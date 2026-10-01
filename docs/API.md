@@ -46,7 +46,7 @@ sections 含 heading、body、source_ids，以及 source / synthesis / applicati
 
 status 还有 clarify（缺少实质条件）、unsupported（资料不支持）和 sources-only（找到材料，但未连接模型、服务故障或仅有目录）。服务失败的 sources-only 仍可正常阅读原文。无法读取资料或处理请求时返回 error 事件。校验、频率与并发拒绝在 SSE 开始前返回 HTTP 422 / 413 / 429 / 503；429 带 Retry-After。调用者应处理停止、断线和未收到最终事件，不能把一条 progress 当成功。
 
-语义匹配与模型等待期间，每 5 秒发送标准 SSE 注释作为保活，注释不代表新的进度或思考。响应使用 no-store,no-transform。客户端应忽略注释，保留未完成问题与已有材料。模型故障的 sources-only 带 retryable:true 与固定 failure_code；用户明确重试后才重新发起请求。主页转发层在 100 秒期限或断流时返回 relay_timeout / upstream_stream_interrupted，客户端另设 110 秒期限并取消上游。重试在原回合进行，沿用内存中的原问题、背景、意图和历史，不自动追加或反复调用模型。
+语义匹配与模型等待期间，每 5 秒发送约 16KB 的标准 SSE 注释作为保活，并在整理回答阶段主动冲刷思路摘要，避免中间代理缓冲较小的数据包；注释不代表新的进度或思考。响应使用 no-store,no-transform。客户端应忽略注释，保留未完成问题与已有材料。模型故障的 sources-only 带 retryable:true 与固定 failure_code；用户明确重试后才重新发起请求。主页转发层在 100 秒期限或断流时返回 relay_timeout / upstream_stream_interrupted，客户端另设 110 秒期限并取消上游。重试在原回合进行，沿用内存中的原问题、背景、意图和历史，不自动追加或反复调用模型。
 
 ## 查看资料与状态
 

@@ -29,7 +29,7 @@ Intent = Literal["understand", "apply", "find"]
 STREAM_HEARTBEAT_SECONDS = 5
 # SSE comments keep connections active without inventing progress or exposing
 # model reasoning. Padding also flushes small frames through buffering proxies.
-STREAM_HEARTBEAT = ": keep-alive " + " " * 2048 + "\n\n"
+STREAM_HEARTBEAT = ": keep-alive " + " " * 16384 + "\n\n"
 
 
 class HistoryItem(BaseModel):
@@ -249,7 +249,7 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     return
                 cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
                 yield sse("approach", answer_approach(payload.intent, passages, cards))
-                yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"})
+                yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"}) + STREAM_HEARTBEAT
                 try:
                     updates = asyncio.Queue()
                     async def generate():

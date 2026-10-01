@@ -507,7 +507,7 @@ def test_idle_work_sends_heartbeat_and_still_finishes_once(context_pack, monkeyp
                     break
             assert any(frame.startswith("event: sources") for frame in frames)
             assert not any(frame.startswith("event: result") for frame in frames)
-            assert len(frames[-1].encode()) >= 2048
+            assert len(frames[-1].encode()) >= 16384
             release.set()
             frames.extend([frame async for frame in response.body_iterator])
             parsed = events(httpx.Response(200, text="".join(frames)))
