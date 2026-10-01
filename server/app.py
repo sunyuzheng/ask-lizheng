@@ -411,11 +411,13 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         if not target.is_relative_to(dist.resolve()):
             raise HTTPException(404, "页面不存在。")
         if target.is_file():
-            return FileResponse(target)
+            # Vite names built assets by content hash, so only they may be cached for good.
+            cache = "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-store"
+            return FileResponse(target, headers={"Cache-Control": cache})
         if path.startswith("api/") or path == "health" or Path(path).suffix:
             raise HTTPException(404, "页面不存在。")
         if (dist / "index.html").is_file():
-            return FileResponse(dist / "index.html")
+            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-store"})
         raise HTTPException(404, "前端页面尚未构建。")
 
     return application

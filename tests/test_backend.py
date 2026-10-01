@@ -198,6 +198,27 @@ def events(response):
     return [(part.splitlines()[0].removeprefix("event: "), json.loads(next(line[6:] for line in part.splitlines() if line.startswith("data: ")))) for part in response.text.strip().split("\n\n") if any(line.startswith("data: ") for line in part.splitlines())]
 
 
+def test_only_existing_hashed_assets_are_cached(context_pack, tmp_path, monkeypatch):
+    import server.app as app_module
+
+    site = tmp_path / "site"
+    (site / "dist/assets").mkdir(parents=True)
+    (site / "dist/index.html").write_text("<!doctype html><title>问问立正</title>")
+    (site / "dist/assets/index-abc123.js").write_text("console.log(1)")
+    with TestClient(create_app(context_pack)) as client:
+        monkeypatch.setattr(app_module, "ROOT", site)
+        asset = client.get("/assets/index-abc123.js")
+        assert asset.status_code == 200
+        assert asset.headers["cache-control"] == "public, max-age=31536000, immutable"
+        missing = client.get("/assets/index-old.js")
+        assert missing.status_code == 404
+        assert "immutable" not in missing.headers.get("cache-control", "")
+        page = client.get("/")
+        assert page.status_code == 200 and page.headers["cache-control"] == "no-store"
+        deep = client.get("/some/where")
+        assert "问问立正" in deep.text and deep.headers["cache-control"] == "no-store"
+
+
 def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
     monkeypatch.delenv("AI_BUILDER_TOKEN", raising=False)
     with TestClient(create_app(context_pack)) as client:
