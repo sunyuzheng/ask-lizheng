@@ -81,3 +81,10 @@ Grok与Flash真实流式内容只在完整JSON段落通过现有来源编号、�
 另用不连接provider的本地合成慢流核验：33秒时连接与长等待提示可见，已有段落仍可阅读；停止后隐藏未完成段落、保留原问题与材料。主页手动重试在同一个回合完成，两种页面均在repairing撤回暂存段落、result完整替换；没有自动增加请求。模拟截图明确使用“本地等待测试”名称，不作为真实模型时延证据。
 
 资料：[DeepSeek当前模型映射](https://api-docs.deepseek.com/quick_start/pricing/)、[思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)、[Builder接口契约](https://space.ai-builders.com/backend/openapi.json)。
+## 2026-10-01 后台发布候选
+
+当前后台218项测试、前端构建通过；个人站111项账号/转发/存储测试、TypeScript及构建通过。真实Python RemoteQuotaStore经逐文件编译的Node handler连到Redis，使用随机合成subject验证used依次1/2/3、第四次拒绝、释放后remaining=3、Founding档位第四次仍可用、未签名请求403；精确测试keys已清理。两仓库Lua字节一致，跨午夜原命令重试通过。此项使用合成身份，不代表真实Founding邮箱已验收。
+
+同一公开fake work问题通过平台真实模型服务测试：Grok 4.5首个完整校验段落约18.95秒、全部约34.41秒；DeepSeek V4 Flash首段约4.38秒、全部约7.37秒。两者均返回answered并通过格式、来源编号校验。这是单个样例，默认保留Grok 4.5；平台模型列表中是deepseek-v4-flash，没有独立的deepseek-v4.1-flash标识。原始reasoning_content未保存或显示。
+
+实际邮件投递、线上身份回跳及生产开关协调须在获批发布时完成；先使受保护额度端点可用，核对完整SSE结果，再启用次数规则。
