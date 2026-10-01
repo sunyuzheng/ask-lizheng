@@ -221,8 +221,13 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
         assert body["response_format"]["type"] == "json_schema"
         assert body["model"] == "grok-4.5"
         assert body["reasoning_effort"] == "medium"
+        assert "先确定 status，再写 sections" in body["messages"][0]["content"]
         prompt = json.loads(body["messages"][1]["content"])
         assert prompt["sources"][0]["attribution_note"]
+        assert prompt["sources"][0]["excerpt"]
+        assert "evidence_role" in prompt["sources"][0]
+        assert "discovery_only" in prompt["sources"][0]
+        assert not {"url", "public_copy_url", "source_path", "docindex", "reason"}.intersection(prompt["sources"][0])
         return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         response = client.post("/api/ask", json={"question": "职业选择怎么做"})
@@ -235,22 +240,23 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
         assert items[-1][1]["sources"][0]["url"].startswith("https://")
 
 
-def test_deepseek_json_object_retains_schema_and_source_validation(context_pack, monkeypatch):
+@pytest.mark.parametrize("model,effort", [("deepseek-v4-pro", "high"), ("deepseek-v4-flash", "low")])
+def test_deepseek_json_object_retains_schema_and_source_validation(context_pack, monkeypatch, model, effort):
     monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
-    monkeypatch.setenv("AI_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("AI_MODEL", model)
     attempts = []
     def provider(request):
         body = json.loads(request.content)
         attempts.append(body)
         assert body["response_format"] == {"type": "json_object"}
         assert body["thinking"] == {"type": "enabled"}
-        assert body["reasoning_effort"] == "high"
+        assert body["reasoning_effort"] == effort
         assert '"additionalProperties": false' in body["messages"][0]["content"]
         # A provider accepting JSON mode does not bypass citation validation.
         answer = answer_for("S999" if len(attempts) == 1 else "S1")
         return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
-        assert client.get("/api/meta").json()["reasoning_effort"] == "high"
+        assert client.get("/api/meta").json()["reasoning_effort"] == effort
         assert events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]["status"] == "answered"
         assert len(attempts) == 2
 

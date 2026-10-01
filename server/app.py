@@ -252,9 +252,11 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                 yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"}) + STREAM_HEARTBEAT
                 try:
                     updates = asyncio.Queue()
+                    async def partial(value):
+                        await updates.put({"_event": "partial", **value})
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": cards}, passages, on_progress=updates.put)
+                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())
@@ -266,7 +268,8 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                             continue
                         if update is None:
                             break
-                        yield sse("progress", update)
+                        event = update.pop("_event", "progress")
+                        yield sse(event, update) + (STREAM_HEARTBEAT if event == "partial" else "")
                     answer = await generation_task
                     result = assemble_answer(answer, passages)
                 except ProviderFailure as exc:

@@ -25,6 +25,8 @@ def model_options(model: str) -> dict:
         return {"reasoning_effort": "medium"}
     if model == "deepseek-v4-pro":
         return {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    if model == "deepseek-v4-flash":
+        return {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
     return {}
 
 class AnswerSection(BaseModel):
@@ -97,21 +99,161 @@ def strict_schema() -> dict:
     return schema
 
 
-async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage], on_progress=None) -> ModelAnswer:
+MODEL_EVIDENCE_FIELDS = frozenset({
+    "id", "title", "date", "excerpt", "author", "publisher", "source_type",
+    "source_family", "source_context", "evidence_role", "content_origin",
+    "generation_method", "attribution_note", "yuzheng_stance_weight",
+    "discovery_only", "section",
+})
+
+
+def model_evidence(passage: Passage) -> dict:
+    """Keep exact excerpts and provenance; links and retrieval internals stay server-owned."""
+    return {key: value for key, value in passage.evidence.items() if key in MODEL_EVIDENCE_FIELDS}
+
+
+def completed_sections(content: str, passages: list[Passage]) -> list[AnswerSection]:
+    """Read complete top-level sections; incomplete JSON and untrusted IDs stay hidden."""
+    decoder = json.JSONDecoder()
+    cursor = 0
+    status = None
+    def whitespace(position):
+        while position < len(content) and content[position].isspace():
+            position += 1
+        return position
+    cursor = whitespace(cursor)
+    if cursor >= len(content) or content[cursor] != "{":
+        return []
+    cursor += 1
+    try:
+        while True:
+            cursor = whitespace(cursor)
+            key, cursor = decoder.raw_decode(content, cursor)
+            cursor = whitespace(cursor)
+            if not isinstance(key, str) or cursor >= len(content) or content[cursor] != ":":
+                return []
+            cursor = whitespace(cursor + 1)
+            if key == "sections":
+                if status != "answered" or cursor >= len(content) or content[cursor] != "[":
+                    return []
+                cursor += 1
+                sections = []
+                while len(sections) < 3:
+                    cursor = whitespace(cursor)
+                    try:
+                        value, cursor = decoder.raw_decode(content, cursor)
+                        section = AnswerSection.model_validate(value)
+                        # Use the same source/quotation/URL boundary as final answers.
+                        validate_answer(ModelAnswer(status="answered", summary="回答仍在生成。", sections=[section], followups=[], clarifying_questions=[]), passages)
+                    except (ValueError, TypeError):
+                        return sections
+                    sections.append(section)
+                    cursor = whitespace(cursor)
+                    if cursor >= len(content) or content[cursor] != ",":
+                        return sections
+                    cursor += 1
+                return sections
+            value, cursor = decoder.raw_decode(content, cursor)
+            if key == "status":
+                status = value
+            cursor = whitespace(cursor)
+            if cursor >= len(content) or content[cursor] != ",":
+                return []
+            cursor += 1
+    except (ValueError, TypeError):
+        return []
+
+
+def provider_status(response: httpx.Response) -> None:
+    if response.status_code == 429:
+        raise ProviderFailure("provider_busy")
+    if response.status_code in {401, 403}:
+        raise ProviderFailure("model_unavailable")
+    if not response.is_success:
+        raise ProviderFailure("provider_unavailable")
+
+
+async def streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial) -> dict | httpx.Response:
+    content = ""
+    finish = None
+    seen_done = False
+    sent_sections = 0
+    started = False
+    async with client.stream(
+        "POST", "https://space.ai-builders.com/backend/v1/chat/completions",
+        json=payload, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+        timeout=httpx.Timeout(remaining, connect=min(10, remaining), pool=min(5, remaining)),
+        follow_redirects=False,
+    ) as response:
+        provider_status(response)
+        if "text/event-stream" not in response.headers.get("content-type", ""):
+            # A gateway may ignore stream; still validate its complete JSON response.
+            await response.aread()
+            return response
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                seen_done = True
+                break
+            if not data or len(data) > 131072:
+                raise ProviderFailure("provider_unavailable")
+            try:
+                chunk = json.loads(data)
+                if chunk.get("error"):
+                    raise ProviderFailure("provider_unavailable")
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                delta = choice.get("delta") or {}
+                # Raw reasoning_content is neither stored nor exposed.
+                text = delta.get("content")
+                if text is not None and not isinstance(text, str):
+                    raise ProviderFailure("provider_unavailable")
+                if text:
+                    content += text
+                    if len(content) > 36000:
+                        raise InvalidAnswer("输出必须是有界的 JSON 字符串。")
+                    if not started and on_progress:
+                        await on_progress({"stage": "drafting", "message": "回答内容已开始返回，正在整理完整段落与出处…"})
+                    started = True
+                    if on_partial:
+                        sections = completed_sections(content, passages)
+                        if len(sections) > sent_sections:
+                            partial = assemble_answer(ModelAnswer(status="answered", summary="回答仍在生成。", sections=sections, followups=[], clarifying_questions=[]), passages)
+                            await on_partial({"sections": partial["sections"], "sources": partial["sources"]})
+                            sent_sections = len(sections)
+                finish = choice.get("finish_reason") or finish
+            except InvalidAnswer:
+                raise
+            except (ValueError, TypeError, KeyError, AttributeError):
+                raise ProviderFailure("provider_unavailable") from None
+    if not seen_done or not content or finish is None:
+        raise ProviderFailure("provider_unavailable")
+    return {"choices": [{"message": {"content": content}, "finish_reason": finish}]}
+
+
+async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage], on_progress=None, on_partial=None) -> ModelAnswer:
     payload = {
-        "model": model, "stream": False, "temperature": .35, "max_tokens": 4000,
+        "model": model, "stream": model in {"grok-4.5", "deepseek-v4-flash"}, "temperature": .35, "max_tokens": 4000,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps({**request, "sources": [passage.evidence for passage in passages]}, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps({**request, "sources": [model_evidence(passage) for passage in passages]}, ensure_ascii=False)},
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "public_context_answer", "strict": True, "schema": strict_schema()}},
     }
     payload.update(model_options(model))
-    if model == "deepseek-v4-pro":
+    if payload["stream"]:
+        payload["messages"][0]["content"] += "\n为逐段展示，JSON 顶层字段按 status、summary、sections、followups、clarifying_questions、limitations、source_reasons 的顺序输出；先确定 status，再写 sections。"
+    if model in {"deepseek-v4-pro", "deepseek-v4-flash"}:
         # Builder's live endpoint rejects json_schema for this model. Supply
         # the same contract in the prompt and retain all server-side checks.
         payload["response_format"] = {"type": "json_object"}
         payload["messages"][0]["content"] += "\n输出 JSON 必须符合以下 schema（所有字段必填，不得增加字段）：" + json.dumps(strict_schema(), ensure_ascii=False)
+    if model == "deepseek-v4-flash":
+        payload["messages"][0]["content"] += "\n本轮先给紧凑回答：summary加所有sections的正文合计以400至700字为目标，最多两个主要解释段落；复杂细节留给followups。优先保留成立条件和来源，不重复同一判断。用户未提供处境时，summary和正文都用可能原因、条件或核对问题，不能直接把资料中的组织制度、瓶颈或能力缺口诊断成用户事实。"
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
     deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
@@ -122,23 +264,23 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
             if remaining <= 0:
                 raise ProviderFailure("provider_timeout")
             async with asyncio.timeout(remaining):
-                response = await client.post(
-                    "https://space.ai-builders.com/backend/v1/chat/completions",
-                    json=payload,
-                    headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
-                    timeout=httpx.Timeout(remaining, connect=min(10, remaining), pool=min(5, remaining)),
-                    follow_redirects=False,
-                )
-            if response.status_code == 429:
-                raise ProviderFailure("provider_busy")
-            if response.status_code in {401, 403}:
-                raise ProviderFailure("model_unavailable")
-            if not response.is_success:
-                raise ProviderFailure("provider_unavailable")
+                if payload["stream"]:
+                    data = await streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial)
+                else:
+                    response = await client.post(
+                        "https://space.ai-builders.com/backend/v1/chat/completions",
+                        json=payload,
+                        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+                        timeout=httpx.Timeout(remaining, connect=min(10, remaining), pool=min(5, remaining)),
+                        follow_redirects=False,
+                    )
+                    provider_status(response)
+                    data = response
             if on_progress:
                 await on_progress({"stage": "checking", "message": "回答已生成，正在核对来源编号和输出格式…"})
             try:
-                data = response.json()
+                if isinstance(data, httpx.Response):
+                    data = data.json()
                 choices = data.get("choices") or []
                 if not choices or choices[0].get("finish_reason") == "length":
                     raise InvalidAnswer("输出缺失或被截断；请缩短内容并返回完整 JSON。")
