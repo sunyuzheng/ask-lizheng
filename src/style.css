@@ -1290,8 +1290,13 @@ main {
 
 .answer-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   margin: 18px 0 0 -12px;
+}
+
+.ghost-button:disabled {
+  opacity: 0.5;
 }
 
 .followups {

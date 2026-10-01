@@ -1,9 +1,10 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
-import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileText, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
+import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
+import {MARK_PATHS} from './mark.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -47,6 +48,7 @@ const MESSAGES = {
   timeout: '这次等得太久，已经停止等待。问题和材料都还在，可以重新生成。',
   stopped: '已停止。问题还在，可以改一改再发。',
   copy: '浏览器没有允许复制，可以直接选中文字复制。',
+  export: '这次没能生成文件，可以稍后再试。',
 };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,14 +59,6 @@ const contextText = background => BACKGROUND
   .map(field => `${field.prompt}：${background[field.key].trim()}`)
   .join('\n');
 
-// The 立正 seal from lizheng.ai (potrace of the handwritten mark).
-const MARK_PATHS = [
-  'M2555 9534 c-148 -22 -200 -45 -219 -98 -11 -30 108 -234 195 -334 116 -134 197 -334 234 -582 28 -187 91 -280 233 -348 213 -101 471 -15 724 241 163 164 193 243 176 467 -21 269 -409 563 -838 635 -91 16 -440 29 -505 19z',
-  'M10920 8853 c-22 -4 -96 -31 -295 -108 -283 -110 -1112 -277 -1830 -370 -297 -39 -319 -42 -460 -65 -71 -11 -161 -24 -200 -29 -89 -11 -118 -25 -150 -72 -88 -126 -14 -261 334 -610 189 -189 255 -206 516 -134 368 102 423 116 510 134 49 11 92 18 96 15 22 -13 50 -179 71 -429 13 -148 20 -2857 8 -2868 -3 -2 -106 -14 -230 -26 -124 -12 -236 -24 -249 -27 l-24 -5 7 403 c4 222 9 437 11 478 3 41 9 170 15 285 6 116 15 271 21 345 26 320 6 408 -119 535 -240 243 -590 357 -797 261 -137 -64 -162 -143 -95 -296 111 -254 142 -398 165 -775 12 -203 5 -1336 -9 -1352 -3 -3 -192 -30 -411 -58 -238 -31 -491 -43 -550 -26 -76 22 -226 26 -282 7 -128 -42 -197 -158 -168 -281 21 -90 87 -185 294 -419 231 -261 324 -293 594 -202 573 193 1180 330 1772 400 348 41 333 40 810 61 178 8 647 5 760 -5 306 -27 432 -50 714 -131 334 -97 479 -72 565 99 94 185 70 372 -67 533 -172 203 -618 493 -714 465 -10 -2 -76 -23 -148 -45 -259 -81 -442 -112 -855 -147 -36 -3 -71 -7 -78 -10 -14 -4 -10 960 4 1211 l6 100 76 1 c43 1 154 13 247 28 94 15 303 40 465 56 367 36 404 46 512 148 114 106 162 275 110 379 -34 66 -170 182 -352 298 -203 130 -271 133 -516 24 -187 -83 -506 -190 -522 -175 -9 10 16 379 38 548 48 383 0 504 -266 672 -128 81 -118 75 -113 80 21 21 595 102 964 136 375 35 415 45 507 135 117 115 162 313 94 416 -69 103 -199 196 -465 331 -182 92 -213 100 -321 81z',
-  'M4090 8234 c-30 -8 -104 -31 -164 -50 -235 -76 -471 -128 -1036 -228 -847 -150 -1321 -208 -1522 -186 -173 19 -276 -4 -351 -77 -124 -120 -103 -231 84 -444 374 -424 509 -513 694 -459 39 12 91 27 116 34 25 7 104 36 175 63 628 244 1608 430 2224 422 295 -4 290 -4 350 16 133 44 222 207 200 365 -23 163 -126 272 -434 458 -167 102 -223 116 -336 86z',
-  'M3583 7060 c-137 -29 -177 -94 -138 -226 81 -277 -22 -784 -308 -1519 -133 -341 -387 -874 -448 -941 -16 -17 -44 -24 -152 -38 -72 -10 -240 -33 -372 -52 -132 -19 -409 -59 -615 -89 -608 -88 -927 -115 -1014 -86 -131 44 -312 -41 -346 -163 -27 -97 -3 -179 89 -296 28 -36 70 -90 93 -120 23 -30 95 -119 161 -198 224 -270 355 -332 542 -258 99 39 165 66 200 81 17 7 71 28 120 45 50 17 101 36 115 41 80 29 438 129 535 149 22 4 108 22 190 39 491 102 1123 161 1729 161 438 0 689 -24 986 -93 188 -44 320 -45 399 -4 128 68 231 232 239 382 8 146 -56 242 -328 494 -312 289 -369 303 -815 206 -124 -27 -365 -62 -690 -99 -121 -15 -242 -29 -270 -32 l-50 -7 76 84 c314 350 594 792 749 1184 17 42 44 82 90 130 298 317 236 607 -211 976 -268 222 -402 282 -556 249z',
-  'M1692 6530 c-39 -16 -74 -119 -121 -359 -118 -591 -35 -1006 272 -1363 323 -374 673 -205 657 317 -14 436 12 540 246 1015 74 150 134 276 134 281 0 34 -42 9 -177 -106 -191 -164 -309 -259 -407 -329 l-80 -57 -72 144 c-170 342 -332 505 -452 457z',
-];
 function Mark({className = ''}) {
   return <svg className={`mark ${className}`} viewBox="0 0 1219.044577 649.234004" aria-hidden="true" focusable="false">
     <g transform="translate(-17.980429,953.72375) scale(0.1,-0.1)" fill="currentColor">{MARK_PATHS.map(d => <path key={d.slice(0, 16)} d={d}/>)}</g>
@@ -249,6 +243,7 @@ function App() {
   const [selected, setSelected] = useState('');
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
@@ -416,6 +411,27 @@ function App() {
     }
   }
 
+  // A long image shares well in chat apps; the PDF keeps the source links clickable.
+  async function exportTurn(kind, m) {
+    setExporting(`${m.id}-${kind}`);
+    try {
+      const {exportAnswer} = await import('./share.js');
+      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date()});
+      const file = new File([blob], name, {type});
+      if (kind === 'png' && window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({files: [file]})) {
+        try { await navigator.share({files: [file], title: '问问立正'}); return; }
+        catch (err) { if (err?.name === 'AbortError') return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const link = Object.assign(document.createElement('a'), {href: url, download: name});
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch { setError(MESSAGES.export); }
+    finally { setExporting(''); }
+  }
+
   async function copy(result) {
     const text = [
       result.summary,
@@ -568,6 +584,10 @@ function App() {
                   </details>}
                   <div className="answer-actions">
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? <Check size={15}/> : <Copy size={15}/>}{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
+                    {m.result.status === 'answered' && <>
+                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('png', m)}>{exporting === `${m.id}-png` ? <LoaderCircle size={15} className="spin"/> : <ImageDown size={15}/>}{exporting === `${m.id}-png` ? '正在生成…' : '保存图片'}</button>
+                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('pdf', m)}>{exporting === `${m.id}-pdf` ? <LoaderCircle size={15} className="spin"/> : <FileDown size={15}/>}{exporting === `${m.id}-pdf` ? '正在生成…' : '下载PDF'}</button>
+                    </>}
                   </div>
                   {last && m.result.followups?.length > 0 && <div className="followups">
                     <p>可以接着问<span>点一下放进输入框，改好再发</span></p>
