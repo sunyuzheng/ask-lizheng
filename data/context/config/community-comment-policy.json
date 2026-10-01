@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "snapshot_at": "2026-08-30",
+  "source_author": "YZ｜立正",
+  "source_comments_reviewed": 2519,
+  "comments_included": 10,
+  "included_space_slugs": [
+    "ai-resources",
+    "guji",
+    "main",
+    "news",
+    "notes",
+    "posts",
+    "recording",
+    "share-your-projects",
+    "tools"
+  ],
+  "minimum_effective_characters": 80,
+  "parent_scope": "public-source comments on included Yuzheng-authored posts only",
+  "excluded_private_context_hints": [
+    "微信 / WeChat",
+    "私信、私聊、群聊、短信或 DM",
+    "电话、手机号、邮箱或住址",
+    "加我、加群或联系我"
+  ],
+  "excluded_parent_post_hints": [
+    "自我介绍与新人报道",
+    "招聘、求职与内推",
+    "活动、直播、课程、作业与答疑通知"
+  ],
+  "sensitive_context_review_hints": [
+    "health, bereavement, minor status, immigration or layoff context",
+    "personal income, compensation or financial context",
+    "partner or private-conversation context",
+    "internal community operations or sponsorship context",
+    "course purchase, eligibility, discount, refund or support operations"
+  ],
+  "privacy_redactions": [
+    "Circle member mention names",
+    "email addresses",
+    "mainland mobile numbers",
+    "all inline links and bare domains (the canonical Circle comment link is retained)"
+  ],
+  "rationale": "Comments are included only when they carry enough standalone substance for retrieval. Only public-source replies on included Yuzheng-authored posts are eligible by default. Short reactions, welcomes, administrative replies, member-introduction threads, jobs, events, leading third-party quotations, sensitive-personal context, archived/test spaces, and private-context hints stay out of the public corpus."
+}

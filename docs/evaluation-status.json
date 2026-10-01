@@ -1,0 +1,109 @@
+{
+  "model": "gpt-5",
+  "release_manifest_sha256": "224cf7c97a8a692b88f1f3a2b3a1c644361e8a7c5c769a38a70cf14ba468f3a5",
+  "synthetic_only": true,
+  "scope": "Local smoke examples and manual review, not a broad quality benchmark",
+  "cases": [
+    {
+      "case": "work-value-prefill",
+      "seconds": 29.18,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "media-prefill",
+      "seconds": 34.56,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "learning-prefill",
+      "seconds": 66.02,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "source-finder",
+      "seconds": 26.8,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "demo-prefill",
+      "seconds": 31.77,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "paraphrase",
+      "seconds": 30.15,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "quality-prefill",
+      "seconds": 63.92,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "scope-tension",
+      "seconds": 28.12,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "ai-judgment",
+      "seconds": 68.37,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "out-of-corpus",
+      "seconds": 17.53,
+      "observed_status": "unsupported",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "career-application",
+      "seconds": 40.91,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "acceptable for this example"
+    },
+    {
+      "case": "guest-attribution",
+      "seconds": 23.55,
+      "observed_status": "answered",
+      "semantic_ready": true,
+      "manual_review": "failed: overbroad absence claim; replaced with identity clarification guard"
+    },
+    {
+      "case": "multi-turn-final",
+      "seconds": 28.07,
+      "observed_status": "answered",
+      "routed_cards": [
+        "learning-transfer"
+      ],
+      "sections": 2,
+      "manual_review": "recovered learning goal, one proposed first action; AI application remains subject to reader verification"
+    }
+  ],
+  "post_fix": {
+    "guest-attribution": {
+      "status": "clarify",
+      "provider_called": false,
+      "verified_by": "HTTP SSE and regression test"
+    }
+  }
+}
