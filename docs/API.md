@@ -77,3 +77,5 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 内部`X-Ask-Admission`使用`v1.<base64url JSON>.<base64url HMAC-SHA256>`，无padding。签名覆盖ASCII `v1.`加encoded JSON，secret是至少32字节UTF-8。JSON精确字段为v:1、sub、tier(public/founding)、attempt(小写规范UUID)、exp(Unix整数秒)、method、path及body_sha256。POST固定path为/api/ask，摘要对应精确转发body；GET /api/quota的摘要对应空body。有效期由转发签发60秒，Builder上限120秒，不接受浏览器自行签发。证明、摘要及问题正文不进入额度账本。
 
 详细规则、隐私边界及启用配置见[ACCOUNT_QUOTAS.md](ACCOUNT_QUOTAS.md)和[ACCOUNT_AUTH_HANDOFF.md](ACCOUNT_AUTH_HANDOFF.md)。
+
+生产额度存储通过Vercel固定端点`POST /api/ask-lizheng/quota-storage`，正文是compact UTF-8 JSON，但Content-Type使用application/octet-stream保留待签名的精确字节。内部X-Ask-Quota-Proof格式为`v1.<expiry>.<hex HMAC-SHA256>`；签名文本为`ask-quota-store:v1:<expiry>:<sha256(body)>`，45秒有效，服务端最多接受未来60秒。这里只传opaque quota metadata，不传问题、回答、邮箱或平台token。端点认可固定Lua与Ask额度namespace，数据库凭证留在Vercel；重试使用同一grant/command，保证预留、结算、释放幂等。

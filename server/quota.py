@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -12,12 +14,15 @@ from uuid import uuid4
 
 import httpx
 
-from .admission import AdmissionError, Principal, verify_proof
+from .admission import ADMISSION_PURPOSE, QUOTA_STORE_PURPOSE, AdmissionError, Principal, derived_secret, verify_proof
 
 DAY_ZONE = timezone(timedelta(hours=8))
 LIMIT = 3
 LEASE_SECONDS = 150
 RETENTION_SECONDS = 172800
+QUOTA_STORE_URL = "https://www.lizheng.ai/api/ask-lizheng/quota-storage"
+QUOTA_STORE_HEADER = "X-Ask-Quota-Proof"
+STORE_REQUEST_SECONDS = 2
 
 
 def day_window(now: float) -> tuple[str, int]:
@@ -89,6 +94,10 @@ class RedisQuotaStore:
             raise AdmissionError("quota_unavailable", 503)
         self.url, self.token, self.client, self.clock = url.rstrip("/"), token, client, clock
 
+    async def _request(self, command: list) -> httpx.Response:
+        return await self.client.post(self.url, json=command, headers={"Authorization": "Bearer " + self.token},
+                                      timeout=httpx.Timeout(STORE_REQUEST_SECONDS, connect=min(1, STORE_REQUEST_SECONDS), pool=min(1, STORE_REQUEST_SECONDS)), follow_redirects=False)
+
     async def _run(self, action: str, reservation: Reservation) -> dict:
         p, day, reset = reservation.principal, reservation.day, reservation.reset
         digest = hashlib.sha256(p.subject.encode("ascii")).hexdigest()
@@ -98,9 +107,8 @@ class RedisQuotaStore:
                    p.attempt, reservation.grant, day, reset, LEASE_SECONDS, RETENTION_SECONDS]
         for attempt in range(2):
             try:
-                async with asyncio.timeout(2):
-                    response = await self.client.post(self.url, json=command, headers={"Authorization": "Bearer " + self.token},
-                                                      timeout=httpx.Timeout(2, connect=1, pool=1), follow_redirects=False)
+                async with asyncio.timeout(STORE_REQUEST_SECONDS):
+                    response = await self._request(command)
                 if not response.is_success:
                     raise ValueError("store unavailable")
                 result = response.json().get("result")
@@ -132,6 +140,26 @@ class RedisQuotaStore:
     async def status(self, principal: Principal) -> dict:
         day, reset = day_window(self.clock())
         return await self._run("status", Reservation(principal, day, reset, ""))
+
+
+class RemoteQuotaStore(RedisQuotaStore):
+    """Fixed signed metadata transport; the origin owns durable Redis EVAL."""
+    def __init__(self, url: str, provider_token: str, client: httpx.AsyncClient, clock=time.time):
+        if url != QUOTA_STORE_URL:
+            raise AdmissionError("quota_unavailable", 503)
+        self.url, self.client, self.clock = url, client, clock
+        self.secret = derived_secret(provider_token, QUOTA_STORE_PURPOSE)
+
+    async def _request(self, command: list) -> httpx.Response:
+        body = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(body) > 16384:
+            raise AdmissionError("quota_unavailable", 503)
+        expiry = int(self.clock()) + 45
+        message = f"ask-quota-store:v1:{expiry}:{hashlib.sha256(body).hexdigest()}"
+        signature = hmac.new(self.secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+        return await self.client.post(self.url, content=body,
+            headers={"Content-Type": "application/octet-stream", QUOTA_STORE_HEADER: f"v1.{expiry}.{signature}"},
+            timeout=httpx.Timeout(STORE_REQUEST_SECONDS, connect=min(1, STORE_REQUEST_SECONDS), pool=min(1, STORE_REQUEST_SECONDS)), follow_redirects=False)
 
 
 class MemoryQuotaStore:
@@ -198,9 +226,19 @@ class QuotaAdmission:
         self.store, self.ready = store, not self.enabled
         if self.enabled and raw not in {"true", "1"}:
             return
+        if self.enabled and not self.secret:
+            token = os.getenv("AI_BUILDER_TOKEN", "")
+            if token:
+                self.secret = derived_secret(token, ADMISSION_PURPOSE)
         if self.enabled and len(self.secret.encode("utf-8")) >= 32:
             try:
-                self.store = store or RedisQuotaStore(os.getenv("ASK_QUOTA_REDIS_REST_URL", ""), os.getenv("ASK_QUOTA_REDIS_REST_TOKEN", ""), client, clock)
+                url, token = os.getenv("ASK_QUOTA_REDIS_REST_URL", ""), os.getenv("ASK_QUOTA_REDIS_REST_TOKEN", "")
+                if store is not None:
+                    self.store = store
+                elif url or token:
+                    self.store = RedisQuotaStore(url, token, client, clock)
+                else:
+                    self.store = RemoteQuotaStore(os.getenv("ASK_QUOTA_STORE_ORIGIN", ""), os.getenv("AI_BUILDER_TOKEN", ""), client, clock)
                 self.ready = True
             except AdmissionError:
                 self.ready = False

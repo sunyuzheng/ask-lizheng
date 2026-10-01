@@ -27,7 +27,53 @@ def test_default_is_dry_run_without_credentials_or_network(monkeypatch, capsys):
     assert '"mode": "dry-run"' in output
     assert deploy.DEPLOYMENTS_URL in output and deploy.PUBLIC_URL in output
     assert '"AI_MODEL": "grok-4.5"' in output
+    assert '"ASK_QUOTA_ENABLED": "false"' in output
     assert "AI_BUILDER_TOKEN" not in output
+
+
+def test_enable_quota_is_reviewable_without_credentials_or_network(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    class NoEnvironment:
+        def get(self, *args):
+            pytest.fail("Quota dry run must not read any environment credential")
+    monkeypatch.setattr(deploy, "os", SimpleNamespace(environ=NoEnvironment()))
+    assert deploy.main(["--enable-quota", "--expected-commit", COMMIT]) == 0
+    output = capsys.readouterr().out
+    assert '"ASK_QUOTA_ENABLED": "true"' in output
+    assert deploy.QUOTA_STORE_URL in output
+    assert "ASK_ADMISSION_SECRET" not in output and "ASK_QUOTA_STORE_SECRET" not in output
+    review = deploy.build_review(expected_commit=COMMIT, enable_quota=True)
+    assert review["payload"]["env_vars"] == {
+        "AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL,
+    }
+    assert deploy.approval_digest(review) != deploy.approval_digest(deploy.build_review(expected_commit=COMMIT))
+
+
+def test_disabled_review_cannot_authorize_enabled_quota(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    class NoEnvironment:
+        def get(self, *args):
+            pytest.fail("Changed quota configuration must not read credentials")
+    monkeypatch.setattr(deploy, "os", SimpleNamespace(environ=NoEnvironment()))
+    approved = deploy.approval_digest(deploy.build_review(expected_commit=COMMIT))
+    assert deploy.main(["--enable-quota", "--expected-commit", COMMIT, "--approved-sha", approved]) == 2
+    assert "digest mismatch" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("configuration", [
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true"},
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL + "/"},
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": "https://elsewhere.example"},
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL, "ASK_ADMISSION_SECRET": "SYNTHETIC_PRIVATE_SENTINEL"},
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL, "ASK_QUOTA_STORE_SECRET": "SYNTHETIC_PRIVATE_SENTINEL"},
+    {"AI_MODEL": "grok-4.5", "ASK_QUOTA_REDIS_REST_TOKEN": "SYNTHETIC_PRIVATE_SENTINEL"},
+])
+def test_deploy_rejects_private_or_unreviewed_quota_configuration(configuration):
+    payload = deploy.build_review()["payload"]
+    payload["env_vars"] = configuration
+    with pytest.raises(deploy.DeploymentError) as error:
+        deploy.validate_payload(payload)
+    assert "SYNTHETIC_PRIVATE_SENTINEL" not in str(error.value)
 
 
 def test_approval_mismatch_blocks_all_network_and_token_reads(monkeypatch, capsys):

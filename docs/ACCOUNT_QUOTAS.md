@@ -1,6 +1,6 @@
 # Superlinear账号与每日额度
 
-状态：2026-10-01本地实现，默认关闭，尚未启用或部署。已按用户最新决定改为两档，替代此前的社区10次／有效Stay不限次方案。
+本文件定义2026-10-01版本的账号与额度合同。代码默认关闭，生产须按配置交接完成核验后协调启用。采用两档，替代此前的社区10次／有效Stay不限次方案。
 
 ## 产品规则
 
@@ -44,9 +44,9 @@
           ↓ 同源会话与问答接口
 Vercel：邮箱验证码确认本人、Founding标签核验、绑定本次请求的签名证明
           ↓ X-Ask-Admission
-Builder：验证证明、原子预留额度、检索、模型、回答校验
-          ↓ 完成结算 / 失败释放
-持久Redis额度账本
+Builder：验证证明、检索、模型、回答校验
+          ↓ 签名额度操作（预留 / 完成 / 释放）
+Vercel受保护的额度端点 → 持久Redis原子账本
 ```
 
 认证路由优先于ask子域的Builder rewrite。邮件验证码10分钟有效、最多尝试5次，HMAC核验和一次性消费在Redis内原子完成；仅核验通过后查询Circle。发送受邮箱、网络入口及全局限速保护。可选SSO仍用官方@logto/node SDK校验状态、PKCE、OIDC签名及claims，回调事务一次性消费。会话及登录事务在Redis中加密，浏览器只持有HttpOnly/Secure不透明cookie，ID/access tokens在回调后丢弃。
@@ -63,6 +63,6 @@ Redis Lua执行原子预留，有限档位满足已结算＋处理中小于3；�
 
 本地已包含Founding只读核验、SSO路由、两入口额度UI、请求证明、Builder准入及持久原子计数。合成身份测试不等于真实SSO验收；生产默认关闭。
 
-启用需同时配置个人站和Builder的ASK_QUOTA_ENABLED及相同ASK_ADMISSION_SECRET，分别提供身份存储和额度存储的Upstash REST配置；个人站另需现有Resend发送及Circle只读查询凭证。签名密钥或额度存储缺失时服务端拒绝生成，不退回无额度控制。部署前以签名/api/quota核验实际存储连通性；/health只证明公开资料就绪。
+启用需协调个人站和Builder的ASK_QUOTA_ENABLED。Builder从平台自动注入的token按不同用途派生准入与额度调用密钥；个人站保存对应派生密钥、Upstash REST配置、Resend发送及Circle只读查询凭证。Builder部署payload只含模型、开关与固定额度端点，不包含私有凭证。签名密钥或额度存储缺失时服务端拒绝生成，不退回无额度控制。先用隔离合成身份通过实际Python→Node→Redis链路核验次数、退款及原子性，再验收真实邮箱。/health只证明公开资料就绪。
 
 上线前用真实测试账号验证：访客3次／第4次拦截，非Founding登录不重置，Founding登录解锁，错误或未验证邮箱拒绝，标签移除后的缓存刷新；两入口匿名计数一致；并发不超额；停止／失败退款；重复请求与重启；iPhone Safari登录窗口、草稿恢复、SSE过程反馈。服务配置及生产发布须审阅准确目的地与payload，本文不代表已授权配置变更或已上线。

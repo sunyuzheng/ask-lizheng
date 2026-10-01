@@ -8,7 +8,7 @@
 
 每份推荐材料保留原始标题、日期、作者、片段与视频时间点。回答会标明 AI 综合或结合个人处境的应用。没有材料支持、模型未连接或暂时故障时，产品会说明状态，并提供确实找到的材料。
 
-本项目不建立对话数据库或分析埋点；浏览器对话仅在内存中，刷新清除。可配置Superlinear SSO：所有人每天3次，核验为Founding Member后每日不限次；默认关闭，身份与额度元数据只在服务端保存。输入与选出的公开材料发送给 Builder Space 的模型服务，其处理规则由该服务管理。它不是立正本人实时回复。
+本项目不建立对话数据库或分析埋点；浏览器对话仅在内存中，刷新清除。可用邮箱验证码核验Superlinear Founding身份：所有人每天3次，Founding Member每日不限次；配置默认关闭，身份与额度元数据只在服务端保存。输入与选出的公开材料发送给 Builder Space 的模型服务，其处理规则由该服务管理。它不是立正本人实时回复。
 
 ## 本地运行
 
@@ -38,11 +38,11 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 
 ## API 与部署
 
-`GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度和候选 sources，再返回完整且通过格式与引用校验的 result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
+`GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度、候选sources与公开整理方向，再逐段显示已经过出处和格式校验的内容，最后返回完整result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
 
 Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `grok-4.5`，附带 `reasoning_effort: medium`，可通过 `AI_MODEL` 更换。`gpt-5` 使用 low；`deepseek-v4-pro` 使用 JSON object 与同一 schema 提示、thinking enabled / high，并保留服务端格式、来源验证和一次修复。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。
 
-部署脚本默认 dry-run，列出目的地、完整非秘密 payload 与审批摘要。审阅时传入 `--expected-commit` 的完整 Git SHA；正式部署再传对应 `--approved-sha`。脚本会先验证公开仓库的 main 正是该版本，再读取模型 token 并执行部署。首次发布前仍需得到用户对公开仓库和服务目的地的明确批准。完整调用契约见 [API.md](docs/API.md)。
+部署脚本默认dry-run，列出目的地、完整非秘密payload与审批摘要。审阅时传入`--expected-commit`的完整Git SHA；正式部署再传对应`--approved-sha`。启用额度时加`--enable-quota`，只向Builder传公开开关与固定额度代理URL，数据库、Circle及邮件凭证都留在个人站Vercel。脚本会先验证公开仓库main正是该版本，再读取模型token并执行部署。发布仍需取得对准确差异与目的地的批准。完整调用契约见[API.md](docs/API.md)。
 
 ## 验证
 
@@ -56,4 +56,4 @@ npm run build
 
 产品设计、Context 架构与验收记录见 `docs/PRODUCT.md`、`docs/CONTEXT_ARCHITECTURE.md` 和 `docs/VERIFICATION.md`。源内容遵守原有许可证；项目代码为 MIT。
 
-Superlinear账号与每日3次／Founding Member不限次的实现说明见 [ACCOUNT_QUOTAS.md](docs/ACCOUNT_QUOTAS.md)，专用SSO应用与服务端配置需求见 [ACCOUNT_AUTH_HANDOFF.md](docs/ACCOUNT_AUTH_HANDOFF.md)。本地实现已完成，尚未启用或上线每日额度。
+Superlinear账号与每日3次／Founding Member不限次的实现说明见[ACCOUNT_QUOTAS.md](docs/ACCOUNT_QUOTAS.md)，邮箱验证及服务端发布配置见[ACCOUNT_AUTH_HANDOFF.md](docs/ACCOUNT_AUTH_HANDOFF.md)。按配置交接中的验收步骤协调启用两个入口。

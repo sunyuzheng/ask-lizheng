@@ -13,6 +13,8 @@ from uuid import UUID
 
 HEADER = "X-Ask-Admission"
 FIELDS = {"v", "sub", "tier", "attempt", "exp", "method", "path", "body_sha256"}
+ADMISSION_PURPOSE = "ask-lizheng:admission:v1"
+QUOTA_STORE_PURPOSE = "ask-lizheng:quota-store:v1"
 MESSAGES = {
     "admission_required": "请从问问立正页面发起请求。",
     "invalid_admission": "这次请求的身份验证已失效，请重新发起。",
@@ -32,6 +34,13 @@ class AdmissionError(Exception):
         if self.quota is not None:
             result.update(quota=self.quota, remaining=self.quota["remaining"], reset_at=self.quota["reset_at"])
         return result
+
+
+def derived_secret(provider_token: str, purpose: str) -> str:
+    """Domain-separated server key; callers use the resulting hex as UTF-8."""
+    if not provider_token or purpose not in {ADMISSION_PURPOSE, QUOTA_STORE_PURPOSE}:
+        raise AdmissionError("quota_unavailable", 503)
+    return hmac.new(provider_token.encode("utf-8"), purpose.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 @dataclass(frozen=True)
