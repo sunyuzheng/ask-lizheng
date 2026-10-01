@@ -1,5 +1,17 @@
 # 提问记录
 
+## v2 owner-only ops 候选
+
+用户授权新问题保留至手动删除，旧v1记录继续原30天期限。`ASK_OPS_ENABLED=true`仅在额度和提问记录配置都ready时启用；部署review加`--enable-quota --enable-query-log --enable-ops`，没有新secret env。
+
+新页面须先显示v2说明，再提交`query_log_notice:"v2"`及canonical UUID `conversation_id`。同一对话追问、手动重试沿用UUID，新对话重置。relay在签名admission v1 claims中仅为v2加入成对的`visitor`和`entrypoint`；访客为签名guest标识，入口只允许home或standalone。客户端不能提供身份。服务端以quota-store派生hex密钥的UTF-8字节再次HMAC访客和对话UUID，不保存账号或邮箱关联，也不把这些字段送给模型。
+
+固定写入端点不变。v2证明为`X-Ask-Query-Proof: v2.<expiry>.<hex>`，45秒有效；签名字符串为`ask-ops-store:v2:<expiry>:<sha256(compact UTF-8 body)>`，请求仍是application/octet-stream。start正文为`{v:2,event:'start',record_id,question,created_at,model,visitor_id,conversation_id,intent,entrypoint}`；finish正文为`{v:2,event:'finish',record_id,status,duration_ms}`。同一写入的两次重试使用相同UUID和正文，只有证明到期时间可更新。Node ACK为`{"ok":true}`，原子分配turn_number及计算问题字数。
+
+start在输入验证和quota reserve后、模型调用前等待确认，每次最多2秒、最多两次；不能确认则503 `ops_storage_unavailable`，不调用模型且退款、释放并发槽。断线和失败清理会有界、抗取消地写finish；finish失败不能影响回答，已保存的问题仍在，后台需把未确认完成的generating状态明确显示为未知，不推测成功。旧v1沿用下文的best-effort流程；v2不重复写v1。公开端点没有记录读取能力，owner-only读取和手动删除由个人站负责。
+
+## v1 历史协议（30天）
+
 用户明确要求保存提问，用于观察大家关心的问题、查找回答不足。默认模型同时改为Builder提供的`deepseek-v4-flash`。这项记录与身份和额度账本分开。
 
 新页面在输入框旁显示「提问会保存30天，用于改进回答。请勿填写私密信息。」并在请求中附`query_log_notice: "v1"`。后台只记录已通过额度准入、带这项提示版本的有效提问。旧页面、无提示的调用、输入验证失败、超额或被限流的请求不记录。

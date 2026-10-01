@@ -74,21 +74,25 @@ def validate_payload(payload: dict) -> None:
         allowed.extend(configurations)
         allowed.extend({**configuration, "ASK_QUERY_LOG_ENABLED": "false"} for configuration in configurations)
         allowed.append({**configurations[-1], "ASK_QUERY_LOG_ENABLED": "true"})
+    allowed.extend({**configuration, "ASK_OPS_ENABLED": "false"} for configuration in tuple(allowed))
+    allowed.extend({"AI_MODEL": model, "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": QUOTA_STORE_URL,
+                    "ASK_QUERY_LOG_ENABLED": "true", "ASK_OPS_ENABLED": "true"} for model in MODELS)
     if payload["env_vars"] not in allowed:
         # Do not repeat rejected values: they may contain a credential.
         raise DeploymentError("Only the approved model and fixed non-secret quota configuration are allowed in env_vars.")
 
 
 def build_review(repo_url: str = DEFAULT_REPO, expected_commit: str = "", *, enable_quota: bool = False,
-                 model: str = DEFAULT_MODEL, enable_query_log: bool = False) -> dict:
+                 model: str = DEFAULT_MODEL, enable_query_log: bool = False, enable_ops: bool = False) -> dict:
     if expected_commit and not re.fullmatch(r"[a-fA-F0-9]{40}", expected_commit):
         raise DeploymentError("Expected commit must be a full 40-character Git SHA.")
-    if model not in MODELS or (enable_query_log and not enable_quota):
-        raise DeploymentError("Query logging requires quotas; the model must be an approved model identifier.")
+    if model not in MODELS or (enable_query_log and not enable_quota) or (enable_ops and not (enable_quota and enable_query_log)):
+        raise DeploymentError("Query logging requires quotas; ops requires both quotas and query logging; the model must be approved.")
     payload = {
         "repo_url": repo_url, "service_name": SERVICE, "branch": "main", "port": 8000,
         "env_vars": {"AI_MODEL": model, "ASK_QUOTA_ENABLED": "true" if enable_quota else "false",
-                     "ASK_QUERY_LOG_ENABLED": "true" if enable_query_log else "false"}, "streaming_log_timeout_seconds": 60,
+                     "ASK_QUERY_LOG_ENABLED": "true" if enable_query_log else "false",
+                     "ASK_OPS_ENABLED": "true" if enable_ops else "false"}, "streaming_log_timeout_seconds": 60,
     }
     if enable_quota:
         payload["env_vars"]["ASK_QUOTA_STORE_ORIGIN"] = QUOTA_STORE_URL
@@ -241,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enable-quota", action="store_true", help="Use the fixed signed remote quota store; no private environment values are published.")
     parser.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
     parser.add_argument("--enable-query-log", action="store_true", help="Save disclosed questions for 30 days through the fixed signed storage endpoint.")
+    parser.add_argument("--enable-ops", action="store_true", help="Require durable disclosed v2 questions until owner deletion; requires quota and query logging.")
     approval = parser.add_mutually_exclusive_group()
     approval.add_argument("--dry-run", action="store_true", help="Print the exact review; never read credentials or make network calls.")
     approval.add_argument("--approved-sha", help="Digest of the exact payload explicitly approved by the user.")
@@ -252,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         if not 1 <= args.poll_seconds <= 10 or not 30 <= args.max_wait_seconds <= 1200:
             raise DeploymentError("Polling must be 1–10 seconds, with a bounded wait of 30–1200 seconds.")
         review = build_review(args.repo_url, args.expected_commit, enable_quota=args.enable_quota,
-                              model=args.model, enable_query_log=args.enable_query_log)
+                              model=args.model, enable_query_log=args.enable_query_log, enable_ops=args.enable_ops)
         digest = approval_digest(review)
         print(json.dumps({"mode": "approved-deploy" if args.approved_sha else "dry-run", "execution_ready": bool(review["expected_commit"]), "review": review, "approval_sha256": digest}, ensure_ascii=False, indent=2))
         if not args.approved_sha:

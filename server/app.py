@@ -14,13 +14,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Awaitable, Callable, Literal
+from uuid import UUID
 
 import httpx
 import anyio
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
@@ -28,6 +29,7 @@ from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
+from .ops_records import OpsRecorder
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -62,7 +64,21 @@ class AskRequest(BaseModel):
     context: str = Field(default="", max_length=2500)
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
-    query_log_notice: Literal["v1"] | None = None
+    query_log_notice: Literal["v1", "v2"] | None = None
+    conversation_id: str | None = Field(default=None, max_length=36)
+
+    @field_validator("conversation_id")
+    @classmethod
+    def canonical_conversation(cls, value):
+        if value is not None and str(UUID(value)) != value:
+            raise ValueError("Invalid conversation UUID")
+        return value
+
+    @model_validator(mode="after")
+    def ops_notice_requires_conversation(self):
+        if self.query_log_notice == "v2" and self.conversation_id is None:
+            raise ValueError("Conversation UUID required")
+        return self
 
     @field_validator("question")
     @classmethod
@@ -156,6 +172,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 async with httpx.AsyncClient(limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
                                              transport=query_record_transport) as record_client:
                     application.state.query_records = QueryRecorder(record_client)
+                    application.state.ops_records = OpsRecorder(record_client)
                     try:
                         yield
                     finally:
@@ -231,7 +248,12 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
-                "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30}}
+                "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
+                "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted"}}
+
+    def ops_ready():
+        return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
+                    and application.state.quota.enabled and application.state.quota.ready)
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):
@@ -252,6 +274,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
         principal = request.state.principal if application.state.quota.enabled else None
+        if (application.state.ops_records.enabled or payload.query_log_notice == "v2") and not ops_ready():
+            raise AdmissionError("ops_storage_unavailable", 503)
+        if payload.query_log_notice == "v2" and (not principal or not principal.visitor or not principal.entrypoint):
+            raise AdmissionError("invalid_admission")
         rate_check(request, "ask", subject=principal.subject if principal else None)
         try:
             await asyncio.wait_for(application.state.slots.acquire(), timeout=.1)
@@ -270,6 +296,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         record_started = time.monotonic()
         record_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         record_status = "cancelled"
+        ops_record_id = None
 
         async def release_resources():
             nonlocal resources_released
@@ -297,6 +324,16 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                                 pass
             finally:
                 application.state.slots.release()
+                if ops_record_id is not None:
+                    # Once start was attempted, its acknowledgement may have
+                    # been lost. An idempotent finish also resolves that case.
+                    with anyio.CancelScope(shield=True):
+                        try:
+                            async with asyncio.timeout(5):
+                                await application.state.ops_records.finish(ops_record_id, record_status,
+                                    max(0, int((time.monotonic() - record_started) * 1000)))
+                        except Exception:
+                            pass
                 # No identity/background/history enters the record. Enqueue
                 # after releasing admission, outside the request's awaits.
                 try:
@@ -305,6 +342,18 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                             model=record_model, status=record_status, duration_ms=max(0, int((time.monotonic() - record_started) * 1000)))
                 except Exception:
                     pass
+
+        if payload.query_log_notice == "v2":
+            try:
+                record = application.state.ops_records.prepare(question=payload.question, created_at=record_created_at,
+                    model=record_model, principal=principal, conversation_id=payload.conversation_id, intent=payload.intent)
+                ops_record_id = record["record_id"]
+                await application.state.ops_records.start(record)
+            except BaseException as exc:
+                if not isinstance(exc, asyncio.CancelledError):
+                    record_status = "error"
+                await release_resources()
+                raise
 
         async def events():
             nonlocal generation_task, record_status
@@ -369,7 +418,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         await updates.put({"_event": "partial", **value})
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(exclude={"query_log_notice"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
+                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(exclude={"query_log_notice", "conversation_id"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())

@@ -13,6 +13,7 @@ from uuid import UUID
 
 HEADER = "X-Ask-Admission"
 FIELDS = {"v", "sub", "tier", "attempt", "exp", "method", "path", "body_sha256"}
+OPS_FIELDS = {"visitor", "entrypoint"}
 ADMISSION_PURPOSE = "ask-lizheng:admission:v1"
 QUOTA_STORE_PURPOSE = "ask-lizheng:quota-store:v1"
 MESSAGES = {
@@ -21,6 +22,7 @@ MESSAGES = {
     "quota_unavailable": "使用额度暂时无法核对，请稍后再试。",
     "quota_exhausted": "今天的回答额度已用完或正在使用，请稍后再试。",
     "attempt_replayed": "这次请求已提交过，请重新发起。",
+    "ops_storage_unavailable": "问题暂时无法可靠保存，这次没有开始生成回答，请稍后重试。",
 }
 
 
@@ -48,6 +50,8 @@ class Principal:
     subject: str
     tier: str
     attempt: str
+    visitor: str | None = None
+    entrypoint: str | None = None
 
 
 def _decode(value: str) -> bytes:
@@ -79,7 +83,7 @@ def verify_proof(proof: str | None, secret: str, method: str, path: str, body: b
             raise ValueError("signature")
         claims = json.loads(_decode(encoded), object_pairs_hook=_unique_object)
         clock = time.time() if now is None else now
-        if not isinstance(claims, dict) or set(claims) != FIELDS or type(claims["v"]) is not int or claims["v"] != 1:
+        if not isinstance(claims, dict) or set(claims) not in (FIELDS, FIELDS | OPS_FIELDS) or type(claims["v"]) is not int or claims["v"] != 1:
             raise ValueError("claims")
         if type(claims["exp"]) is not int or not clock < claims["exp"] <= clock + 120:
             raise ValueError("expiry")
@@ -95,6 +99,11 @@ def verify_proof(proof: str | None, secret: str, method: str, path: str, body: b
             raise ValueError("body hash")
         if not hmac.compare_digest(claims["body_sha256"], hashlib.sha256(body).hexdigest()):
             raise ValueError("body binding")
-        return Principal(claims["sub"], claims["tier"], claims["attempt"])
+        if "visitor" in claims:
+            if (method, path) != ("POST", "/api/ask") or not isinstance(claims["visitor"], str) or not re.fullmatch(r"guest:[A-Za-z0-9_-]{43}", claims["visitor"]):
+                raise ValueError("visitor")
+            if claims["entrypoint"] not in ("home", "standalone"):
+                raise ValueError("entrypoint")
+        return Principal(claims["sub"], claims["tier"], claims["attempt"], claims.get("visitor"), claims.get("entrypoint"))
     except (ValueError, TypeError, KeyError, UnicodeError):
         raise AdmissionError("invalid_admission") from None

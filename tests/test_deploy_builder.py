@@ -47,6 +47,7 @@ def test_enable_quota_is_reviewable_without_credentials_or_network(monkeypatch, 
     assert review["payload"]["env_vars"] == {
         "AI_MODEL": "deepseek-v4-flash", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL,
         "ASK_QUERY_LOG_ENABLED": "false",
+        "ASK_OPS_ENABLED": "false",
     }
     assert deploy.approval_digest(review) != deploy.approval_digest(deploy.build_review(expected_commit=COMMIT))
 
@@ -72,6 +73,35 @@ def test_logging_requires_quota_and_separate_approval(monkeypatch, capsys):
     assert "digest mismatch" in capsys.readouterr().err
     review = deploy.build_review(expected_commit=COMMIT, enable_quota=True, enable_query_log=True)
     assert review["payload"]["env_vars"]["ASK_QUERY_LOG_ENABLED"] == "true"
+
+
+def test_ops_requires_quota_logging_and_separate_exact_approval(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    for options in [{}, {"enable_quota": True}, {"enable_query_log": True}]:
+        with pytest.raises(deploy.DeploymentError): deploy.build_review(enable_ops=True, **options)
+    approved = deploy.approval_digest(deploy.build_review(expected_commit=COMMIT, enable_quota=True, enable_query_log=True))
+    class NoEnvironment:
+        def get(self, *args): pytest.fail("Changed ops configuration read credentials")
+    monkeypatch.setattr(deploy, "os", SimpleNamespace(environ=NoEnvironment()))
+    assert deploy.main(["--enable-quota", "--enable-query-log", "--enable-ops", "--expected-commit", COMMIT,
+                        "--approved-sha", approved]) == 2
+    assert "digest mismatch" in capsys.readouterr().err
+    assert deploy.main(["--enable-quota", "--enable-query-log", "--enable-ops", "--expected-commit", COMMIT]) == 0
+    review = deploy.build_review(expected_commit=COMMIT, enable_quota=True, enable_query_log=True, enable_ops=True)
+    assert review["payload"]["env_vars"]["ASK_OPS_ENABLED"] == "true"
+    assert deploy.approval_digest(review) != approved
+
+
+@pytest.mark.parametrize("config", [
+    {"AI_MODEL": "deepseek-v4-flash", "ASK_OPS_ENABLED": "true"},
+    {"AI_MODEL": "deepseek-v4-flash", "ASK_OPS_ENABLED": "true", "ASK_QUOTA_ENABLED": "true",
+     "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL, "ASK_QUERY_LOG_ENABLED": "false"},
+    {"AI_MODEL": "deepseek-v4-flash", "ASK_OPS_ENABLED": "yes"},
+])
+def test_private_or_uncoordinated_ops_configuration_is_rejected(config):
+    review = deploy.build_review()
+    review["payload"]["env_vars"] = config
+    with pytest.raises(deploy.DeploymentError): deploy.validate_payload(review["payload"])
 
 
 def test_model_change_requires_its_own_review(monkeypatch, capsys):

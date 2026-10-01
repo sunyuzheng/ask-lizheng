@@ -32,6 +32,7 @@ const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
 const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
 const KIND = {application: '结合你的处境', source: '材料里的观点', synthesis: 'AI综合'};
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
+const OPS_NOTICE = '提问及匿名使用、对话统计会保存至站点所有者手动删除；不保存背景和完整回答。请勿填写私密信息。';
 const LINKS = {
   context: 'https://github.com/sunyuzheng/lizheng-open-context',
   site: 'https://www.lizheng.ai/',
@@ -231,8 +232,8 @@ function About({close, meta, account, focusInput}) {
       <div className="about-row"><h3>把答案带回现实</h3><p>AI可以整理材料、提出假设，但你的具体情况未必在材料里。建议是否适用，要靠你的行动和反馈来判断。也可以直接追问：这个判断成立的条件是什么？</p></div>
       <div className="about-row"><h3>随时回到出处</h3><p>文章保留日期，视频尽量链接到具体时间点。嘉宾的观点归嘉宾，AI的整理和推断也会标出来。AI可能读错或漏掉条件，重要的判断请打开原文核对；材料里没有的内容，它会说明材料不足。</p></div>
       <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
-        <li>提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。</li>
-        <li>不保存补充背景、对话历史和完整回答；提问记录不关联邮箱、账号或IP。</li>
+        <li>{meta?.ops_logging?.enabled ? '提问文本、匿名使用标识、对话分组和轮次、问题字数、提问方式和入口，以及提问时间、模型、回答状态和耗时，会保存至站点所有者手动删除，用于查看使用情况和改进回答。旧版记录仍在30天后自动删除。' : '提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。'}</li>
+        <li>不保存补充背景、对话历史、完整回答和模型内部推理；提问记录不关联邮箱、账号或IP。</li>
         <li>当前对话只在这个页面里，刷新就会清除。</li>
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
@@ -267,6 +268,25 @@ function App() {
   const [loginStep, setLoginStep] = useState('');
   const [foundingOpen, setFoundingOpen] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
+  const conversationId = useRef(null);
+  const metadataAbort = useRef(null);
+  const storageReady = meta?.query_logging?.enabled === true && typeof meta?.ops_logging?.enabled === 'boolean' && !meta?.settings_error;
+  const refreshMeta = () => {
+    metadataAbort.current?.abort();
+    const controller = new AbortController();
+    metadataAbort.current = controller;
+    setMeta(null);
+    const deadline = setTimeout(() => controller.abort(), 4000);
+    fetch('/api/meta', {signal: controller.signal, cache: 'no-store', credentials: 'same-origin'})
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(value => {
+        if (metadataAbort.current !== controller) return;
+        const ready = value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean';
+        setMeta(ready ? value : {...value, settings_error: true});
+      })
+      .catch(() => { if (metadataAbort.current === controller) setMeta({settings_error: true}); })
+      .finally(() => { clearTimeout(deadline); if (metadataAbort.current === controller) metadataAbort.current = null; });
+  };
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
   const showLoginResult = next => {
     setAccount(next);
@@ -289,7 +309,8 @@ function App() {
     return () => { window.removeEventListener('focus', onFocus); loginCleanup.current?.(); };
   }, []);
   useEffect(() => {
-    fetch('/api/meta').then(response => (response.ok ? response.json() : Promise.reject())).then(setMeta).catch(() => setMeta({offline: true}));
+    refreshMeta();
+    return () => { metadataAbort.current?.abort(); metadataAbort.current = null; };
   }, []);
   useEffect(() => {
     if (!busy) return;
@@ -353,16 +374,20 @@ function App() {
     if (busy) return;
     setMessages([]); setQuestion(''); setBackground({goal: '', facts: '', tried: ''}); setPersonal(false); setEditingSituation(false);
     setSelected(''); setSourceTurn(null); setError('');
+    conversationId.current = null;
     window.scrollTo({top: 0, behavior: scrollBehavior()});
     focusInput();
   };
 
   async function submit(event, retry) {
     event?.preventDefault();
-    if (abort.current || (!retry && !question.trim())) return;
+    if (abort.current || !storageReady || (!retry && !question.trim())) return;
     if (loginStep !== 'pending') setLoginStep('');
     const history = messages.filter(m => m.result).slice(-6).map(m => ({question: m.question, summary: m.result.summary}));
-    const payload = retry?.request || {question: question.trim(), context: situation, intent, history, query_log_notice: 'v1'};
+    const ops = meta?.ops_logging?.enabled === true;
+    if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
+    const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
+      query_log_notice: ops ? 'v2' : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -384,6 +409,7 @@ function App() {
         // `scope: network`: a shared network's daily guest limit ran out, not this person's own 3.
         if (body?.code === 'quota_exhausted' && body.scope === 'network') throw failure('quota_exhausted', MESSAGES.networkQuota);
         if (body?.code === 'quota_exhausted') { seeQuota({remaining: 0}); throw failure('quota_exhausted', MESSAGES.quota); }
+        if (body?.code === 'ops_storage_unavailable') throw failure(body.code, '未能确认问题保存，这次没有开始生成，也不扣次数。请重试。');
         if (body?.code === 'membership_unavailable') throw failure(body.code, MESSAGES.membership);
         throw failure(body?.code, response.status === 429 ? MESSAGES.busy : MESSAGES.unreachable);
       }
@@ -530,17 +556,17 @@ function App() {
           {!busy && <kbd className="shortcut">{isMac ? '⌘ Enter' : 'Ctrl Enter'} 发送</kbd>}
           {busy
             ? <button type="button" className="send stop" onClick={() => abort.current?.abort()} aria-label="停止回答"><Square size={14} fill="currentColor"/></button>
-            : <button type="submit" className="send" disabled={!question.trim() || outOfQuota} aria-label="发送问题"><ArrowUp size={20}/></button>}
+            : <button type="submit" className="send" disabled={!storageReady || !question.trim() || outOfQuota} aria-label="发送问题"><ArrowUp size={20}/></button>}
         </div>
       </div>
     </form>
     <div className="composer-meta">
-      <p className="notice">{NOTICE}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
+      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? OPS_NOTICE : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
       <AccountLine account={account} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
-    {meta?.offline && <p className="form-error">暂时连不上服务。问题可以先写好，恢复后再发送。</p>}
+    {meta?.settings_error && <p className="form-error">保存设置还未确认，暂时不能发送。<button type="button" className="text-button" onClick={refreshMeta}>重试</button></p>}
     {meta?.mode === 'search-only' && <p className="form-note">现在只能检索原文，模型连上后才能生成回答。</p>}
   </div>;
 
@@ -640,7 +666,7 @@ function App() {
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
-                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
+                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
               </article>;
             })}
           </section>
