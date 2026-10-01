@@ -11,7 +11,7 @@ import {beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} 
 const MODES = [
   {id: 'ask', label: '想明白', hint: '问一个概念、一个判断，或一直没想通的地方。', placeholder: '有什么你一直想弄明白的问题？',
     personalHint: '回答会结合你的目标、现状和卡点，也会指出还缺什么信息。', personalPlaceholder: '说说你在做的事，以及卡在哪里。'},
-  {id: 'find', label: '从哪读起', hint: '说一个话题，AI挑出最值得先读的文章和视频，说明各讲什么、从哪篇开始。', placeholder: '比如：想系统了解fake work，从哪几篇读起？'},
+  {id: 'find', label: '从哪读起', hint: '说一个话题，AI挑出最值得先读的文章和视频，说明各讲什么、从哪篇开始。', placeholder: '比如：想了解AI时代怎么学习，先读哪几篇？'},
 ];
 const intentOf = (mode, personal) => (mode === 'find' ? 'find' : personal ? 'apply' : 'understand');
 const EXAMPLES = [
