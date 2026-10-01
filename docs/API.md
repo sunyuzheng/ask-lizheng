@@ -12,7 +12,7 @@ curl -N http://127.0.0.1:8000/api/ask \
 
 上线后把 localhost 换成正式站点地址。`intent` 可用 `understand`、`apply`、`find`；`context` 和 `history` 选填。问题最长 2000 字符，背景最长 2500 字符，历史最多六轮，每轮只有 question（2000 字符）和 summary（1500 字符）。整个请求最大 80 KB。历史由调用者提供，服务端将其视为未核实的上下文；新的明确主题会重新检索。
 
-返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；result 是一次完整且已经校验的 JSON。它不逐字流出未经核对的回答，也不输出模型的内部推理文本。
+返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；approach 提前提供结合检索材料的整理方向、待核对的问题与出处；result 是一次完整且已经校验的 JSON。approach 是公开的回答准备摘要，尚不是结论；不是模型内部推理文本。完整回答仍须经过格式与来源编号核对。
 
 ```text
 event: progress
@@ -26,6 +26,9 @@ data: {"stage":"matching","message":"正在匹配意思相近的材料，并合�
 
 event: sources
 data: {"phase":"matched","provisional":true,"sources":[{"id":"S1","title":"…","excerpt":"…","url":"…"}]}
+
+event: approach
+data: {"summary":"先对照原文，解释关键关系并核对条件。","questions":["这份产出会改变下游的什么决定？"],"sources":[{"id":"S1","title":"…"}],"note":"这是整理方向，尚不是完整回答。"}
 
 event: progress
 data: {"stage":"thinking","message":"已找到 12 个候选片段，正在根据材料整理回答…"}
@@ -42,6 +45,8 @@ data: {"status":"answered","summary":"…","sections":[],"sources":[],"followups
 sections 含 heading、body、source_ids，以及 source / synthesis / application 的 kind；分别表示材料转述、AI 综合与联系处境的应用。sources 含 id、title、url、date、excerpt、author、attribution_note、evidence_role、推荐理由及可用的 timecode / public_copy_url。链接和原文片段由服务器提供。
 
 status 还有 clarify（缺少实质条件）、unsupported（资料不支持）和 sources-only（找到材料，但未连接模型、服务故障或仅有目录）。服务失败的 sources-only 仍可正常阅读原文。无法读取资料或处理请求时返回 error 事件。校验、频率与并发拒绝在 SSE 开始前返回 HTTP 422 / 413 / 429 / 503；429 带 Retry-After。调用者应处理停止、断线和未收到最终事件，不能把一条 progress 当成功。
+
+语义匹配与模型等待期间，每 5 秒发送标准 SSE 注释作为保活，注释不代表新的进度或思考。响应使用 no-store,no-transform。客户端应忽略注释，保留未完成问题与已有材料。模型故障的 sources-only 带 retryable:true 与固定 failure_code；用户明确重试后才重新发起请求。主页转发层在 100 秒期限或断流时返回 relay_timeout / upstream_stream_interrupted，客户端另设 110 秒期限并取消上游。重试在原回合进行，沿用内存中的原问题、背景、意图和历史，不自动追加或反复调用模型。
 
 ## 查看资料与状态
 

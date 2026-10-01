@@ -195,7 +195,7 @@ def test_source_reasons_use_known_ids_and_server_owned_metadata(index):
 
 
 def events(response):
-    return [(part.splitlines()[0].removeprefix("event: "), json.loads(next(line[6:] for line in part.splitlines() if line.startswith("data: ")))) for part in response.text.strip().split("\n\n")]
+    return [(part.splitlines()[0].removeprefix("event: "), json.loads(next(line[6:] for line in part.splitlines() if line.startswith("data: ")))) for part in response.text.strip().split("\n\n") if any(line.startswith("data: ") for line in part.splitlines())]
 
 
 def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
@@ -204,7 +204,7 @@ def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
         meta = client.get("/api/meta").json()
         assert meta["mode"] == "search-only" and not meta["model_ready"]
         response = client.post("/api/ask", json={"question": "职业选择怎么做", "intent": "apply"})
-        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["cache-control"] == "no-store, no-transform"
         assert response.headers["x-accel-buffering"] == "no"
         result = events(response)[-1][1]
         assert result["status"] == "sources-only" and result["sources"]
@@ -227,7 +227,8 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         response = client.post("/api/ask", json={"question": "职业选择怎么做"})
         items = events(response)
-        assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "progress", "progress", "result"]
+        assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "approach", "progress", "progress", "result"]
+        assert items[4][1]["sources"] and "尚不是完整回答" in items[4][1]["note"]
         assert items[1][1]["provisional"] and items[1][1]["sources"][0]["excerpt"]
         assert items[-2][1]["stage"] == "checking"
         assert items[-1][1]["status"] == "answered"
@@ -305,6 +306,7 @@ def test_provider_failure_preserves_retrieved_sources(context_pack, monkeypatch,
         result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
         assert result["status"] == "sources-only" and result["sources"]
         assert result["limitations"]
+        assert result["retryable"] and result["failure_code"]
         assert len(attempts) == (2 if failure in {"invalid-json", "unknown-source"} else 1)
 
 
@@ -413,7 +415,7 @@ def test_disconnect_cancels_model_generation(context_pack, monkeypatch):
                     return False
             ask = next(route.endpoint for route in app.routes if route.path == "/api/ask")
             response = await ask(Request(), AskRequest(question="职业选择怎么做"))
-            for _ in range(5):
+            for _ in range(6):
                 await anext(response.body_iterator)
             pending = asyncio.create_task(anext(response.body_iterator))
             await asyncio.wait_for(started.wait(), .5)
@@ -460,5 +462,57 @@ def test_anyio_disconnect_cancellation_always_returns_generation_slot(context_pa
                 # Starlette uses a persistent cancellation scope on disconnect.
                 group.cancel_scope.cancel()
             await asyncio.wait_for(cancelled.wait(), 1)
+            assert app.state.slots._value == 3
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("phase", ["semantic", "model"])
+def test_idle_work_sends_heartbeat_and_still_finishes_once(context_pack, monkeypatch, phase):
+    import asyncio
+    import importlib
+    from server.app import AskRequest
+    app_module = importlib.import_module("server.app")
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.setattr(app_module, "STREAM_HEARTBEAT_SECONDS", .01)
+    calls = []
+
+    async def run():
+        release = asyncio.Event()
+
+        async def semantic(*args):
+            if phase == "semantic":
+                await release.wait()
+            return []
+
+        async def provider(request):
+            calls.append(True)
+            if phase == "model":
+                await release.wait()
+            return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
+
+        monkeypatch.setattr(app_module.SemanticIndex, "candidates", semantic)
+        app = create_app(context_pack, httpx.MockTransport(provider))
+        async with app.router.lifespan_context(app):
+            class Request:
+                client = type("Client", (), {"host": "127.0.0.1"})()
+                async def is_disconnected(self):
+                    return False
+            ask = next(route.endpoint for route in app.routes if route.path == "/api/ask")
+            response = await ask(Request(), AskRequest(question="职业选择如何验证能力？"))
+            frames = []
+            while True:
+                frame = await asyncio.wait_for(anext(response.body_iterator), .5)
+                frames.append(frame)
+                if frame.startswith(": keep-alive "):
+                    break
+            assert any(frame.startswith("event: sources") for frame in frames)
+            assert not any(frame.startswith("event: result") for frame in frames)
+            assert len(frames[-1].encode()) >= 2048
+            release.set()
+            frames.extend([frame async for frame in response.body_iterator])
+            parsed = events(httpx.Response(200, text="".join(frames)))
+            assert parsed[-1][0] == "result" and parsed[-1][1]["status"] == "answered"
+            assert sum(event == "result" for event, _ in parsed) == 1
+            assert len(calls) == 1
             assert app.state.slots._value == 3
     asyncio.run(run())

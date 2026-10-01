@@ -26,6 +26,10 @@ from .semantic import SemanticIndex
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
+STREAM_HEARTBEAT_SECONDS = 5
+# SSE comments keep connections active without inventing progress or exposing
+# model reasoning. Padding also flushes small frames through buffering proxies.
+STREAM_HEARTBEAT = ": keep-alive " + " " * 2048 + "\n\n"
 
 
 class HistoryItem(BaseModel):
@@ -86,6 +90,25 @@ FAILURES = {
 }
 
 
+def answer_approach(intent: str, passages, cards: list[dict]) -> dict:
+    """Public reading outline, not the model's private reasoning or a conclusion."""
+    summaries = {
+        "understand": "先对照相关原文，解释其中的关键关系，再检查它们在什么条件下成立。",
+        "apply": "先对照资料和你提供的处境，区分材料中的观点、适用条件与AI的应用推演。",
+        "find": "先挑选最值得读的出处，说明每份材料适合核对什么，以及可以从哪里开始。",
+    }
+    questions = list(dict.fromkeys(
+        question for card in cards for question in card.get("diagnostic_questions", [])[:1]
+    ))[:2]
+    return {
+        "summary": summaries[intent],
+        "questions": questions,
+        "sources": [{"id": passage.source["id"], "title": passage.source["title"]}
+                    for passage in passages if not passage.discovery][:3],
+        "note": "这是结合候选材料的整理方向，尚不是完整回答或已核验的结论。",
+    }
+
+
 def create_app(context_root: Path | None = None, provider_transport=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application):
@@ -139,7 +162,11 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
+            response.headers["Cache-Control"] = (
+                "no-store, no-transform"
+                if response.headers.get("content-type", "").startswith("text/event-stream")
+                else "no-store"
+            )
         return response
 
     def rate_check(request: Request, route: str, multiplier: int = 1):
@@ -182,7 +209,7 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                 if clarification:
                     yield sse("result", clarification)
                     return
-                yield sse("progress", {"stage": "retrieving", "message": "正在查找相关公开材料…"})
+                yield sse("progress", {"stage": "retrieving", "message": "正在查找相关公开材料…"}) + STREAM_HEARTBEAT
                 token = os.getenv("AI_BUILDER_TOKEN", "")
                 semantic_query = payload.question + "\n" + payload.context
                 if payload.history and len(payload.question) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", payload.question):
@@ -195,6 +222,10 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     if passages:
                         yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
                     yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"})
+                    while not semantic_task.done():
+                        done, _ = await asyncio.wait({semantic_task}, timeout=STREAM_HEARTBEAT_SECONDS)
+                        if not done:
+                            yield STREAM_HEARTBEAT
                     semantic_candidates = await semantic_task
                 finally:
                     if not semantic_task.done():
@@ -216,21 +247,31 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     result = sources_only(passages, "这些条目只收录目录信息；可以打开原文继续阅读。", "find") if payload.intent == "find" and passages else unsupported_result(passages)
                     yield sse("result", result)
                     return
+                cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
+                yield sse("approach", answer_approach(payload.intent, passages, cards))
                 yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"})
                 try:
                     updates = asyncio.Queue()
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)}, passages, on_progress=updates.put)
+                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": cards}, passages, on_progress=updates.put)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())
-                    while (update := await updates.get()) is not None:
+                    while True:
+                        try:
+                            update = await asyncio.wait_for(updates.get(), timeout=STREAM_HEARTBEAT_SECONDS)
+                        except TimeoutError:
+                            yield STREAM_HEARTBEAT
+                            continue
+                        if update is None:
+                            break
                         yield sse("progress", update)
                     answer = await generation_task
                     result = assemble_answer(answer, passages)
                 except ProviderFailure as exc:
                     result = sources_only(passages, FAILURES[exc.code], payload.intent)
+                    result.update(retryable=True, failure_code=exc.code)
                 if not await request.is_disconnected():
                     yield sse("result", result)
             except asyncio.CancelledError:
@@ -249,7 +290,7 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     # disconnect. The bounded concurrency slot must still return.
                     application.state.slots.release()
 
-        return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+        return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"})
 
     @application.get("/{path:path}")
     async def static(path: str):

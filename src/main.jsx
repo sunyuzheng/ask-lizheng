@@ -48,6 +48,7 @@ function Working({message,busy,elapsed,model,onStop,onSelect}) {
     {busy&&<><div className="progress"><LoaderCircle size={18} className="spin"/><span role="status">{message.progress?.message||'正在查找相关公开材料…'}</span><button onClick={onStop}><Square size={12}/>停止</button></div>
       <ol className="process-steps" aria-label="处理步骤">{PROCESS_STEPS.map((label,i)=><li key={label} className={i<step?'done':i===step?'current':''} aria-current={i===step?'step':undefined}>{i<step?<Check size={12}/>:<span>{i+1}</span>}{label}</li>)}</ol>
       <p className="process-note"><span>{model} · 已等待 {elapsed} 秒</span><span>{candidates.length?'可以先读材料，回答仍在整理中。':'材料找到后会先展示在这里。'}</span></p></>}
+    {busy&&message.approach&&<div className="answer-approach"><h3>回答思路</h3><p>{message.approach.summary}</p>{message.approach.questions?.length>0&&<ul>{message.approach.questions.map(q=><li key={q}>{q}</li>)}</ul>}<div className="approach-sources">{message.approach.sources.map(s=><span key={s.id}>{s.id} · {s.title}</span>)}</div><small>{message.approach.note}</small></div>}
     {candidates.length>0&&<div className="preview-sources"><div className="preview-heading"><BookOpen size={16}/><h3>已找到的材料</h3><span>候选 · 不代表最终采用</span></div>
       {candidates.slice(0,2).map(s=><article className="preview-source" key={`${s.id}-${s.url}`}><div><a href={s.url} target="_blank" rel="noreferrer">{s.title}<ArrowUpRight size={14}/></a><time>{s.date?.slice(0,10)||'日期未标明'}</time></div><p>{s.excerpt?.slice(0,160)}{s.excerpt?.length>160?'…':''}</p></article>)}
       <details className="candidate-details"><summary>查看全部 {candidates.length} 份候选材料与片段 <ChevronDown size={14}/></summary>{candidates.map(s=><SourceCard key={`${s.id}-${s.url}`} source={s} prefix={`turn-${message.id}`} onSelect={id=>onSelect(id,message.id)}/>)}</details>
@@ -76,21 +77,29 @@ function App() {
   const selectSource=(id,turnId)=>{setSourceTurn(turnId);setSelected(id);requestAnimationFrame(()=>{const rail=document.getElementById(`rail-source-${id}`);const target=rail?.getClientRects().length?rail:document.getElementById(`turn-${turnId}-source-${id}`);target?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});});};
   const prefill=(value,mode=intent)=>{setIntent(mode);setQuestion(value);setError('');setNav(false);requestAnimationFrame(()=>{input.current?.focus();input.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});});};
   const newChat=()=>{if(busy)return;setMessages([]);setQuestion('');setBackground({goal:'',facts:'',tried:''});setShowContext(false);setSelected('');setSourceTurn(null);setError('');setNav(false);input.current?.focus();};
-  async function submit(e) {
-    e?.preventDefault();if(busy||!question.trim())return;
+  useEffect(()=>()=>abort.current?.abort(),[]);
+  async function submit(e,retry) {
+    e?.preventDefault();if(abort.current||(!retry&&!question.trim()))return;
     const text=question.trim(),context=Object.entries(background).filter(([,v])=>v.trim()).map(([k,v])=>`${{goal:'希望达到的结果',facts:'目前的情况与限制',tried:'已经试过的办法'}[k]}：${v.trim()}`).join('\n');
     const history=messages.filter(m=>m.result).slice(-6).map(m=>({question:m.question,summary:m.result.summary}));
-    const id=Date.now(),started=performance.now();setMessages(prev=>[...prev,{id,question:text,intent,context,model:meta?.model||'AI',progress:{stage:'retrieving',message:'正在查找相关公开材料…'}}]);setQuestion('');setBusy(true);setError('');setSelected('');setSourceTurn(null);
-    abort.current=new AbortController();
+    const payload=retry?.request||{question:text,context,intent,history};
+    const id=retry?.id||Date.now(),started=performance.now(),controller=new AbortController();let timedOut=false;
+    const deadline=setTimeout(()=>{timedOut=true;controller.abort();},110000);
+    abort.current=controller;
+    setMessages(prev=>[...prev.filter(m=>m.id!==id),{id,question:payload.question,intent:payload.intent,context:payload.context,request:payload,previewSources:retry?.previewSources||[],model:meta?.model||'AI',progress:{stage:'retrieving',message:'正在查找相关公开材料…'}}]);setQuestion(prev=>!retry||prev.trim()===payload.question?'':prev);setBusy(true);setError('');setSelected('');setSourceTurn(null);
+    const failure=(code,message)=>Object.assign(new Error(message),{code});
     try {
-      const response=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,context,intent,history}),signal:abort.current.signal});
-      if(!response.ok){let body;try{body=await response.json();}catch{}throw new Error(body?.detail||body?.message||(response.status===429?'现在提问的人有点多，请稍后再试。':'暂时没能连接，请稍后重试。'));}
+      const response=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal,cache:'no-store',credentials:'omit'});
+      if(!response.ok){let body;try{body=await response.json();}catch{}throw failure(body?.code,response.status===429?'现在提问的人有点多，请稍后再试。':'暂时没能连接，请稍后重试。');}
+      if(!response.body||!response.headers.get('content-type')?.includes('text/event-stream'))throw failure('invalid_stream','回答连接未能建立，可以重新生成。');
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',received=false;
-      const process=frame=>{let event='message',data=[];for(const line of frame.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trim());}if(!data.length)return;const value=JSON.parse(data.join('\n'));if(event==='progress')setMessages(prev=>prev.map(m=>m.id===id?{...m,progress:value}:m));else if(event==='sources')setMessages(prev=>prev.map(m=>m.id===id?{...m,previewSources:value.sources||[]}:m));else if(event==='result'){received=true;setMessages(prev=>prev.map(m=>m.id===id?{...m,result:value,elapsed:Math.round((performance.now()-started)/1000)}:m));}else if(event==='error')throw new Error(value.message||'回答暂时未完成，可以重试。');};
-      while(true){const {done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});buffer=buffer.replace(/\r\n/g,'\n');let index;while((index=buffer.indexOf('\n\n'))!==-1){process(buffer.slice(0,index));buffer=buffer.slice(index+2);}if(done){if(buffer.trim())process(buffer);break;}}
-      if(!received)throw new Error('连接中断了，还没有得到完整回答。你的问题已保留，可以重试。');
-    } catch(err) {const message=err.name==='AbortError'?'已停止。你的问题还在，可以修改后重试。':String(err.message||'暂时没有完成，请重试。');setError(message);setMessages(prev=>prev.map(m=>m.id===id?{...m,error:message}:m));setQuestion(text);}
-    finally {setBusy(false);abort.current=null;}
+      const process=frame=>{let event='message',data=[];for(const line of frame.split(/\r?\n/)){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trimStart());}if(!data.length)return;let value;try{value=JSON.parse(data.join('\n'));}catch{throw failure('invalid_stream','回答数据未能完整读取，可以重新生成。');}if(controller.signal.aborted)return;if(event==='progress')setMessages(prev=>prev.map(m=>m.id===id?{...m,progress:value}:m));else if(event==='approach')setMessages(prev=>prev.map(m=>m.id===id?{...m,approach:value}:m));else if(event==='sources')setMessages(prev=>prev.map(m=>m.id===id?{...m,previewSources:value.sources||[]}:m));else if(event==='result'){received=true;setMessages(prev=>prev.map(m=>m.id===id?{...m,result:value,elapsed:Math.round((performance.now()-started)/1000)}:m));}else if(event==='error')throw failure(value.code,'回答未完成。问题和已找到的材料仍在，可以重新生成。');};
+      try {
+        while(!received){const {done,value}=await reader.read();buffer+=decoder.decode(value,{stream:!done});if(buffer.length>512000)throw failure('invalid_stream','回答数据超出读取范围，可以重新生成。');let boundary;while((boundary=/\r?\n\r?\n/.exec(buffer))){process(buffer.slice(0,boundary.index));buffer=buffer.slice(boundary.index+boundary[0].length);if(received)break;}if(done){if(!received&&buffer.trim())process(buffer);break;}}
+        if(!received)throw failure('connection_lost','连接中断了，问题和已找到的材料仍在，可以重新生成。');
+      } finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
+    } catch(err) {const message=timedOut||err.code==='relay_timeout'?'这次等待超时了，问题和材料仍在，可以重新生成。':controller.signal.aborted?'已停止。你的问题还在，可以修改后重试。':err instanceof TypeError?'连接中断了，问题和已找到的材料仍在，可以重新生成。':String(err.message||'暂时没有完成，请重试。');setError(message);setMessages(prev=>prev.map(m=>m.id===id?{...m,error:message}:m));setQuestion(prev=>prev.trim()?prev:payload.question);}
+    finally {clearTimeout(deadline);if(abort.current===controller){controller.abort();setBusy(false);abort.current=null;}}
   }
   async function copy(result){const text=[result.summary,...(result.sections||[]).map(s=>`${s.heading}\n${s.body}`),...(result.sources||[]).map(s=>`${s.title}（${s.date?.slice(0,10)||''}）\n${s.url}`),'由问问立正 AI 根据公开材料整理，非本人实时回复。'].join('\n\n');try{await navigator.clipboard.writeText(text);setCopied(result);setTimeout(()=>setCopied(false),1800);}catch{setError('浏览器未允许复制，请直接选择回答文字。');}}
   const mode=MODES.find(m=>m.id===intent);
@@ -117,6 +126,7 @@ function App() {
               {index===messages.length-1&&m.result.followups?.length>0&&<div className="followups"><p>可以继续问</p>{m.result.followups.map(q=><button key={q} onClick={()=>prefill(q,'apply')}>{q}<ArrowUpRight size={15}/></button>)}</div>}
             </div>}
             {m.error&&<p className="turn-error" role="alert">{m.error}</p>}
+            {!busy&&index===messages.length-1&&(m.error||m.result?.retryable)&&<button className="retry-answer" onClick={()=>submit(undefined,m)}>重新生成回答</button>}
           </article>)}
           <div ref={end}/>
         </section>}
