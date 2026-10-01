@@ -215,7 +215,7 @@ def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
 
 def test_provider_answer_is_source_validated(context_pack, monkeypatch):
     monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
-    monkeypatch.delenv("AI_MODEL", raising=False)
+    monkeypatch.setenv("AI_MODEL", "grok-4.5")
     def provider(request):
         body = json.loads(request.content)
         assert body["response_format"]["type"] == "json_schema"

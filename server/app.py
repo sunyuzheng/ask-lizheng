@@ -11,6 +11,7 @@ import secrets
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Awaitable, Callable, Literal
 
@@ -26,6 +27,7 @@ from .retrieval import ContextIndex
 from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
+from .query_records import QueryRecorder
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -60,6 +62,7 @@ class AskRequest(BaseModel):
     context: str = Field(default="", max_length=2500)
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
+    query_log_notice: Literal["v1"] | None = None
 
     @field_validator("question")
     @classmethod
@@ -125,7 +128,7 @@ def answer_approach(intent: str, passages, cards: list[dict]) -> dict:
     }
 
 
-def create_app(context_root: Path | None = None, provider_transport=None, *, quota_store=None) -> FastAPI:
+def create_app(context_root: Path | None = None, provider_transport=None, *, quota_store=None, query_record_transport=None) -> FastAPI:
     if quota_store is not None and context_root is None:
         raise ValueError("An injected quota store requires an explicit local/test context root")
     @asynccontextmanager
@@ -150,7 +153,13 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             application.state.provider = client
             async with httpx.AsyncClient(limits=httpx.Limits(max_connections=4, max_keepalive_connections=2)) as quota_client:
                 application.state.quota = QuotaAdmission(quota_client, store=quota_store)
-                yield
+                async with httpx.AsyncClient(limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
+                                             transport=query_record_transport) as record_client:
+                    application.state.query_records = QueryRecorder(record_client)
+                    try:
+                        yield
+                    finally:
+                        await application.state.query_records.close()
 
     application = FastAPI(title="Ask Lizheng", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -221,7 +230,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         ready = bool(os.getenv("AI_BUILDER_TOKEN"))
         model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
-                "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only"}
+                "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
+                "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30}}
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):
@@ -256,6 +266,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         generation_task = None
         quota_finished = False
         resources_released = False
+        record_created_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        record_started = time.monotonic()
+        record_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
+        record_status = "cancelled"
 
         async def release_resources():
             nonlocal resources_released
@@ -283,13 +297,22 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                                 pass
             finally:
                 application.state.slots.release()
+                # No identity/background/history enters the record. Enqueue
+                # after releasing admission, outside the request's awaits.
+                try:
+                    if payload.query_log_notice == "v1" and application.state.quota.enabled and application.state.quota.ready:
+                        application.state.query_records.enqueue(question=payload.question, created_at=record_created_at,
+                            model=record_model, status=record_status, duration_ms=max(0, int((time.monotonic() - record_started) * 1000)))
+                except Exception:
+                    pass
 
         async def events():
-            nonlocal generation_task
+            nonlocal generation_task, record_status
             async def settled_result(result):
-                nonlocal quota_finished
+                nonlocal quota_finished, record_status
                 quota = await application.state.quota.finish(reservation, result["status"] == "answered")
                 quota_finished = True
+                record_status = result["status"]
                 return {**result, "quota": quota} if quota is not None else result
             try:
                 if initial_quota is not None:
@@ -326,6 +349,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 if await request.is_disconnected():
                     return
                 if not application.state.index.documents:
+                    record_status = "error"
                     yield sse("error", {"message": "公开资料暂时无法读取，请稍后再试。", "code": "context_unavailable"})
                     return
                 token = os.getenv("AI_BUILDER_TOKEN", "")
@@ -345,7 +369,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         await updates.put({"_event": "partial", **value})
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
+                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(exclude={"query_log_notice"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())
@@ -369,8 +393,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             except asyncio.CancelledError:
                 raise
             except AdmissionError as exc:
+                record_status = "error"
                 yield sse("error", exc.payload())
             except Exception:
+                record_status = "error"
                 # Do not include exception strings: providers may echo input.
                 yield sse("error", {"message": "这次处理没有完成，请稍后再试。", "code": "request_failed"})
             finally:

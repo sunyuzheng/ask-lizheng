@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .retrieval import Passage
 
 ANSWER_BUDGET_SECONDS = 85
-DEFAULT_MODEL = "grok-4.5"
+DEFAULT_MODEL = "deepseek-v4-flash"
 
 
 def model_options(model: str) -> dict:

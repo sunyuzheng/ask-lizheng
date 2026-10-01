@@ -26,7 +26,8 @@ def test_default_is_dry_run_without_credentials_or_network(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert '"mode": "dry-run"' in output
     assert deploy.DEPLOYMENTS_URL in output and deploy.PUBLIC_URL in output
-    assert '"AI_MODEL": "grok-4.5"' in output
+    assert '"AI_MODEL": "deepseek-v4-flash"' in output
+    assert '"ASK_QUERY_LOG_ENABLED": "false"' in output
     assert '"ASK_QUOTA_ENABLED": "false"' in output
     assert "AI_BUILDER_TOKEN" not in output
 
@@ -44,7 +45,8 @@ def test_enable_quota_is_reviewable_without_credentials_or_network(monkeypatch, 
     assert "ASK_ADMISSION_SECRET" not in output and "ASK_QUOTA_STORE_SECRET" not in output
     review = deploy.build_review(expected_commit=COMMIT, enable_quota=True)
     assert review["payload"]["env_vars"] == {
-        "AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL,
+        "AI_MODEL": "deepseek-v4-flash", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": deploy.QUOTA_STORE_URL,
+        "ASK_QUERY_LOG_ENABLED": "false",
     }
     assert deploy.approval_digest(review) != deploy.approval_digest(deploy.build_review(expected_commit=COMMIT))
 
@@ -57,6 +59,25 @@ def test_disabled_review_cannot_authorize_enabled_quota(monkeypatch, capsys):
     monkeypatch.setattr(deploy, "os", SimpleNamespace(environ=NoEnvironment()))
     approved = deploy.approval_digest(deploy.build_review(expected_commit=COMMIT))
     assert deploy.main(["--enable-quota", "--expected-commit", COMMIT, "--approved-sha", approved]) == 2
+    assert "digest mismatch" in capsys.readouterr().err
+
+
+def test_logging_requires_quota_and_separate_approval(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    with pytest.raises(deploy.DeploymentError):
+        deploy.build_review(enable_query_log=True)
+    approved = deploy.approval_digest(deploy.build_review(expected_commit=COMMIT, enable_quota=True))
+    assert deploy.main(["--enable-quota", "--enable-query-log", "--expected-commit", COMMIT,
+                        "--approved-sha", approved]) == 2
+    assert "digest mismatch" in capsys.readouterr().err
+    review = deploy.build_review(expected_commit=COMMIT, enable_quota=True, enable_query_log=True)
+    assert review["payload"]["env_vars"]["ASK_QUERY_LOG_ENABLED"] == "true"
+
+
+def test_model_change_requires_its_own_review(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    approved = deploy.approval_digest(deploy.build_review(expected_commit=COMMIT, model="grok-4.5"))
+    assert deploy.main(["--expected-commit", COMMIT, "--approved-sha", approved]) == 2
     assert "digest mismatch" in capsys.readouterr().err
 
 

@@ -66,7 +66,7 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 
 服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
 
-输入及检索到的公开片段会由 Builder 的模型服务处理。本项目不记录问答正文，不创建对话数据库；它不能替第三方服务承诺保存政策。
+输入及检索到的公开片段会由 Builder 的模型服务处理。默认模型为 `deepseek-v4-flash`。前端展示30天保存提示后，提交可附 `query_log_notice: "v1"`；只有额度已启用并完成准入且记录开关开启时，保存这次问题文本、时间、模型、状态与耗时。不保存补充背景、历史、完整回答或模型思考，不关联账号或邮箱；旧客户端未附提示版本则不记录。记录自动过期，详情见[QUERY_RECORDS.md](QUERY_RECORDS.md)。这些约束不替第三方服务承诺其保存政策。
 
 ## 账号与额度（默认关闭）
 

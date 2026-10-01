@@ -24,6 +24,8 @@ DEFAULT_REPO = "https://github.com/sunyuzheng/ask-lizheng"
 SERVICE = "ask-lizheng"
 PUBLIC_URL = "https://ask-lizheng.ai-builders.space/"
 QUOTA_STORE_URL = "https://www.lizheng.ai/api/ask-lizheng/quota-storage"
+DEFAULT_MODEL = "deepseek-v4-flash"
+MODELS = (DEFAULT_MODEL, "grok-4.5")
 WORKFLOW_STATES = {"queued", "deploying"}
 TERMINAL_STATES = {"HEALTHY", "SLEEPING", "UNHEALTHY", "DEGRADED", "ERROR"}
 
@@ -62,22 +64,31 @@ def validate_payload(payload: dict) -> None:
         raise DeploymentError("This script deploys only the ask-lizheng service.")
     if payload["branch"] != "main" or payload["port"] != 8000 or payload["streaming_log_timeout_seconds"] != 60:
         raise DeploymentError("Branch, port, or log timeout differs from this app's reviewed deployment contract.")
-    allowed = [
-        {"AI_MODEL": "grok-4.5"},
-        {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "false"},
-        {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": QUOTA_STORE_URL},
-    ]
+    allowed = []
+    for model in MODELS:
+        configurations = [
+            {"AI_MODEL": model},
+            {"AI_MODEL": model, "ASK_QUOTA_ENABLED": "false"},
+            {"AI_MODEL": model, "ASK_QUOTA_ENABLED": "true", "ASK_QUOTA_STORE_ORIGIN": QUOTA_STORE_URL},
+        ]
+        allowed.extend(configurations)
+        allowed.extend({**configuration, "ASK_QUERY_LOG_ENABLED": "false"} for configuration in configurations)
+        allowed.append({**configurations[-1], "ASK_QUERY_LOG_ENABLED": "true"})
     if payload["env_vars"] not in allowed:
         # Do not repeat rejected values: they may contain a credential.
         raise DeploymentError("Only the approved model and fixed non-secret quota configuration are allowed in env_vars.")
 
 
-def build_review(repo_url: str = DEFAULT_REPO, expected_commit: str = "", *, enable_quota: bool = False) -> dict:
+def build_review(repo_url: str = DEFAULT_REPO, expected_commit: str = "", *, enable_quota: bool = False,
+                 model: str = DEFAULT_MODEL, enable_query_log: bool = False) -> dict:
     if expected_commit and not re.fullmatch(r"[a-fA-F0-9]{40}", expected_commit):
         raise DeploymentError("Expected commit must be a full 40-character Git SHA.")
+    if model not in MODELS or (enable_query_log and not enable_quota):
+        raise DeploymentError("Query logging requires quotas; the model must be an approved model identifier.")
     payload = {
         "repo_url": repo_url, "service_name": SERVICE, "branch": "main", "port": 8000,
-        "env_vars": {"AI_MODEL": "grok-4.5", "ASK_QUOTA_ENABLED": "true" if enable_quota else "false"}, "streaming_log_timeout_seconds": 60,
+        "env_vars": {"AI_MODEL": model, "ASK_QUOTA_ENABLED": "true" if enable_quota else "false",
+                     "ASK_QUERY_LOG_ENABLED": "true" if enable_query_log else "false"}, "streaming_log_timeout_seconds": 60,
     }
     if enable_quota:
         payload["env_vars"]["ASK_QUOTA_STORE_ORIGIN"] = QUOTA_STORE_URL
@@ -228,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-url", default=DEFAULT_REPO)
     parser.add_argument("--expected-commit", default="")
     parser.add_argument("--enable-quota", action="store_true", help="Use the fixed signed remote quota store; no private environment values are published.")
+    parser.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
+    parser.add_argument("--enable-query-log", action="store_true", help="Save disclosed questions for 30 days through the fixed signed storage endpoint.")
     approval = parser.add_mutually_exclusive_group()
     approval.add_argument("--dry-run", action="store_true", help="Print the exact review; never read credentials or make network calls.")
     approval.add_argument("--approved-sha", help="Digest of the exact payload explicitly approved by the user.")
@@ -238,7 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not 1 <= args.poll_seconds <= 10 or not 30 <= args.max_wait_seconds <= 1200:
             raise DeploymentError("Polling must be 1–10 seconds, with a bounded wait of 30–1200 seconds.")
-        review = build_review(args.repo_url, args.expected_commit, enable_quota=args.enable_quota)
+        review = build_review(args.repo_url, args.expected_commit, enable_quota=args.enable_quota,
+                              model=args.model, enable_query_log=args.enable_query_log)
         digest = approval_digest(review)
         print(json.dumps({"mode": "approved-deploy" if args.approved_sha else "dry-run", "execution_ready": bool(review["expected_commit"]), "review": review, "approval_sha256": digest}, ensure_ascii=False, indent=2))
         if not args.approved_sha:
