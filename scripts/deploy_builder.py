@@ -61,7 +61,7 @@ def validate_payload(payload: dict) -> None:
         raise DeploymentError("This script deploys only the ask-lizheng service.")
     if payload["branch"] != "main" or payload["port"] != 8000 or payload["streaming_log_timeout_seconds"] != 60:
         raise DeploymentError("Branch, port, or log timeout differs from this app's reviewed deployment contract.")
-    if payload["env_vars"] != {"AI_MODEL": "grok-4-fast"}:
+    if payload["env_vars"] != {"AI_MODEL": "grok-4.5"}:
         # Do not repeat rejected values: they may contain a credential.
         raise DeploymentError("Only the approved, non-secret AI_MODEL configuration is allowed in env_vars.")
 
@@ -71,7 +71,7 @@ def build_review(repo_url: str = DEFAULT_REPO, expected_commit: str = "") -> dic
         raise DeploymentError("Expected commit must be a full 40-character Git SHA.")
     payload = {
         "repo_url": repo_url, "service_name": SERVICE, "branch": "main", "port": 8000,
-        "env_vars": {"AI_MODEL": "grok-4-fast"}, "streaming_log_timeout_seconds": 60,
+        "env_vars": {"AI_MODEL": "grok-4.5"}, "streaming_log_timeout_seconds": 60,
     }
     validate_payload(payload)
     return {

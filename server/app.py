@@ -20,7 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, sources_only, unsupported_result
+from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
 from .semantic import SemanticIndex
 
@@ -157,7 +157,7 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
         ready = bool(os.getenv("AI_BUILDER_TOKEN"))
         model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
-                "model": model, "reasoning_effort": "low" if model == "gpt-5" else None, "mode": "live" if ready else "search-only"}
+                "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only"}
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):

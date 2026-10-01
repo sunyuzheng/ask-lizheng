@@ -49,6 +49,6 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 
 ## 服务端怎样调用 Builder
 
-在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `grok-4-fast`，使用严格 JSON schema；核心摘要最多 350 字符、解释段落最多三节。服务端选择 `gpt-5` 时附带 `reasoning_effort: low`，其他模型不附带该参数。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与 reasoning_effort，客户端不能覆盖。
+在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `grok-4.5`（reasoning_effort: medium），使用严格 JSON schema；核心摘要最多 350 字符、解释段落最多三节。服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 使用 JSON object 加同一 schema 提示，thinking enabled / high；两者都保留服务端来源与格式校验。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与 reasoning_effort，客户端不能覆盖。
 
 输入及检索到的公开片段会由 Builder 的模型服务处理。本项目不记录问答正文，不创建对话数据库；它不能替第三方服务承诺保存政策。

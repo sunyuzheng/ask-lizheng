@@ -219,8 +219,8 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
     def provider(request):
         body = json.loads(request.content)
         assert body["response_format"]["type"] == "json_schema"
-        assert body["model"] == "grok-4-fast"
-        assert "reasoning_effort" not in body
+        assert body["model"] == "grok-4.5"
+        assert body["reasoning_effort"] == "medium"
         prompt = json.loads(body["messages"][1]["content"])
         assert prompt["sources"][0]["attribution_note"]
         return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
@@ -232,6 +232,26 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
         assert items[-2][1]["stage"] == "checking"
         assert items[-1][1]["status"] == "answered"
         assert items[-1][1]["sources"][0]["url"].startswith("https://")
+
+
+def test_deepseek_json_object_retains_schema_and_source_validation(context_pack, monkeypatch):
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.setenv("AI_MODEL", "deepseek-v4-pro")
+    attempts = []
+    def provider(request):
+        body = json.loads(request.content)
+        attempts.append(body)
+        assert body["response_format"] == {"type": "json_object"}
+        assert body["thinking"] == {"type": "enabled"}
+        assert body["reasoning_effort"] == "high"
+        assert '"additionalProperties": false' in body["messages"][0]["content"]
+        # A provider accepting JSON mode does not bypass citation validation.
+        answer = answer_for("S999" if len(attempts) == 1 else "S1")
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        assert client.get("/api/meta").json()["reasoning_effort"] == "high"
+        assert events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]["status"] == "answered"
+        assert len(attempts) == 2
 
 
 def test_gpt5_option_uses_low_reasoning_without_overriding_client_input(context_pack, monkeypatch):

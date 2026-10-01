@@ -14,7 +14,18 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .retrieval import Passage
 
 ANSWER_BUDGET_SECONDS = 85
-DEFAULT_MODEL = "grok-4-fast"
+DEFAULT_MODEL = "grok-4.5"
+
+
+def model_options(model: str) -> dict:
+    """Options accepted by Builder; model selection is server-owned."""
+    if model == "gpt-5":
+        return {"reasoning_effort": "low"}
+    if model == "grok-4.5":
+        return {"reasoning_effort": "medium"}
+    if model == "deepseek-v4-pro":
+        return {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    return {}
 
 class AnswerSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -95,11 +106,12 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "public_context_answer", "strict": True, "schema": strict_schema()}},
     }
-    # Builder forwards this OpenAI-compatible option. In live GPT-5 checks low
-    # reduced the initial wait and avoided reasoning exhausting the completion
-    # budget. Other model families keep their settings.
-    if model == "gpt-5":
-        payload["reasoning_effort"] = "low"
+    payload.update(model_options(model))
+    if model == "deepseek-v4-pro":
+        # Builder's live endpoint rejects json_schema for this model. Supply
+        # the same contract in the prompt and retain all server-side checks.
+        payload["response_format"] = {"type": "json_object"}
+        payload["messages"][0]["content"] += "\n输出 JSON 必须符合以下 schema（所有字段必填，不得增加字段）：" + json.dumps(strict_schema(), ensure_ascii=False)
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
     deadline = time.monotonic() + ANSWER_BUDGET_SECONDS

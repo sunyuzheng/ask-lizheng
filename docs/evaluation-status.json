@@ -151,5 +151,32 @@
       "observed_status": "answered",
       "manual_review": "schema-valid but unnecessary timed workflow and engineering framing; not selected as the default"
     }
+  },
+  "quality_model_update": {
+    "date": "2026-09-30",
+    "model": "grok-4.5",
+    "reasoning_effort": "medium",
+    "synthetic_only": true,
+    "scope": "Three synthetic questions using the same retrieved evidence per pair. Generation and validation timing excludes retrieval; no general quality or latency guarantee.",
+    "comparison": [
+      {
+        "case": "learning",
+        "grok_4_5_seconds": 30.63,
+        "deepseek_v4_pro_seconds": 27.85
+      },
+      {
+        "case": "value",
+        "grok_4_5_seconds": 38.09,
+        "deepseek_v4_pro_seconds": 19.03
+      },
+      {
+        "case": "scope",
+        "grok_4_5_seconds": 24.33,
+        "deepseek_v4_pro_seconds": 20.73
+      }
+    ],
+    "manual_review": "Grok 4.5 better retained conditions around learning vs production ownership and individual speed vs organizational outcomes. DeepSeek V4 Pro introduced an inaccurate absence disclaimer in the scope case and an overly definite inference in the value case. Selected Grok 4.5 for this product, despite higher latency.",
+    "catalog": "Live Builder Space models endpoint lists grok-4.5, deepseek-v4-pro, kimi-k2.5, gemini-3-flash-preview and gpt-5; no newer GPT or Claude ID observed. Catalog created timestamps are not release dates.",
+    "publication": "Local candidate; requires approval and production verification."
   }
 }
