@@ -33,7 +33,7 @@ const NO_START = new Set('，。、；：？！）」』”’》〉】…—·%
 const NO_END = new Set('（「『“‘《〈【([{'.split(''));
 
 // Bold, citations [S3], links and code; other Markdown marks are dropped.
-function inlineRuns(text, ids) {
+function inlineRuns(text, cites) {
   const out = [];
   const plain = value => value.replace(/\*\*|__|`/g, '').replace(/(^|[^*])\*(?!\*)/g, '$1');
   const pattern = /\*\*(.+?)\*\*|\[(S\d+)\](?!\()|\[([^\]]+)\]\([^)]*\)|`([^`]+)`/g;
@@ -41,7 +41,7 @@ function inlineRuns(text, ids) {
   while ((match = pattern.exec(text))) {
     if (match.index > last) out.push({text: plain(text.slice(last, match.index))});
     if (match[1]) out.push({text: plain(match[1]), bold: true});
-    else if (match[2]) { if (ids.has(match[2])) out.push({cite: match[2].slice(1)}); }
+    else if (match[2]) { if (cites.has(match[2])) out.push({cite: cites.get(match[2])}); }
     else out.push({text: match[3] || match[4]});
     last = pattern.lastIndex;
   }
@@ -229,7 +229,7 @@ function limitsRow(ctx, text) {
   }};
 }
 
-function sourceRow(ctx, source) {
+function sourceRow(ctx, source, number) {
   const style = {size: 27, weight: 600, color: C.ink};
   const all = wrap(ctx, units([{text: source.title || ''}], style), INNER - 70);
   const titleLines = all.slice(0, 2);
@@ -240,7 +240,7 @@ function sourceRow(ctx, source) {
     c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2);
     c.fillStyle = C.greenTint; roundRect(c, PAD, y + 26, 44, 44, 10); c.fill();
     c.fillStyle = C.greenText; c.font = font(700, 22); c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(source.id.slice(1), PAD + 22, y + 49);
+    c.fillText(number, PAD + 22, y + 49);
     c.textAlign = 'left';
     let ty = y + 24;
     titleLines.forEach((line, i) => {
@@ -289,7 +289,8 @@ function footerRow() {
 }
 
 function layout(ctx, {question, result, date}) {
-  const ids = new Set((result.sources || []).map(s => s.id));
+  // Number sources 1..n in the shared file; the answer's ids skip sources it did not use.
+  const cites = new Map((result.sources || []).map((s, i) => [s.id, String(i + 1)]));
   const rows = [header(), gap(62)];
   rows.push(...textRows(ctx, [{text: '你的问题'}], {size: 23, lh: 1.6, weight: 600, color: C.greenText, keep: true}), gap(6));
   rows.push(...textRows(ctx, [{text: question}], {size: 44, lh: 1.5, weight: 700, family: SERIF, color: C.ink}));
@@ -298,13 +299,13 @@ function layout(ctx, {question, result, date}) {
   rows.push(gap(14), ...textRows(ctx, [{text: meta}], {size: 21, lh: 1.6, weight: 400, color: C.faint}));
   rows.push(gap(30), {h: 2, draw(c, y) { c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2); }}, gap(34));
   for (const block of markdownBlocks(result.summary)) {
-    rows.push(...textRows(ctx, inlineRuns(block.text, ids), {size: 32, lh: 1.75, weight: 600, color: C.ink, strong: C.ink}));
+    rows.push(...textRows(ctx, inlineRuns(block.text, cites), {size: 32, lh: 1.75, weight: 600, color: C.ink, strong: C.ink}));
   }
   for (const section of result.sections || []) {
     rows.push(gap(46), ...headingRows(ctx, section.heading, section.kind), gap(8));
     markdownBlocks(section.body).forEach((block, i) => {
       if (i) rows.push(gap(16));
-      rows.push(...textRows(ctx, inlineRuns(block.text, ids),
+      rows.push(...textRows(ctx, inlineRuns(block.text, cites),
         {size: 29, lh: 1.85, weight: 400, color: C.ink2, strong: C.ink},
         block.marker ? {indent: 40, marker: block.marker} : {}));
     });
@@ -317,7 +318,7 @@ function layout(ctx, {question, result, date}) {
       c.fillStyle = C.faint; c.font = font(400, 21);
       c.fillText(`回答依据的${result.sources.length}份公开原文`, PAD + 88, y + 28);
     }}, gap(10));
-    for (const source of result.sources) rows.push(sourceRow(ctx, source));
+    result.sources.forEach((source, i) => rows.push(sourceRow(ctx, source, String(i + 1))));
   }
   rows.push(gap(56), footerRow());
   return rows;
