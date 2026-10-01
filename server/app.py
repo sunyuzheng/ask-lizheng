@@ -20,7 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .answers import ProviderFailure, assemble_answer, attribution_clarification, generate_answer, sources_only, unsupported_result
+from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, sources_only, unsupported_result
 from .retrieval import ContextIndex
 from .semantic import SemanticIndex
 
@@ -155,8 +155,9 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
     @application.get("/api/meta")
     async def metadata():
         ready = bool(os.getenv("AI_BUILDER_TOKEN"))
+        model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
-                "model": os.getenv("AI_MODEL", "gpt-5"), "mode": "live" if ready else "search-only"}
+                "model": model, "reasoning_effort": "low" if model == "gpt-5" else None, "mode": "live" if ready else "search-only"}
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):
@@ -175,6 +176,7 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
             raise HTTPException(503, "现在有几位读者正在提问，请稍等片刻再试。") from None
 
         async def events():
+            generation_task = None
             try:
                 clarification = attribution_clarification(payload.question, payload.context, payload.history)
                 if clarification:
@@ -185,8 +187,22 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                 semantic_query = payload.question + "\n" + payload.context
                 if payload.history and len(payload.question) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", payload.question):
                     semantic_query += "\n" + payload.history[-1].question
-                semantic_candidates = await application.state.semantic.candidates(application.state.provider, token, semantic_query)
-                passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates)
+                # Start the network lookup alongside local retrieval. Readers
+                # can open actual public excerpts without waiting on either AI call.
+                semantic_task = asyncio.create_task(application.state.semantic.candidates(application.state.provider, token, semantic_query))
+                try:
+                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12)
+                    if passages:
+                        yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
+                    yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"})
+                    semantic_candidates = await semantic_task
+                finally:
+                    if not semantic_task.done():
+                        semantic_task.cancel()
+                    await asyncio.gather(semantic_task, return_exceptions=True)
+                if semantic_candidates:
+                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates)
+                yield sse("sources", {"phase": "matched", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
                 if await request.is_disconnected():
                     return
                 if not application.state.index.documents:
@@ -200,9 +216,18 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     result = sources_only(passages, "这些条目只收录目录信息；可以打开原文继续阅读。", "find") if payload.intent == "find" and passages else unsupported_result(passages)
                     yield sse("result", result)
                     return
-                yield sse("progress", {"stage": "thinking", "message": "正在结合材料理解你的问题…"})
+                yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"})
                 try:
-                    answer = await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", "gpt-5"), {**payload.model_dump(), "reasoning_cards": application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)}, passages)
+                    updates = asyncio.Queue()
+                    async def generate():
+                        try:
+                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(), "reasoning_cards": application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)}, passages, on_progress=updates.put)
+                        finally:
+                            await updates.put(None)
+                    generation_task = asyncio.create_task(generate())
+                    while (update := await updates.get()) is not None:
+                        yield sse("progress", update)
+                    answer = await generation_task
                     result = assemble_answer(answer, passages)
                 except ProviderFailure as exc:
                     result = sources_only(passages, FAILURES[exc.code], payload.intent)
@@ -214,7 +239,15 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                 # Do not include exception strings: providers may echo input.
                 yield sse("error", {"message": "这次处理没有完成，请稍后再试。", "code": "request_failed"})
             finally:
-                application.state.slots.release()
+                try:
+                    if generation_task is not None:
+                        if not generation_task.done():
+                            generation_task.cancel()
+                        await asyncio.gather(generation_task, return_exceptions=True)
+                finally:
+                    # StreamingResponse may cancel cleanup awaits again on a
+                    # disconnect. The bounded concurrency slot must still return.
+                    application.state.slots.release()
 
         return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 

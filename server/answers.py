@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .retrieval import Passage
 
 ANSWER_BUDGET_SECONDS = 85
+DEFAULT_MODEL = "grok-4-fast"
 
 class AnswerSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -32,8 +33,8 @@ class SourceReason(BaseModel):
 class ModelAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["answered", "clarify", "unsupported"]
-    summary: str = Field(min_length=1, max_length=1200)
-    sections: list[AnswerSection] = Field(max_length=6)
+    summary: str = Field(min_length=1, max_length=350)
+    sections: list[AnswerSection] = Field(max_length=3)
     followups: list[str] = Field(max_length=3)
     clarifying_questions: list[str] = Field(max_length=2)
     limitations: str = Field(default="", max_length=900)
@@ -63,7 +64,7 @@ intent=apply：围绕用户的目标、约束与具体处境作有依据的应�
 当用户追问“先试哪一步／先做什么”时，只选择一个值得先做的动作，解释它能验证什么，以及怎样观察反馈；不再罗列整套流程或承诺几分钟就能完成。
 intent=find：先给具体阅读起点，选择最有用的 3 至 5 份来源，解释每份适合解答什么以及建议从哪份开始。用简短段落帮助用户选择材料，不把找内容写成长篇人生建议；推荐原文的理由放 source_reasons。
 
-summary 应直接承载回答的核心，不写“根据资料我将为你……”这类流程说明。sections 通常用 2 至 3 个实质段落，复杂问题可以更多，必要时为空。不要把同一个判断拆成重复的几节；篇幅以解释清楚问题为准。普通概念或个人困惑通常合计约 400 至 700 字即可，不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；只有用户确实要做生产系统时，才展开部署与工程验收。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。只返回符合 JSON schema 的对象。"""
+summary 应直接承载回答的核心，用一至两句先答，不在摘要罗列行动步骤，不写“根据资料我将为你……”这类流程说明。sections 最多 3 个实质段落，必要时为空。复杂问题优先解释关键关系，可以通过追问继续展开。不要把同一个判断拆成重复的几节；篇幅以解释清楚问题为准。普通概念或个人困惑通常合计约 400 至 700 字即可，不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；“做过几个项目”不等于要求生产系统分层，不引入 L1-L6、部署或工程验收，除非用户明确问这些。需要行动建议时，给一个用来检验当前判断的小尝试，解释观察什么反馈；不要自行拼成多步骤压力测试、规定 5/10/60 分钟或精确间隔。资料中的实验时间也不能自动变成给读者的日程要求。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。只返回符合 JSON schema 的对象。"""
 
 
 class ProviderFailure(Exception):
@@ -85,7 +86,7 @@ def strict_schema() -> dict:
     return schema
 
 
-async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage]) -> ModelAnswer:
+async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage], on_progress=None) -> ModelAnswer:
     payload = {
         "model": model, "stream": False, "temperature": .35, "max_tokens": 4000,
         "messages": [
@@ -94,6 +95,11 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "public_context_answer", "strict": True, "schema": strict_schema()}},
     }
+    # Builder forwards this OpenAI-compatible option. In live GPT-5 checks low
+    # reduced the initial wait and avoided reasoning exhausting the completion
+    # budget. Other model families keep their settings.
+    if model == "gpt-5":
+        payload["reasoning_effort"] = "low"
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
     deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
@@ -117,6 +123,8 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
                 raise ProviderFailure("model_unavailable")
             if not response.is_success:
                 raise ProviderFailure("provider_unavailable")
+            if on_progress:
+                await on_progress({"stage": "checking", "message": "回答已生成，正在核对来源编号和输出格式…"})
             try:
                 data = response.json()
                 choices = data.get("choices") or []
@@ -136,6 +144,8 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
         except InvalidAnswer as exc:
             if attempt:
                 raise ProviderFailure("invalid_answer") from None
+            if on_progress:
+                await on_progress({"stage": "repairing", "message": "回答中的来源标注或格式需要修正，正在重新整理…"})
             if content:
                 payload["messages"].append({"role": "assistant", "content": content})
             payload["messages"].append({"role": "user", "content": "上一份输出未通过服务器核对：" + str(exc) + " 请依据同一批证据修复完整 JSON，不生成链接、不编造来源编号、不把发现用元数据当正文依据。不解释修复过程，只返回符合 schema 的对象。"})

@@ -12,20 +12,34 @@ curl -N http://127.0.0.1:8000/api/ask \
 
 上线后把 localhost 换成正式站点地址。`intent` 可用 `understand`、`apply`、`find`；`context` 和 `history` 选填。问题最长 2000 字符，背景最长 2500 字符，历史最多六轮，每轮只有 question（2000 字符）和 summary（1500 字符）。整个请求最大 80 KB。历史由调用者提供，服务端将其视为未核实的上下文；新的明确主题会重新检索。
 
-返回 `text/event-stream`。progress 提供检索和理解状态；result 是一次完整且已经校验的 JSON。它不逐字流出未经核对的回答。
+返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；result 是一次完整且已经校验的 JSON。它不逐字流出未经核对的回答，也不输出模型的内部推理文本。
 
 ```text
 event: progress
 data: {"stage":"retrieving","message":"正在查找相关公开材料…"}
 
+event: sources
+data: {"phase":"initial","provisional":true,"sources":[{"id":"S1","title":"…","excerpt":"…","url":"…"}]}
+
 event: progress
-data: {"stage":"thinking","message":"正在结合材料理解你的问题…"}
+data: {"stage":"matching","message":"正在匹配意思相近的材料，并合并重复出处…"}
+
+event: sources
+data: {"phase":"matched","provisional":true,"sources":[{"id":"S1","title":"…","excerpt":"…","url":"…"}]}
+
+event: progress
+data: {"stage":"thinking","message":"已找到 12 个候选片段，正在根据材料整理回答…"}
+
+event: progress
+data: {"stage":"checking","message":"回答已生成，正在核对来源编号和输出格式…"}
 
 event: result
 data: {"status":"answered","summary":"…","sections":[],"sources":[],"followups":[],"clarifying_questions":[],"limitations":"…"}
 ```
 
-上面 result 仅示意字段；实际 answered 至少有一个带来源编号的 section。sections 含 heading、body、source_ids，以及 source / synthesis / application 的 kind；分别表示材料转述、AI 综合与联系处境的应用。sources 含 id、title、url、date、excerpt、author、attribution_note、evidence_role、推荐理由及可用的 timecode / public_copy_url。链接和原文片段由服务器提供。
+上述事件只示意字段；实际 sources 附有日期、作者、归属等来源元数据，answered 至少有一个带来源编号的 section。初选材料可能在语义匹配后重新排序，编号以最后的 result 为准；provisional 的条目不能当成已经采用的引用。没有词法命中时可以省略 initial sources，语义失败则保留词法结果；缺少说话人身份的请求可能直接返回 clarify。checking 校验编号、输出格式和禁止生成的链接等，不是对事实正确性的保证。格式或引用失败后，repairing 状态表示正在进行唯一一次修复。
+
+sections 含 heading、body、source_ids，以及 source / synthesis / application 的 kind；分别表示材料转述、AI 综合与联系处境的应用。sources 含 id、title、url、date、excerpt、author、attribution_note、evidence_role、推荐理由及可用的 timecode / public_copy_url。链接和原文片段由服务器提供。
 
 status 还有 clarify（缺少实质条件）、unsupported（资料不支持）和 sources-only（找到材料，但未连接模型、服务故障或仅有目录）。服务失败的 sources-only 仍可正常阅读原文。无法读取资料或处理请求时返回 error 事件。校验、频率与并发拒绝在 SSE 开始前返回 HTTP 422 / 413 / 429 / 503；429 带 Retry-After。调用者应处理停止、断线和未收到最终事件，不能把一条 progress 当成功。
 
@@ -35,6 +49,6 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 
 ## 服务端怎样调用 Builder
 
-在线时先向 `/backend/v1/embeddings` 获取问题向量，8 秒预算内失败便回到词法与判断卡。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，使用 `gpt-5` 和严格 JSON schema。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。
+在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `grok-4-fast`，使用严格 JSON schema；核心摘要最多 350 字符、解释段落最多三节。服务端选择 `gpt-5` 时附带 `reasoning_effort: low`，其他模型不附带该参数。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与 reasoning_effort，客户端不能覆盖。
 
 输入及检索到的公开片段会由 Builder 的模型服务处理。本项目不记录问答正文，不创建对话数据库；它不能替第三方服务承诺保存政策。

@@ -26,7 +26,7 @@ def test_default_is_dry_run_without_credentials_or_network(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert '"mode": "dry-run"' in output
     assert deploy.DEPLOYMENTS_URL in output and deploy.PUBLIC_URL in output
-    assert '"AI_MODEL": "gpt-5"' in output
+    assert '"AI_MODEL": "grok-4-fast"' in output
     assert "AI_BUILDER_TOKEN" not in output
 
 

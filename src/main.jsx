@@ -40,6 +40,21 @@ function Markdown({text,sources,onSelect}) {
   }}}>{content}</ReactMarkdown>;
 }
 
+const PROCESS_STEPS = ['查找原文','匹配相关材料','整理回答','核对来源'];
+function Working({message,busy,elapsed,model,onStop,onSelect}) {
+  const step={retrieving:0,matching:1,thinking:2,checking:3,repairing:3}[message.progress?.stage]??0;
+  const candidates=message.previewSources||[];
+  return <section className="working" aria-label={busy?'回答处理进度':'已找到的材料'}>
+    {busy&&<><div className="progress"><LoaderCircle size={18} className="spin"/><span role="status">{message.progress?.message||'正在查找相关公开材料…'}</span><button onClick={onStop}><Square size={12}/>停止</button></div>
+      <ol className="process-steps" aria-label="处理步骤">{PROCESS_STEPS.map((label,i)=><li key={label} className={i<step?'done':i===step?'current':''} aria-current={i===step?'step':undefined}>{i<step?<Check size={12}/>:<span>{i+1}</span>}{label}</li>)}</ol>
+      <p className="process-note"><span>{model} · 已等待 {elapsed} 秒</span><span>{candidates.length?'可以先读材料，回答仍在整理中。':'材料找到后会先展示在这里。'}</span></p></>}
+    {candidates.length>0&&<div className="preview-sources"><div className="preview-heading"><BookOpen size={16}/><h3>已找到的材料</h3><span>候选 · 不代表最终采用</span></div>
+      {candidates.slice(0,2).map(s=><article className="preview-source" key={`${s.id}-${s.url}`}><div><a href={s.url} target="_blank" rel="noreferrer">{s.title}<ArrowUpRight size={14}/></a><time>{s.date?.slice(0,10)||'日期未标明'}</time></div><p>{s.excerpt?.slice(0,160)}{s.excerpt?.length>160?'…':''}</p></article>)}
+      <details className="candidate-details"><summary>查看全部 {candidates.length} 份候选材料与片段 <ChevronDown size={14}/></summary>{candidates.map(s=><SourceCard key={`${s.id}-${s.url}`} source={s} prefix={`turn-${message.id}`} onSelect={id=>onSelect(id,message.id)}/>)}</details>
+    </div>}
+  </section>;
+}
+
 function About({close,meta}) {
   const ref=useRef(null);
   useEffect(()=>{const previous=document.activeElement;ref.current?.focus();const handler=e=>{if(e.key==='Escape')close();if(e.key==='Tab'){const items=ref.current?.querySelectorAll('button,a');const first=items?.[0],last=items?.[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};document.addEventListener('keydown',handler);return()=>{document.removeEventListener('keydown',handler);previous?.focus();};},[]);
@@ -49,14 +64,15 @@ function About({close,meta}) {
 function App() {
   const [meta,setMeta]=useState(null),[intent,setIntent]=useState('understand'),[question,setQuestion]=useState('');
   const [showContext,setShowContext]=useState(false),[background,setBackground]=useState({goal:'',facts:'',tried:''});
-  const [messages,setMessages]=useState([]),[busy,setBusy]=useState(false),[stage,setStage]=useState(''),[error,setError]=useState('');
+  const [messages,setMessages]=useState([]),[busy,setBusy]=useState(false),[elapsed,setElapsed]=useState(0),[error,setError]=useState('');
   const [about,setAbout]=useState(false),[nav,setNav]=useState(false),[selected,setSelected]=useState(''),[sourceTurn,setSourceTurn]=useState(null),[copied,setCopied]=useState(false);
   const input=useRef(null),abort=useRef(null),end=useRef(null);
   useEffect(()=>{fetch('/api/meta').then(r=>r.ok?r.json():Promise.reject()).then(setMeta).catch(()=>setMeta({offline:true}));},[]);
   useEffect(()=>{if(messages.length)end.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'end'});},[messages.length]);
-  useEffect(()=>{if(!busy)return;const timer=setTimeout(()=>setStage('还在结合材料整理，你可以随时停止。'),20000);return()=>clearTimeout(timer);},[busy]);
-  const latest=messages.filter(m=>m.result).at(-1)?.result;
-  const sources=(messages.find(m=>m.id===sourceTurn)?.result||latest)?.sources||[];
+  useEffect(()=>{if(!busy)return;const started=Date.now();setElapsed(0);const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer);},[busy]);
+  const sourceMessage=messages.find(m=>m.id===sourceTurn)||(busy?messages.at(-1):messages.filter(m=>m.result||m.previewSources?.length).at(-1));
+  const provisional=!!sourceMessage&&!sourceMessage.result;
+  const sources=sourceMessage?.result?.sources||sourceMessage?.previewSources||[];
   const selectSource=(id,turnId)=>{setSourceTurn(turnId);setSelected(id);requestAnimationFrame(()=>{const rail=document.getElementById(`rail-source-${id}`);const target=rail?.getClientRects().length?rail:document.getElementById(`turn-${turnId}-source-${id}`);target?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});});};
   const prefill=(value,mode=intent)=>{setIntent(mode);setQuestion(value);setError('');setNav(false);requestAnimationFrame(()=>{input.current?.focus();input.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});});};
   const newChat=()=>{if(busy)return;setMessages([]);setQuestion('');setBackground({goal:'',facts:'',tried:''});setShowContext(false);setSelected('');setSourceTurn(null);setError('');setNav(false);input.current?.focus();};
@@ -64,17 +80,17 @@ function App() {
     e?.preventDefault();if(busy||!question.trim())return;
     const text=question.trim(),context=Object.entries(background).filter(([,v])=>v.trim()).map(([k,v])=>`${{goal:'希望达到的结果',facts:'目前的情况与限制',tried:'已经试过的办法'}[k]}：${v.trim()}`).join('\n');
     const history=messages.filter(m=>m.result).slice(-6).map(m=>({question:m.question,summary:m.result.summary}));
-    const id=Date.now();setMessages(prev=>[...prev,{id,question:text,intent,context}]);setQuestion('');setBusy(true);setError('');setStage('正在找相关的文章与视频…');setSelected('');setSourceTurn(null);
+    const id=Date.now(),started=performance.now();setMessages(prev=>[...prev,{id,question:text,intent,context,model:meta?.model||'AI',progress:{stage:'retrieving',message:'正在查找相关公开材料…'}}]);setQuestion('');setBusy(true);setError('');setSelected('');setSourceTurn(null);
     abort.current=new AbortController();
     try {
       const response=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,context,intent,history}),signal:abort.current.signal});
       if(!response.ok){let body;try{body=await response.json();}catch{}throw new Error(body?.detail||body?.message||(response.status===429?'现在提问的人有点多，请稍后再试。':'暂时没能连接，请稍后重试。'));}
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',received=false;
-      const process=frame=>{let event='message',data=[];for(const line of frame.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trim());}if(!data.length)return;const value=JSON.parse(data.join('\n'));if(event==='progress')setStage(value.message||'正在整理回答…');else if(event==='result'){received=true;setMessages(prev=>prev.map(m=>m.id===id?{...m,result:value}:m));}else if(event==='error')throw new Error(value.message||'回答暂时未完成，可以重试。');};
+      const process=frame=>{let event='message',data=[];for(const line of frame.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trim());}if(!data.length)return;const value=JSON.parse(data.join('\n'));if(event==='progress')setMessages(prev=>prev.map(m=>m.id===id?{...m,progress:value}:m));else if(event==='sources')setMessages(prev=>prev.map(m=>m.id===id?{...m,previewSources:value.sources||[]}:m));else if(event==='result'){received=true;setMessages(prev=>prev.map(m=>m.id===id?{...m,result:value,elapsed:Math.round((performance.now()-started)/1000)}:m));}else if(event==='error')throw new Error(value.message||'回答暂时未完成，可以重试。');};
       while(true){const {done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});buffer=buffer.replace(/\r\n/g,'\n');let index;while((index=buffer.indexOf('\n\n'))!==-1){process(buffer.slice(0,index));buffer=buffer.slice(index+2);}if(done){if(buffer.trim())process(buffer);break;}}
       if(!received)throw new Error('连接中断了，还没有得到完整回答。你的问题已保留，可以重试。');
     } catch(err) {const message=err.name==='AbortError'?'已停止。你的问题还在，可以修改后重试。':String(err.message||'暂时没有完成，请重试。');setError(message);setMessages(prev=>prev.map(m=>m.id===id?{...m,error:message}:m));setQuestion(text);}
-    finally {setBusy(false);setStage('');abort.current=null;}
+    finally {setBusy(false);abort.current=null;}
   }
   async function copy(result){const text=[result.summary,...(result.sections||[]).map(s=>`${s.heading}\n${s.body}`),...(result.sources||[]).map(s=>`${s.title}（${s.date?.slice(0,10)||''}）\n${s.url}`),'由问问立正 AI 根据公开材料整理，非本人实时回复。'].join('\n\n');try{await navigator.clipboard.writeText(text);setCopied(result);setTimeout(()=>setCopied(false),1800);}catch{setError('浏览器未允许复制，请直接选择回答文字。');}}
   const mode=MODES.find(m=>m.id===intent);
@@ -91,7 +107,8 @@ function App() {
       <main id="main-content" className="main-area" tabIndex={-1}>{messages.length>0&&<h1 className="sr-only">问问立正，当前对话</h1>}
         {!messages.length?<section className="welcome"><p className="eyebrow"><span className="live-dot"/> 从公开材料出发</p><h1>把一个问题，<br/><em>问得更明白。</em></h1><p className="intro">读过一些文章，看过一些视频，<br className="mobile-break"/>不妨带着自己的问题，再往前想一步。</p><p className="identity">根据立正公开内容回答的 AI · 不是本人实时回复</p></section>:<section className="thread" aria-label="当前对话">
           {messages.map((m,index)=><article key={m.id} id={`turn-${m.id}`} className="turn"><div className="user-question"><span className="question-label">你的问题</span><h2>{m.question}</h2>{m.context&&<details className="submitted-context"><summary>补充的背景 <ChevronDown size={13}/></summary><p>{m.context}</p></details>}</div>
-            {m.result&&<div className="answer"><div className="answer-meta"><Mark small/><span>问问立正 <small>{m.result.status==='sources-only'?'找到的材料':'AI 根据公开材料整理'}</small></span></div><div className="answer-summary"><Markdown text={m.result.summary} sources={m.result.sources||[]} onSelect={id=>selectSource(id,m.id)}/></div>
+            {!m.result&&(busy&&index===messages.length-1||m.previewSources?.length>0)&&<Working message={m} busy={busy&&index===messages.length-1} elapsed={elapsed} model={m.model} onStop={()=>abort.current?.abort()} onSelect={selectSource}/>}
+            {m.result&&<div className="answer"><div className="answer-meta"><Mark small/><span>问问立正 <small>{m.result.status==='sources-only'?'找到的材料':`AI 根据公开材料整理 · ${m.model}`}</small></span></div><div className="answer-summary"><Markdown text={m.result.summary} sources={m.result.sources||[]} onSelect={id=>selectSource(id,m.id)}/></div>
               {(m.result.sections||[]).map((s,i)=><section className="answer-section" key={i}><div className="section-title"><h3>{s.heading}</h3><Kind kind={s.kind}/></div><Markdown text={s.body} sources={m.result.sources||[]} onSelect={id=>selectSource(id,m.id)}/>{s.source_ids?.length>0&&<div className="section-citations">相关材料 {s.source_ids.map(id=><button key={id} onClick={()=>selectSource(id,m.id)}>{id.slice(1)}</button>)}</div>}</section>)}
               {m.result.clarifying_questions?.length>0&&<div className="clarifications"><p>再补充一点，就能继续往下想</p>{m.result.clarifying_questions.map(q=><button key={q} onClick={()=>{setIntent('apply');setQuestion(m.question);setShowContext(true);setBackground(prev=>({...prev,facts:prev.facts?`${prev.facts}\n${q}：`:`${q}：`}));requestAnimationFrame(()=>document.getElementById('context-facts')?.focus());}}>{q}<Plus size={15}/></button>)}</div>}
               {m.result.limitations&&<p className="limitations">{m.result.limitations}</p>}
@@ -101,7 +118,6 @@ function App() {
             </div>}
             {m.error&&<p className="turn-error" role="alert">{m.error}</p>}
           </article>)}
-          {busy&&<div className="progress" role="status"><LoaderCircle size={18} className="spin"/><span>{stage}</span><button onClick={()=>abort.current?.abort()}><Square size={12}/>停止</button></div>}
           <div ref={end}/>
         </section>}
         <div className="composer-wrap"><form className={`composer ${busy?'is-busy':''}`} onSubmit={submit}><div className="mode-tabs" role="group" aria-label="这次想怎样使用"><div>{MODES.map(m=><button key={m.id} type="button" aria-pressed={intent===m.id} className={intent===m.id?'active':''} onClick={()=>setIntent(m.id)}><m.icon size={15}/>{m.label}</button>)}</div><span className="context-version">材料 {meta?.context_date||'版本读取中'}</span></div><label className="sr-only" htmlFor="question">你的问题</label><textarea id="question" ref={input} maxLength={2000} value={question} onChange={e=>setQuestion(e.target.value)} placeholder={mode.placeholder} rows={messages.length?2:3} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();submit();}}}/>
@@ -112,7 +128,7 @@ function App() {
         {!messages.length&&<footer className="home-footer"><span>Context 开放，问题也开放。</span><a href={LINKS.context} target="_blank" rel="noreferrer">自己做一个版本 <ArrowUpRight size={14}/></a></footer>}
       </main>
     </div>
-    {!!sources.length&&<aside className="source-rail"><div className="rail-heading"><BookOpen size={18}/><div><h2>回到出处</h2><p>看原文，也看它为何相关。</p></div></div>{sources.map(s=><SourceCard key={s.id} source={s} selected={selected} onSelect={setSelected}/>)}<a className="rail-footer" href={LINKS.community} target="_blank" rel="noreferrer">把新的问题带回社区<ArrowUpRight size={15}/></a></aside>}
+    {!!sources.length&&<aside className="source-rail"><div className="rail-heading"><BookOpen size={18}/><div><h2>{provisional?'已找到的材料':'回到出处'}</h2><p>{provisional?(busy&&sourceMessage===messages.at(-1)?'候选片段，回答还在整理。':'检索候选，可以继续阅读原文。'):'看原文，也看它为何相关。'}</p></div></div>{sources.map(s=><SourceCard key={`${s.id}-${s.url}`} source={s} selected={selected} onSelect={setSelected}/>)}<a className="rail-footer" href={LINKS.community} target="_blank" rel="noreferrer">把新的问题带回社区<ArrowUpRight size={15}/></a></aside>}
     {about&&<About close={()=>setAbout(false)} meta={meta}/>}
   </div>;
 }

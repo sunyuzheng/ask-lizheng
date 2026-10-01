@@ -38,9 +38,9 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 
 ## API 与部署
 
-`GET /api/meta` 返回材料版本与服务状态；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 返回 progress 和完整 result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
+`GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度和候选 sources，再返回完整且通过格式与引用校验的 result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
 
-Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `gpt-5`，可通过 `AI_MODEL` 更换。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。
+Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `grok-4-fast`，可通过 `AI_MODEL` 更换；选用 `gpt-5` 时附带 `reasoning_effort: low`。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。
 
 部署脚本默认 dry-run，列出目的地、完整非秘密 payload 与审批摘要。审阅时传入 `--expected-commit` 的完整 Git SHA；正式部署再传对应 `--approved-sha`。脚本会先验证公开仓库的 main 正是该版本，再读取模型 token 并执行部署。首次发布前仍需得到用户对公开仓库和服务目的地的明确批准。完整调用契约见 [API.md](docs/API.md)。
 

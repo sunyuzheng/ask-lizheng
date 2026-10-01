@@ -215,19 +215,36 @@ def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
 
 def test_provider_answer_is_source_validated(context_pack, monkeypatch):
     monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.delenv("AI_MODEL", raising=False)
     def provider(request):
         body = json.loads(request.content)
         assert body["response_format"]["type"] == "json_schema"
-        assert body["model"] == "gpt-5"
+        assert body["model"] == "grok-4-fast"
+        assert "reasoning_effort" not in body
         prompt = json.loads(body["messages"][1]["content"])
         assert prompt["sources"][0]["attribution_note"]
         return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         response = client.post("/api/ask", json={"question": "职业选择怎么做"})
         items = events(response)
-        assert [event for event, _ in items] == ["progress", "progress", "result"]
+        assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "progress", "progress", "result"]
+        assert items[1][1]["provisional"] and items[1][1]["sources"][0]["excerpt"]
+        assert items[-2][1]["stage"] == "checking"
         assert items[-1][1]["status"] == "answered"
         assert items[-1][1]["sources"][0]["url"].startswith("https://")
+
+
+def test_gpt5_option_uses_low_reasoning_without_overriding_client_input(context_pack, monkeypatch):
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.setenv("AI_MODEL", "gpt-5")
+    def provider(request):
+        body = json.loads(request.content)
+        assert body["model"] == "gpt-5" and body["reasoning_effort"] == "low"
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        assert client.get("/api/meta").json()["reasoning_effort"] == "low"
+        assert events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]["status"] == "answered"
+        assert client.post("/api/ask", json={"question": "职业选择", "model": "other-model"}).status_code == 422
 
 
 def test_invalid_source_gets_one_targeted_repair(context_pack, monkeypatch):
@@ -244,7 +261,10 @@ def test_invalid_source_gets_one_targeted_repair(context_pack, monkeypatch):
             answer = answer_for()
         return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
-        result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
+        items = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))
+        assert any(value.get("stage") == "repairing" for event, value in items if event == "progress")
+        assert not any(event == "result" and "S999" in json.dumps(value) for event, value in items)
+        result = items[-1][1]
         assert result["status"] == "answered"
         assert len(attempts) == 2
 
@@ -318,3 +338,107 @@ def test_missing_context_has_recoverable_error(tmp_path, monkeypatch):
         assert health.status_code == 503 and not health.json()["context_ready"]
         result = events(client.post("/api/ask", json={"question": "职业选择"}))[-1]
         assert result == ("error", {"message": "公开资料暂时无法读取，请稍后再试。", "code": "context_unavailable"})
+
+
+def test_actual_sources_arrive_before_slow_semantic_lookup_and_cancel_frees_slot(context_pack, monkeypatch):
+    import asyncio
+    from server.app import AskRequest
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    cancelled = []
+    async def slow_semantic(*args):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+    monkeypatch.setattr("server.app.SemanticIndex.candidates", slow_semantic)
+    async def run():
+        app = create_app(context_pack)
+        async with app.router.lifespan_context(app):
+            class Request:
+                client = type("Client", (), {"host": "127.0.0.1"})()
+                async def is_disconnected(self):
+                    return False
+            ask = next(route.endpoint for route in app.routes if route.path == "/api/ask")
+            response = await ask(Request(), AskRequest(question="职业选择怎么做"))
+            await anext(response.body_iterator)
+            source_frame = await asyncio.wait_for(anext(response.body_iterator), .5)
+            assert source_frame.startswith("event: sources\n")
+            assert "职业选择要看能力与作品" in source_frame
+            assert app.state.slots._value == 2
+            await response.body_iterator.aclose()
+            assert cancelled and app.state.slots._value == 3
+    asyncio.run(run())
+
+
+def test_disconnect_cancels_model_generation(context_pack, monkeypatch):
+    import asyncio
+    from server.app import AskRequest
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    cancelled = []
+    started = None
+    async def provider(request):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+    async def run():
+        nonlocal started
+        started = asyncio.Event()
+        app = create_app(context_pack, httpx.MockTransport(provider))
+        async with app.router.lifespan_context(app):
+            class Request:
+                client = type("Client", (), {"host": "127.0.0.1"})()
+                async def is_disconnected(self):
+                    return False
+            ask = next(route.endpoint for route in app.routes if route.path == "/api/ask")
+            response = await ask(Request(), AskRequest(question="职业选择怎么做"))
+            for _ in range(5):
+                await anext(response.body_iterator)
+            pending = asyncio.create_task(anext(response.body_iterator))
+            await asyncio.wait_for(started.wait(), .5)
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            assert cancelled and app.state.slots._value == 3
+    asyncio.run(run())
+
+
+def test_anyio_disconnect_cancellation_always_returns_generation_slot(context_pack, monkeypatch):
+    import asyncio
+    import importlib
+    import anyio
+    from starlette.requests import Request
+    app_module = importlib.import_module("server.app")
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.setenv("ASK_CONCURRENCY", "3")
+    async def run():
+        started, cancelled = asyncio.Event(), asyncio.Event()
+        async def blocking_generate(*args, **kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        monkeypatch.setattr(app_module, "generate_answer", blocking_generate)
+        app = app_module.create_app(context_pack)
+        async with app.router.lifespan_context(app):
+            scope = {"type": "http", "method": "POST", "path": "/api/ask", "headers": [],
+                     "client": ("127.0.0.1", 1234), "server": ("127.0.0.1", 8000),
+                     "scheme": "http", "http_version": "1.1", "asgi": {"version": "3.0", "spec_version": "2.3"}}
+            async def receive():
+                await asyncio.sleep(0)
+                return {"type": "http.request", "body": b"", "more_body": False}
+            endpoint = next(route.endpoint for route in app.routes if route.path == "/api/ask")
+            response = await endpoint(Request(scope, receive), app_module.AskRequest(question="职业选择如何验证能力？"))
+            async def consume():
+                async for _ in response.body_iterator:
+                    pass
+            async with anyio.create_task_group() as group:
+                group.start_soon(consume)
+                await asyncio.wait_for(started.wait(), 2)
+                # Starlette uses a persistent cancellation scope on disconnect.
+                group.cancel_scope.cancel()
+            await asyncio.wait_for(cancelled.wait(), 1)
+            assert app.state.slots._value == 3
+    asyncio.run(run())

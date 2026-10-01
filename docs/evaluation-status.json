@@ -105,5 +105,51 @@
       "provider_called": false,
       "verified_by": "HTTP SSE and regression test"
     }
+  },
+  "historical_configuration": {
+    "revision": "b62da6fec002df6a4c5d69d46726f1fbe7b070e2",
+    "model": "gpt-5",
+    "reasoning_effort": "provider default",
+    "note": "The original cases below precede the latency update."
+  },
+  "latency_update": {
+    "model": "grok-4-fast",
+    "synthetic_only": true,
+    "scope": "Small live smoke checks, not a general quality or latency guarantee",
+    "first_sources_seconds": [
+      0.171,
+      0.194
+    ],
+    "cases": [
+      {
+        "case": "scope_tension_final",
+        "seconds": 8.139,
+        "observed_status": "answered",
+        "manual_review": "acceptable for this example"
+      },
+      {
+        "case": "unsupported_final",
+        "seconds": 3.604,
+        "observed_status": "unsupported",
+        "manual_review": "acceptable for this example"
+      },
+      {
+        "case": "learning-prefill-browser",
+        "observed_status": "answered",
+        "sections": 2,
+        "manual_review": "Explains transfer and retained judgment; one small trial, no engineering level checklist. Browser duration not instrumented."
+      }
+    ],
+    "regressions": [
+      "Sources emitted before delayed semantic lookup",
+      "Stopping cancels provider and semantic work",
+      "AnyIO persistent disconnect cancellation always returns the concurrency slot",
+      "Invalid citations never become a final answer"
+    ],
+    "gpt5_low_comparison": {
+      "seconds": 34.203,
+      "observed_status": "answered",
+      "manual_review": "schema-valid but unnecessary timed workflow and engineering framing; not selected as the default"
+    }
   }
 }
