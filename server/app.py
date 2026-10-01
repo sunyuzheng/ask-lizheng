@@ -12,9 +12,10 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Awaitable, Callable, Literal
 
 import httpx
+import anyio
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -23,6 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
 from .semantic import SemanticIndex
+from .admission import AdmissionError, HEADER
+from .quota import QuotaAdmission
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -30,6 +33,19 @@ STREAM_HEARTBEAT_SECONDS = 5
 # SSE comments keep connections active without inventing progress or exposing
 # model reasoning. Padding also flushes small frames through buffering proxies.
 STREAM_HEARTBEAT = ": keep-alive " + " " * 16384 + "\n\n"
+
+
+class CleanupStreamingResponse(StreamingResponse):
+    """Release admission resources even if sending headers fails first."""
+    def __init__(self, content, *, on_close: Callable[[], Awaitable[None]], **kwargs):
+        super().__init__(content, **kwargs)
+        self.on_close = on_close
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self.on_close()
 
 
 class HistoryItem(BaseModel):
@@ -109,7 +125,9 @@ def answer_approach(intent: str, passages, cards: list[dict]) -> dict:
     }
 
 
-def create_app(context_root: Path | None = None, provider_transport=None) -> FastAPI:
+def create_app(context_root: Path | None = None, provider_transport=None, *, quota_store=None) -> FastAPI:
+    if quota_store is not None and context_root is None:
+        raise ValueError("An injected quota store requires an explicit local/test context root")
     @asynccontextmanager
     async def lifespan(application):
         index = ContextIndex(context_root or ROOT / "data" / "context", require_lock=context_root is None)
@@ -130,7 +148,9 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
             transport=provider_transport,
         ) as client:
             application.state.provider = client
-            yield
+            async with httpx.AsyncClient(limits=httpx.Limits(max_connections=4, max_keepalive_connections=2)) as quota_client:
+                application.state.quota = QuotaAdmission(quota_client, store=quota_store)
+                yield
 
     application = FastAPI(title="Ask Lizheng", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -143,6 +163,13 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
     @application.exception_handler(HTTPException)
     async def http_error(request, exc):
         return JSONResponse(status_code=exc.status_code, content={"message": str(exc.detail), "code": "rate_limited" if exc.status_code == 429 else "unavailable"}, headers=exc.headers)
+
+    @application.exception_handler(AdmissionError)
+    async def admission_error(request, exc):
+        headers = {"Cache-Control": "no-store"}
+        if exc.code == "quota_exhausted" and exc.status == 429:
+            headers["X-Ask-Error-Code"] = "quota_exhausted"
+        return JSONResponse(status_code=exc.status, content=exc.payload(), headers=headers)
 
     @application.middleware("http")
     async def request_boundaries(request, call_next):
@@ -158,6 +185,16 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                 if len(body) > 80000:
                     return JSONResponse(status_code=413, content={"message": "这次输入过长，请缩短问题或对话背景。", "code": "input_too_large"})
             request._body = bytes(body)
+        if request.url.path in {"/api/ask", "/api/quota"}:
+            try:
+                if request.url.path == "/api/quota":
+                    async for chunk in request.stream():
+                        if chunk:
+                            raise AdmissionError("invalid_admission")
+                body = await request.body() if request.url.path == "/api/ask" else b""
+                request.state.principal = application.state.quota.verify(request.headers.get(HEADER), request.method, request.url.path, body)
+            except AdmissionError as exc:
+                return JSONResponse(status_code=exc.status, content=exc.payload(), headers={"Cache-Control": "no-store"})
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -169,8 +206,8 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
             )
         return response
 
-    def rate_check(request: Request, route: str, multiplier: int = 1):
-        address = request.client.host if request.client else "unknown"
+    def rate_check(request: Request, route: str, multiplier: int = 1, subject: str | None = None):
+        address = subject or (request.client.host if request.client else "unknown")
         if not application.state.limiter.allow(address, route, multiplier):
             raise HTTPException(429, "提问有点密集，请稍等一分钟再试。", headers={"Retry-After": "60"})
 
@@ -194,20 +231,72 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
         passages = await asyncio.to_thread(application.state.index.retrieve, q, limit=8)
         return {"sources": [passage.source for passage in passages]}
 
+    @application.get("/api/quota")
+    async def quota_status(request: Request):
+        if not application.state.quota.enabled:
+            return {"enabled": False}
+        principal = request.state.principal
+        rate_check(request, "quota", 3, principal.subject)
+        return await application.state.quota.store.status(principal)
+
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
-        rate_check(request, "ask")
+        principal = request.state.principal if application.state.quota.enabled else None
+        rate_check(request, "ask", subject=principal.subject if principal else None)
         try:
             await asyncio.wait_for(application.state.slots.acquire(), timeout=.1)
         except TimeoutError:
             raise HTTPException(503, "现在有几位读者正在提问，请稍等片刻再试。") from None
+        try:
+            reservation, initial_quota = await application.state.quota.reserve(principal)
+        except BaseException:
+            application.state.slots.release()
+            raise
+
+        generation_task = None
+        quota_finished = False
+        resources_released = False
+
+        async def release_resources():
+            nonlocal resources_released
+            if resources_released:
+                return
+            # Both the iterator and ASGI response call this guard. Claim cleanup
+            # before its first await so cancellation cannot release a slot twice.
+            resources_released = True
+            try:
+                try:
+                    if generation_task is not None:
+                        if not generation_task.done():
+                            generation_task.cancel()
+                        await asyncio.gather(generation_task, return_exceptions=True)
+                finally:
+                    if reservation is not None and not quota_finished:
+                        # Disconnect cancellation is persistent in Starlette.
+                        # Bound protected cleanup; the durable lease is the
+                        # crash/network-failure fallback, never a body cache.
+                        with anyio.CancelScope(shield=True):
+                            try:
+                                async with asyncio.timeout(5):
+                                    await application.state.quota.finish(reservation, False)
+                            except (AdmissionError, TimeoutError):
+                                pass
+            finally:
+                application.state.slots.release()
 
         async def events():
-            generation_task = None
+            nonlocal generation_task
+            async def settled_result(result):
+                nonlocal quota_finished
+                quota = await application.state.quota.finish(reservation, result["status"] == "answered")
+                quota_finished = True
+                return {**result, "quota": quota} if quota is not None else result
             try:
+                if initial_quota is not None:
+                    yield sse("quota", initial_quota) + STREAM_HEARTBEAT
                 clarification = attribution_clarification(payload.question, payload.context, payload.history)
                 if clarification:
-                    yield sse("result", clarification)
+                    yield sse("result", await settled_result(clarification))
                     return
                 yield sse("progress", {"stage": "retrieving", "message": "正在查找相关公开材料…"}) + STREAM_HEARTBEAT
                 token = os.getenv("AI_BUILDER_TOKEN", "")
@@ -241,11 +330,11 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     return
                 token = os.getenv("AI_BUILDER_TOKEN", "")
                 if not token:
-                    yield sse("result", sources_only(passages, "当前没有连接 AI 模型；这里展示的是公开资料检索结果。", payload.intent))
+                    yield sse("result", await settled_result(sources_only(passages, "当前没有连接 AI 模型；这里展示的是公开资料检索结果。", payload.intent)))
                     return
                 if not any(not passage.discovery for passage in passages):
                     result = sources_only(passages, "这些条目只收录目录信息；可以打开原文继续阅读。", "find") if payload.intent == "find" and passages else unsupported_result(passages)
-                    yield sse("result", result)
+                    yield sse("result", await settled_result(result))
                     return
                 cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
                 yield sse("approach", answer_approach(payload.intent, passages, cards))
@@ -276,24 +365,18 @@ def create_app(context_root: Path | None = None, provider_transport=None) -> Fas
                     result = sources_only(passages, FAILURES[exc.code], payload.intent)
                     result.update(retryable=True, failure_code=exc.code)
                 if not await request.is_disconnected():
-                    yield sse("result", result)
+                    yield sse("result", await settled_result(result))
             except asyncio.CancelledError:
                 raise
+            except AdmissionError as exc:
+                yield sse("error", exc.payload())
             except Exception:
                 # Do not include exception strings: providers may echo input.
                 yield sse("error", {"message": "这次处理没有完成，请稍后再试。", "code": "request_failed"})
             finally:
-                try:
-                    if generation_task is not None:
-                        if not generation_task.done():
-                            generation_task.cancel()
-                        await asyncio.gather(generation_task, return_exceptions=True)
-                finally:
-                    # StreamingResponse may cancel cleanup awaits again on a
-                    # disconnect. The bounded concurrency slot must still return.
-                    application.state.slots.release()
+                await release_resources()
 
-        return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"})
+        return CleanupStreamingResponse(events(), on_close=release_resources, media_type="text/event-stream", headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"})
 
     @application.get("/{path:path}")
     async def static(path: str):

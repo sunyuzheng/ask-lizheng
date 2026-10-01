@@ -1,6 +1,6 @@
 # 调用问问立正
 
-模型凭证留在服务端。网站与其他调用者使用同一公开问答接口，不直接调用 Builder Space，也不能从请求覆盖模型或系统指令。第一版没有账号，端点受到输入、并发和频率限制，不提供持久对话 ID。
+模型凭证留在服务端。网站与其他调用者使用同一问答接口，不直接调用 Builder Space，也不能从请求覆盖模型或系统指令。账号与每日额度默认关闭；启用后所有人每天3次，服务端核验的Founding Member每日不限次。端点受到输入、并发和频率限制，不提供持久对话 ID。
 
 ## 问一个问题
 
@@ -67,3 +67,13 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
 
 输入及检索到的公开片段会由 Builder 的模型服务处理。本项目不记录问答正文，不创建对话数据库；它不能替第三方服务承诺保存政策。
+
+## 账号与额度（默认关闭）
+
+浏览器通过同源`GET /api/ask-lizheng/auth/session`读取enabled、authenticated、founding、remaining及reset_at；邮箱核验入口使用`/api/ask-lizheng/auth/login`，验证码发送与确认分别为同源POST `email-request`（email）及`email-verify`（code）；仅成功核验邮箱后查询Founding标签。原生表单与JSON调用均受同源校验，验证码10分钟、最多5次、一次消费。可选Academy SSO可显式选择provider=logto。退出为同源POST `/api/ask-lizheng/auth/logout`。前端携带同源cookie，不传会员档位。主页与独立页的请求经过同一Vercel转发；启用后Builder直接调用没有有效证明会被拒绝。
+
+只有最终校验通过的answered回答结算一次；内部修复不重复计次，其他最终状态、失败及生成中的取消释放预留。SSE可包含quota事件，最终result可包含quota。HTTP429的quota_exhausted与一般rate_limited分开，前者有remaining及reset_at字段；转发只接收带专用X-Ask-Error-Code标记且有界的额度错误。重复attempt返回409，不缓存或重放回答。
+
+内部`X-Ask-Admission`使用`v1.<base64url JSON>.<base64url HMAC-SHA256>`，无padding。签名覆盖ASCII `v1.`加encoded JSON，secret是至少32字节UTF-8。JSON精确字段为v:1、sub、tier(public/founding)、attempt(小写规范UUID)、exp(Unix整数秒)、method、path及body_sha256。POST固定path为/api/ask，摘要对应精确转发body；GET /api/quota的摘要对应空body。有效期由转发签发60秒，Builder上限120秒，不接受浏览器自行签发。证明、摘要及问题正文不进入额度账本。
+
+详细规则、隐私边界及启用配置见[ACCOUNT_QUOTAS.md](ACCOUNT_QUOTAS.md)和[ACCOUNT_AUTH_HANDOFF.md](ACCOUNT_AUTH_HANDOFF.md)。

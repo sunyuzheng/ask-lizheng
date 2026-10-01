@@ -8,7 +8,7 @@
 
 每份推荐材料保留原始标题、日期、作者、片段与视频时间点。回答会标明 AI 综合或结合个人处境的应用。没有材料支持、模型未连接或暂时故障时，产品会说明状态，并提供确实找到的材料。
 
-本项目不建立账号、对话数据库或分析埋点；浏览器对话仅在内存中，刷新清除。输入与选出的公开材料发送给 Builder Space 的模型服务，其处理规则由该服务管理。它不是立正本人实时回复。
+本项目不建立对话数据库或分析埋点；浏览器对话仅在内存中，刷新清除。可配置Superlinear SSO：所有人每天3次，核验为Founding Member后每日不限次；默认关闭，身份与额度元数据只在服务端保存。输入与选出的公开材料发送给 Builder Space 的模型服务，其处理规则由该服务管理。它不是立正本人实时回复。
 
 ## 本地运行
 
@@ -55,3 +55,5 @@ npm run build
 ```
 
 产品设计、Context 架构与验收记录见 `docs/PRODUCT.md`、`docs/CONTEXT_ARCHITECTURE.md` 和 `docs/VERIFICATION.md`。源内容遵守原有许可证；项目代码为 MIT。
+
+Superlinear账号与每日3次／Founding Member不限次的实现说明见 [ACCOUNT_QUOTAS.md](docs/ACCOUNT_QUOTAS.md)，专用SSO应用与服务端配置需求见 [ACCOUNT_AUTH_HANDOFF.md](docs/ACCOUNT_AUTH_HANDOFF.md)。本地实现已完成，尚未启用或上线每日额度。
