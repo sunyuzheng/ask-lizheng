@@ -156,19 +156,35 @@ ASKED = ["我在某某公司做产品三年，怎么判断自己是真的学会�
 
 def test_themes_return_fresh_generic_questions_only(context_pack, token):
     reply = {"themes": [
-        {"topic_label": "学会还是看懂", "question": "学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？", "count": 2},
-        # Repeats an asker's words: dropped.
-        {"topic_label": "照抄的主题", "question": "怎么判断自己是真的学会了AI？", "count": 2},
-        {"topic_label": "AI提效与价值", "question": "效率提高了，为什么价值没有跟着变？", "count": 1},
-        {"topic_label": "学会还是看懂", "question": "同一个主题的第二个问题，应该被去掉？", "count": 2},
-        {"topic_label": "一个超过十个字的主题名称太长", "question": "主题名太长的问题会被去掉吗？", "count": 3},
+        {"topic_label": "学会还是看懂", "questions": ["学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？",
+                                                   "怎么判断自己是真的学会了AI？"], "count": 2},
+        {"topic_label": "AI提效与价值", "questions": ["效率提高了，为什么价值没有跟着变？"], "count": 1},
+        {"topic_label": "学会还是看懂", "questions": ["同一个主题的第二组问题，应该被去掉？"], "count": 2},
+        {"topic_label": "一个超过十个字的主题名称太长", "questions": ["主题名太长的问题会被去掉吗？"], "count": 3},
+        {"topic_label": "已有主题", "questions": ["已经发布过的主题不再重复？"], "count": 4},
     ]}
-    seen, transport = provider(reply)
+    # The question that repeats an asker's words gets one rewrite.
+    rewrite = {"rewrites": [{"topic_label": "学会还是看懂", "question": "掌握一项技能和仅仅理解它，区别在哪里？"}]}
+    seen, transport = provider(reply, rewrite)
     with TestClient(create_app(context_pack, provider_transport=transport)) as client:
-        response = post_feed(client, "/api/themes", {"v": 1, "questions": ASKED})
+        response = post_feed(client, "/api/themes", {"v": 1, "questions": ASKED, "existing": ["已有主题"]})
     assert response.status_code == 200
-    assert response.json() == {"themes": [{"topic_label": "学会还是看懂", "question": "学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？", "count": 2}]}
+    assert response.json() == {
+        "themes": [{"topic_label": "学会还是看懂", "question": "学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？", "count": 2},
+                   {"topic_label": "学会还是看懂", "question": "掌握一项技能和仅仅理解它，区别在哪里？", "count": 2}],
+        "report": {"proposed": 5, "rare": 1, "label": 1, "repeat": 2, "borrowed": 0, "rewritten": 1}}
     assert "不能公开" in seen[0]["messages"][0]["content"]
+    assert "已有主题" in seen[0]["messages"][1]["content"]
+    assert len(seen) == 2
+
+
+def test_a_rewrite_that_still_echoes_is_dropped(context_pack, token):
+    reply = {"themes": [{"topic_label": "学会还是看懂", "questions": ["怎么判断自己是真的学会了AI？"], "count": 3}]}
+    rewrite = {"rewrites": [{"topic_label": "学会还是看懂", "question": "怎么判断自己是真的学会了AI呢？"}]}
+    _, transport = provider(reply, rewrite)
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        body = post_feed(client, "/api/themes", {"v": 1, "questions": ASKED}).json()
+    assert body["themes"] == [] and body["report"]["borrowed"] == 1
 
 
 def test_feed_proofs_are_bound_to_their_route(context_pack, token):

@@ -199,32 +199,47 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
 
 
 # The first batch: themes drawn from questions asked before v4, which may never be shown themselves.
-# Ops sends their text here once; only generic questions, written fresh, come back.
+# Ops sends their text here; only generic questions, written fresh, come back, with counts of what was dropped.
 THEMES_PROMPT = """下面是「问问立正」此前收到的提问，只供你归纳主题；这些提问不能公开，你的输出会公开。
-请找出被问得最多的共性主题，最多30个，每个主题至少有2条提问属于它。对每个主题：
-- topic_label：不超过10个字的主题名，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」；
-- question：用你自己的话写一个通用的问题，不超过60字，任何人都可能这样问。不能照抄或接近照抄任何一条提问，不能带任何个人信息、公司、人名、城市、具体数字或个人经历；
-- count：属于这个主题的提问条数。
-跳过健康、法律纠纷、感情、财务等隐私话题，跳过测试、乱码和没有意义的提问。
-只输出一个 JSON 对象：{"themes": [{"topic_label": "", "question": "", "count": 2}]}，按 count 从大到小。"""
+请找出大家反复在问的具体问题，最多40个。主题要具体到一件事（例如「怎么判断自己真的学会了」「AI提效了为什么价值没变」），不要用「学习与成长」「职业发展」这类大类；每个主题至少有2条提问在问同一件事。
+对每个主题：
+- topic_label：不超过10个字的主题名，说清问的是什么；
+- questions：1到2个通用问题，用你自己的话、从不同角度写，每个不超过60字，任何人都可能这样问。不能照抄或接近照抄任何一条提问，也不要连着用原提问里的长短语；不能带任何个人信息、公司、人名、城市、具体数字或个人经历；
+- count：在问这件事的提问条数。
+跳过健康、法律纠纷、感情、财务等隐私话题，跳过测试、乱码和没有意义的提问。不要重复已经有的主题。
+只输出一个 JSON 对象：{"themes": [{"topic_label": "", "questions": [""], "count": 2}]}，按 count 从大到小。"""
+REWRITE_PROMPT = """下面这些通用问题和原来的提问用词太接近。请为每个换一种完全不同的说法重写，保持主题和意思，不超过60字，不要用原提问里连着的短语。
+只输出一个 JSON 对象：{"rewrites": [{"topic_label": "", "question": ""}]}。"""
 
 
 class ThemesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     v: Literal[1]
     questions: list[str] = Field(min_length=1, max_length=300)
+    existing: list[str] = Field(default_factory=list, max_length=300)
 
 
 class Theme(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    topic_label: str = Field(min_length=1, max_length=16)
-    question: str = Field(min_length=4, max_length=120)
+    model_config = ConfigDict(extra="ignore")
+    topic_label: str = Field(min_length=1, max_length=40)
+    questions: list[str] = Field(min_length=1, max_length=3)
     count: int = Field(ge=1, le=1000)
 
 
 class ThemesReply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    themes: list[Theme] = Field(max_length=40)
+    model_config = ConfigDict(extra="ignore")
+    themes: list[Theme] = Field(max_length=60)
+
+
+class Rewrite(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    topic_label: str = Field(max_length=40)
+    question: str = Field(max_length=200)
+
+
+class RewriteReply(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    rewrites: list[Rewrite] = Field(max_length=120)
 
 
 def borrowed(question: str, asked: list[str]) -> bool:
@@ -239,11 +254,9 @@ def borrowed(question: str, asked: list[str]) -> bool:
     return False
 
 
-async def generic_themes(client: httpx.AsyncClient, token: str, model: str, request: ThemesRequest) -> list[dict]:
-    asked = [item[:2000] for item in request.questions if item.strip()]
-    payload = {"model": model, "temperature": .2, "max_tokens": 4000, "response_format": {"type": "json_object"},
-               "messages": [{"role": "system", "content": THEMES_PROMPT},
-                            {"role": "user", "content": json.dumps({"questions": asked}, ensure_ascii=False)}], **model_options(model)}
+async def json_reply(client: httpx.AsyncClient, token: str, model: str, messages: list, reply_type):
+    payload = {"model": model, "temperature": .2, "max_tokens": 6000, "response_format": {"type": "json_object"},
+               "messages": messages, **model_options(model)}
     async with asyncio.timeout(CURATE_SECONDS):
         response = await client.post("https://space.ai-builders.com/backend/v1/chat/completions", json=payload,
             headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
@@ -254,18 +267,53 @@ async def generic_themes(client: httpx.AsyncClient, token: str, model: str, requ
         content = choice.get("message", {}).get("content")
         if choice.get("finish_reason") == "length" or not isinstance(content, str):
             raise ValueError()
-        themes = ThemesReply.model_validate_json(content).themes
+        return content, reply_type.model_validate_json(content)
     except (ValueError, ValidationError, TypeError, AttributeError):
         raise ProviderFailure("invalid_answer") from None
-    out, labels = [], set()
-    for theme in sorted(themes, key=lambda item: -item.count):
-        label, question = theme.topic_label.strip(), theme.question.strip()
-        # Fresh wording only, and one question per topic.
-        if theme.count < 2 or label in labels or len(label) > 10 or borrowed(question, asked):
+
+
+async def generic_themes(client: httpx.AsyncClient, token: str, model: str, request: ThemesRequest) -> dict:
+    asked = [item[:2000] for item in request.questions if item.strip()]
+    existing = {label.strip() for label in request.existing}
+    messages = [{"role": "system", "content": THEMES_PROMPT},
+                {"role": "user", "content": json.dumps({"questions": asked, "existing_topics": sorted(existing)}, ensure_ascii=False)}]
+    content, reply = await json_reply(client, token, model, messages, ThemesReply)
+    report = {"proposed": len(reply.themes), "rare": 0, "label": 0, "repeat": 0, "borrowed": 0, "rewritten": 0}
+    kept, labels, retry = [], set(), []
+    for theme in sorted(reply.themes, key=lambda item: -item.count):
+        label = theme.topic_label.strip()
+        if theme.count < 2:
+            report["rare"] += 1
+            continue
+        if not label or len(label) > 10:
+            report["label"] += 1
+            continue
+        if label in labels or label in existing:
+            report["repeat"] += 1
             continue
         labels.add(label)
-        out.append({"topic_label": label, "question": question, "count": theme.count})
-    return out
+        for question in theme.questions[:2]:
+            question = question.strip()
+            if not 4 <= len(question) <= 120:
+                continue
+            (retry if borrowed(question, asked) else kept).append({"topic_label": label, "question": question, "count": theme.count})
+    if retry:
+        # One chance to say it differently; whatever still echoes an asker is dropped.
+        try:
+            _, rewrites = await json_reply(client, token, model, [*messages, {"role": "assistant", "content": content},
+                {"role": "user", "content": REWRITE_PROMPT + "\n" + json.dumps([{"topic_label": item["topic_label"], "question": item["question"]} for item in retry], ensure_ascii=False)}], RewriteReply)
+        except ProviderFailure:
+            rewrites = RewriteReply(rewrites=[])
+        counts = {item["topic_label"]: item["count"] for item in retry}
+        used = set()
+        for item in rewrites.rewrites:
+            label, question = item.topic_label.strip(), item.question.strip()
+            if label in counts and label not in used and 4 <= len(question) <= 120 and not borrowed(question, asked):
+                used.add(label)
+                kept.append({"topic_label": label, "question": question, "count": counts[label]})
+                report["rewritten"] += 1
+        report["borrowed"] = len(retry) - report["rewritten"]
+    return {"themes": kept, "report": report}
 
 
 class SeedRequest(BaseModel):

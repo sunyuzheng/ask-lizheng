@@ -292,7 +292,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         if failure:
             return failure
         try:
-            return {"themes": await generic_themes(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), payload)}
+            return await generic_themes(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), payload)
         except (ProviderFailure, TimeoutError) as exc:
             return JSONResponse(status_code=503, content={"code": getattr(exc, "code", "provider_timeout")})
 
