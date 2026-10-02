@@ -141,7 +141,7 @@ function Working({message, elapsed, onStop, onSelect}) {
     </ol>
     <p className="working-note">
       <span>{message.model} · 已用{elapsed}秒</span>
-      <span>{!message.lastActivity ? '正在连接服务…' : stale ? '有一会儿没收到新进展了，还在等。' : candidates.length ? '回答还在整理，可以先读找到的材料。' : '找到材料后，会先在这里给你看。'}</span>
+      <span>{!message.lastActivity ? (elapsed >= 5 ? '问答服务闲置时会休眠，正在唤醒，通常十几秒…' : '正在连接服务…') : stale ? '有一会儿没收到新进展了，还在等。' : candidates.length ? '回答还在整理，可以先读找到的材料。' : '找到材料后，会先在这里给你看。'}</span>
     </p>
     {elapsed >= 30 && <p className="working-note">这次整理得久一些。可以先读原文；停止也会保留问题和已找到的材料。</p>}
     {message.approach && <div className="approach">
@@ -175,7 +175,8 @@ function Candidates({sources, turnId, onSelect}) {
 }
 
 // `step` is where a Founding verification stands, so it never looks like nothing happened.
-function AccountLine({account, busy, step, foundingOpen, onToggleFounding, onLogin, onLoginHere, onLogout, onRetry}) {
+function AccountLine({account, waking, busy, step, foundingOpen, onToggleFounding, onLogin, onLoginHere, onLogout, onRetry}) {
+  if (!account && waking) return <p className="account" aria-live="polite"><span className="account-pending">正在唤醒问答服务…</span></p>;
   if (!account?.enabled) return null;
   if (account.unavailable) return <p className="account" aria-live="polite"><span>暂时读不到今天的次数。</span><button type="button" className="text-button" onClick={onRetry}>重试</button></p>;
   if (account.founding) return <p className="account" aria-live="polite">{step === 'verified' ? <b className="account-verified">验证成功 · Founding Member · 不限次</b> : <span className="account-strong">Founding Member · 不限次</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></p>;
@@ -267,6 +268,8 @@ function App() {
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
   const [foundingOpen, setFoundingOpen] = useState(false);
+  // The count comes from Builder, which sleeps when idle: say so while it wakes.
+  const [accountWaking, setAccountWaking] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const conversationId = useRef(null);
   const metadataAbort = useRef(null);
@@ -305,10 +308,20 @@ function App() {
       setPersonal(draft.intent === 'apply' || !!draft.context);
       if (draft.context) setBackground({goal: '', facts: draft.context, tried: ''});
     }
-    void readAskAccount().then(signedIn || draft ? showLoginResult : setAccount);
+    let stopped = false;
+    const slow = setTimeout(() => setAccountWaking(true), 1500);
+    // A read that times out while Builder wakes gets one more try a second later.
+    const load = again => void readAskAccount().then(next => {
+      if (stopped) return;
+      if (next?.unavailable && again) { setTimeout(() => load(false), 1000); return; }
+      clearTimeout(slow);
+      setAccountWaking(false);
+      (signedIn || draft ? showLoginResult : setAccount)(next);
+    });
+    load(true);
     const onFocus = () => { if (!abort.current) refreshAccount(); };
     window.addEventListener('focus', onFocus);
-    return () => { window.removeEventListener('focus', onFocus); loginCleanup.current?.(); };
+    return () => { stopped = true; clearTimeout(slow); window.removeEventListener('focus', onFocus); loginCleanup.current?.(); };
   }, []);
   useEffect(() => {
     refreshMeta();
@@ -564,7 +577,7 @@ function App() {
     </form>
     <div className="composer-meta">
       <p className="notice">{storageReady ? (meta.ops_logging.enabled ? OPS_NOTICE : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
-      <AccountLine account={account} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
+      <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}

@@ -40,7 +40,7 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 
 `GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度、候选sources与公开整理方向，再逐段显示已经过出处和格式校验的内容，最后返回完整result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
 
-Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `deepseek-v4-flash`，附带 thinking enabled、`reasoning_effort: low`、JSON object 与同一 schema 提示；流式段落和最终回答继续经过格式与来源验证，并至多修复一次。可通过 `AI_MODEL` 更换：`grok-4.5` 使用 medium，`gpt-5` 使用 low，`deepseek-v4-pro` 使用 high。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。
+Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `deepseek-v4-flash`，附带 thinking enabled、`reasoning_effort: low`、JSON object 与同一 schema 提示；流式段落和最终回答继续经过格式与来源验证，并至多修复一次。可通过 `AI_MODEL` 更换：`grok-4.5` 使用 medium，`gpt-5` 使用 low，`deepseek-v4-pro` 使用 high。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。服务闲置5分钟后会深度休眠，下一个请求把它唤醒，通常要几秒到半分钟。ask.lizheng.ai根路径因此先经个人站的页面函数：服务1.5秒内回应就原样给页面，否则先显示「正在唤醒」并在醒来后自动刷新；页面里读次数和提问等得久时，也会说明服务在唤醒。
 
 部署脚本默认dry-run，列出目的地、完整非秘密payload与审批摘要。审阅时传入`--expected-commit`的完整Git SHA；正式部署再传对应`--approved-sha`。启用额度时加`--enable-quota`，只向Builder传公开开关与固定额度代理URL，数据库、Circle及邮件凭证都留在个人站Vercel。脚本会先验证公开仓库main正是该版本，再读取模型token并执行部署。发布仍需取得对准确差异与目的地的批准。完整调用契约见[API.md](docs/API.md)。
 
