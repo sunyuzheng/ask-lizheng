@@ -32,6 +32,14 @@ const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
 const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
 const KIND = {application: '结合你的处境', source: '材料里的观点', synthesis: 'AI综合'};
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
+// v4: answers may be published with personal details removed; the situation is kept for analysis only.
+const V4_NOTICE = '很多问题是共性的。提交即同意保存问答，去掉个人信息后可能整理公开，帮到更多人。请勿填写私密信息。';
+const V4_PARTS = [
+  ['为什么保存', '很多问题是共性的，你问的往往也是别人想问的。我们会把常见的问题和回答整理出来，去掉个人信息后公开，比如「今天大家在问什么」；立正也会从中找选题写文章、做视频，并用它们改进回答。'],
+  ['保存什么', '提问、完整回答和所用出处，保存到立正手动删除为止。记录不关联邮箱、账号或IP。'],
+  ['你的隐私', '公开前，我们会先用模型自动去掉可能认出你的信息；模型也可能漏，所以请别填写私密信息。「结合我的处境」里填的内容只用于分析，不会公开，用到这些内容的回答也不会公开。'],
+  ['另外', '回答由AI根据立正公开的文章和视频整理，不是立正本人回复。提问和必要背景会发给Builder Space的模型服务处理。当前对话只在这个页面里，刷新就会清除。账号只用于登录和Founding资格核验，不交给模型；如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。'],
+];
 const OPS_NOTICE = '提问、完整回答及出处、匿名使用和对话统计会保存至站点所有者手动删除；不保存补充背景原文和模型内部推理。请勿填写私密信息。';
 const LINKS = {
   context: 'https://github.com/sunyuzheng/lizheng-open-context',
@@ -205,7 +213,7 @@ function FoundingInfo({account, busy, step, onLogin}) {
   </div>;
 }
 
-function About({close, meta, account, focusInput}) {
+function About({close, meta, account, focusInput, publicArchive}) {
   const ref = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -232,13 +240,15 @@ function About({close, meta, account, focusInput}) {
       <div className="about-row"><h3>问得具体一点</h3><p>与其问「我该怎么办」，不如打开「结合我的处境」，说清想达到什么、发生了什么、试过什么，以及你觉得卡在哪里。不用先把问题想得很完美。</p></div>
       <div className="about-row"><h3>把答案带回现实</h3><p>AI可以整理材料、提出假设，但你的具体情况未必在材料里。建议是否适用，要靠你的行动和反馈来判断。也可以直接追问：这个判断成立的条件是什么？</p></div>
       <div className="about-row"><h3>随时回到出处</h3><p>文章保留日期，视频尽量链接到具体时间点。嘉宾的观点归嘉宾，AI的整理和推断也会标出来。AI可能读错或漏掉条件，重要的判断请打开原文核对；材料里没有的内容，它会说明材料不足。</p></div>
-      <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
+      {publicArchive ? <div className="about-row" id="about-input"><h3>你的提问会怎么用</h3>
+        {V4_PARTS.map(([title, text]) => <p key={title}><b>{title}</b>　{text}</p>)}
+      </div> : <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
         <li>{meta?.ops_logging?.enabled ? '提问文本、完整回答及来源快照、匿名使用标识、对话分组和轮次、问题字数、提问方式和入口，以及提问时间、模型、回答状态和耗时，会保存至站点所有者手动删除。旧版记录仍在30天后自动删除。' : '提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。'}</li>
         <li>不保存补充背景和对话历史原文、模型内部推理；提问记录不关联邮箱、账号或IP。完整回答可能概括你提供的处境。</li>
         <li>当前对话只在这个页面里，刷新就会清除。</li>
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
-      </ul></div>
+      </ul></div>}
       {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p><p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={LINKS.stay} target="_blank" rel="noopener noreferrer">了解会员<ArrowUpRight size={13}/></a></p></div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
@@ -273,9 +283,13 @@ function App() {
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const conversationId = useRef(null);
   const metadataAbort = useRef(null);
+  // The page shows v4's notice only once the service says it keeps to v4.
+  const knownNotice = ops => ops.answer_archive === true && (ops.notice === 'v3'
+    || (ops.notice === 'v4' && ops.retention === 'until_deleted' && ops.context_archive === true && ops.public_display === 'deidentified'));
   const storageConfirmed = value => value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean'
-    && (!value.ops_logging.enabled || (value.ops_logging.notice === 'v3' && value.ops_logging.answer_archive === true));
+    && (!value.ops_logging.enabled || knownNotice(value.ops_logging));
   const storageReady = storageConfirmed(meta) && !meta?.settings_error;
+  const publicArchive = storageReady && meta.ops_logging.enabled && meta.ops_logging.notice === 'v4';
   const refreshMeta = () => {
     metadataAbort.current?.abort();
     const controller = new AbortController();
@@ -402,7 +416,7 @@ function App() {
     const ops = meta?.ops_logging?.enabled === true;
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
-      query_log_notice: ops ? 'v3' : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
+      query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -546,7 +560,7 @@ function App() {
         <button type="button" className="text-button" onClick={() => setEditingSituation(true)}>{filled.length ? '修改' : '填写'}</button>
       </p>}
       {showFields && <div className="background">
-        <p>说清处境，比把问题包装好更有用。三项都可以空着，只写你愿意分享的部分。</p>
+        <p>说清处境，比把问题包装好更有用。三项都可以空着，只写你愿意分享的部分。{publicArchive && '这部分只用于分析，不会公开。'}</p>
         {BACKGROUND.map(field => <label key={field.key}>
           {field.label}
           {field.multiline
@@ -576,7 +590,7 @@ function App() {
       </div>
     </form>
     <div className="composer-meta">
-      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? OPS_NOTICE : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
+      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
       <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
@@ -697,7 +711,7 @@ function App() {
         </aside>}
       </div>}
     </main>
-    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput}/>}
+    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive}/>}
   </div>;
 }
 
