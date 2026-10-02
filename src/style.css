@@ -879,6 +879,127 @@ main {
     0 18px 36px -28px rgb(20 30 20 / 0.45);
 }
 
+/* Questions others asked, in place of the examples once some are published. */
+.discovery-list {
+  display: grid;
+  gap: 12px;
+}
+
+.qcard {
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow 0.25s;
+}
+
+.qcard:hover,
+.qcard.open {
+  box-shadow:
+    0 0 0 1px rgb(35 131 67 / 0.45),
+    0 18px 36px -28px rgb(20 30 20 / 0.45);
+}
+
+.qcard-head {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 16px 48px 16px 18px;
+  border-radius: 14px;
+  text-align: left;
+}
+
+.qcard-question {
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.qcard-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--ink-2);
+}
+
+.qcard-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.qcard-chevron {
+  position: absolute;
+  top: 19px;
+  right: 18px;
+  color: var(--faint);
+  transition: transform 0.2s;
+}
+
+.qcard.open .qcard-chevron {
+  transform: rotate(180deg);
+}
+
+.qcard-body {
+  padding: 0 18px 18px;
+}
+
+.qcard-body .answer {
+  margin-top: 2px;
+}
+
+.qcard-body .summary {
+  margin-top: 0;
+  font-size: 17px;
+}
+
+.qcard-body .answer-section {
+  margin-top: 24px;
+}
+
+.qcard-body .section-head h3 {
+  font-size: 17.5px;
+}
+
+.qcard-body .answer-section p,
+.qcard-body .answer-section li {
+  font-size: 15.5px;
+}
+
+.qcard-body :is(.limits, .inline-sources) {
+  margin-top: 20px;
+}
+
+.qcard-body .inline-sources {
+  background: var(--ivory);
+}
+
+.qcard-note {
+  padding: 2px 0 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.qcard-attribution {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.qcard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.qcard-like.on {
+  color: var(--green-text);
+}
+
 .footer {
   display: flex;
   flex-wrap: wrap;
@@ -1691,7 +1812,7 @@ main {
     scrollbar-width: thin;
   }
 
-  .inline-sources {
+  .thread .inline-sources {
     display: none;
   }
 }
@@ -1864,6 +1985,19 @@ main {
 
   .starter-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qcard-head {
+    padding: 14px 44px 14px 16px;
+  }
+
+  .qcard-chevron {
+    top: 17px;
+    right: 16px;
+  }
+
+  .qcard-body {
+    padding: 0 16px 16px;
   }
 
   .footer {

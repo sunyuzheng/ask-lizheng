@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
+import {discoveryDetail, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
 import {MARK_PATHS} from './mark.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
@@ -47,6 +48,14 @@ const LINKS = {
   community: 'https://www.superlinear.academy/c/tools/lizheng-context',
   stay: 'https://stay.superlinear.academy/',
 };
+// Where a link to the membership page sits, so its visits can be told apart there.
+const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
+// Questions others asked, published with personal details removed.
+const DISCOVERY = {
+  title: '别人在问什么',
+  note: '真实的提问，去掉个人信息后由AI挑选整理。',
+  attribution: 'AI整理，不是立正本人回复。',
+};
 const MESSAGES = {
   quota: '今天的3次已经用完。北京时间每天0点恢复；Founding Member验证后不限次。',
   networkQuota: '今天来自这个网络的免费提问已经很多了，北京时间每天0点恢复；Founding Member验证后不限次。',
@@ -61,6 +70,23 @@ const MESSAGES = {
   copy: '浏览器没有允许复制，可以直接选中文字复制。',
   export: '这次没能生成文件，可以稍后再试。',
 };
+
+// Visits and a few clicks are counted by Vercel Web Analytics, which lizheng.ai's hosts serve;
+// the counts carry no question text. Elsewhere, such as a local build, nothing loads.
+const analytics = /(^|\.)lizheng\.ai$/.test(location.hostname);
+if (analytics) {
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  document.head.append(Object.assign(document.createElement('script'), {defer: true, src: '/_vercel/insights/script.js'}));
+}
+const track = (name, data) => { if (analytics) window.va('event', {name, data}); };
+const sourceKind = url => {
+  try {
+    const host = new URL(url).hostname;
+    return /(^|\.)lizheng\.ai$/.test(host) ? 'article' : /youtube\.com$|youtu\.be$|bilibili\.com$/.test(host) ? 'video'
+      : /superlinear\.academy$|circle\.so$/.test(host) ? 'community' : 'other';
+  } catch { return 'other'; }
+};
+const trackSource = url => track('Ask Source Click', {surface: 'ask', kind: sourceKind(url)});
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scrollBehavior = () => (reducedMotion() ? 'auto' : 'smooth');
@@ -96,8 +122,8 @@ function SourceCard({source, selected, onOpen, prefix}) {
       <span>{isVideo(source) ? <Video size={14}/> : <FileText size={14}/>}{sourceLabel(source)}</span>
       <time>{sourceDate(source)}</time>
     </div>
-    <a className="source-title" href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={15}/></a>
-    {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer">从 {source.timecode} 开始看</a>}
+    <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={15}/></a>
+    {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>从 {source.timecode} 开始看</a>}
     {source.reason && <p className="source-reason">{source.reason}</p>}
     <details onToggle={event => { if (event.currentTarget.open) onOpen?.(source.id); }}>
       <summary>看片段<ChevronDown size={14}/></summary>
@@ -171,7 +197,7 @@ function Candidates({sources, turnId, onSelect}) {
   return <div className="candidates">
     <div className="candidates-head"><BookOpen size={15}/><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
     {sources.slice(0, 2).map(source => <article className="candidate" key={`${source.id}-${source.url}`}>
-      <a href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={14}/></a>
+      <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={14}/></a>
       <time>{sourceDate(source)}</time>
       <p>{source.excerpt?.slice(0, 150)}{source.excerpt?.length > 150 ? '…' : ''}</p>
     </article>)}
@@ -207,10 +233,46 @@ function FoundingInfo({account, busy, step, onLogin}) {
     <p>Stay Superlinear前3,000位新年费会员是Founding Member，一年$149/¥999。AI Builder、AI Architect的老学员也是。</p>
     <p>会员每年有12+场嘉宾大师课，每个月和鸭哥与立正直播答疑，问问立正也不限次。</p>
     <p className="founding-actions">
-      <a className="founding-join" href={LINKS.stay} target="_blank" rel="noopener noreferrer">了解会员<ArrowUpRight size={15}/></a>
+      <a className="founding-join" href={stayLink('founding_panel')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'founding_panel'})}>了解会员<ArrowUpRight size={15}/></a>
       {!account.authenticated && account.login_ready && step !== 'pending' && <button type="button" className="text-button" disabled={busy} onClick={onLogin}>已经是？验证身份</button>}
     </p>
   </div>;
+}
+
+// One published question. Its answer opens in place and reads like one in a conversation.
+function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
+  const prefix = `q-${card.public_id}`;
+  const likes = vote?.likes ?? card.likes;
+  // A count only when it says more than this one question.
+  const meta = [card.topic_question_count >= 2 && `${card.topic_question_count}次类似提问`, likes > 0 && `${likes}人觉得有帮助`]
+    .filter(Boolean).join(' · ');
+  const select = id => onSelect(prefix, id);
+  const answer = detail && typeof detail === 'object' ? detail.answer : null;
+  return <article className={`qcard ${open ? 'open' : ''}`}>
+    <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
+      {card.topic_label && <span className="starter-tag">{card.topic_label}</span>}
+      <span className="qcard-question">{card.question}</span>
+      {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
+      {meta && <span className="qcard-meta">{meta}</span>}
+      <ChevronDown size={16} className="qcard-chevron" aria-hidden="true"/>
+    </button>
+    {open && <div className="qcard-body">
+      {answer ? <div className="answer">
+        <div className="summary"><Markdown text={answer.summary} sources={answer.sources} onSelect={select}/></div>
+        {answer.sections.map((section, index) => <SectionBlock key={index} section={section} sources={answer.sources} onSelect={select}/>)}
+        {answer.limitations && <p className="limits"><Info size={15}/><span><b>这个回答的边界</b>{answer.limitations}</span></p>}
+        {answer.sources.length > 0 && <details className="inline-sources">
+          <summary><BookOpen size={16}/>回到{answer.sources.length}份原文<ChevronDown size={16}/></summary>
+          <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
+        </details>}
+        <p className="qcard-attribution">{DISCOVERY.attribution}</p>
+      </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
+      <div className="qcard-actions">
+        <button type="button" className="pill-button" onClick={onSimilar}><CornerDownRight size={15}/>问个类似的</button>
+        {signedIn && <button type="button" className={`ghost-button qcard-like ${vote?.voted ? 'on' : ''}`} aria-pressed={!!vote?.voted} onClick={onLike}>{vote?.voted && <Check size={15}/>}{vote?.voted ? '觉得有帮助' : '有帮助'}</button>}
+      </div>
+    </div>}
+  </article>;
 }
 
 function About({close, meta, account, focusInput, publicArchive}) {
@@ -249,7 +311,7 @@ function About({close, meta, account, focusInput, publicArchive}) {
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>}
-      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p><p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={LINKS.stay} target="_blank" rel="noopener noreferrer">了解会员<ArrowUpRight size={13}/></a></p></div>}
+      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p><p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'about'})}>了解会员<ArrowUpRight size={13}/></a></p></div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<ArrowUpRight size={14}/></a>
@@ -278,10 +340,20 @@ function App() {
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
   const [foundingOpen, setFoundingOpen] = useState(false);
+  // Questions others asked: this visit's picks, each answer once opened, and this visit's likes.
+  const [discovery, setDiscovery] = useState([]);
+  const [openCard, setOpenCard] = useState('');
+  const [cardDetails, setCardDetails] = useState({});
+  const [cardVotes, setCardVotes] = useState({});
+  const [cardSource, setCardSource] = useState('');
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
   const [accountWaking, setAccountWaking] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const conversationId = useRef(null);
+  // How the question box was last filled, counted with each question: typed, example, card, followup or clarify.
+  const questionFrom = useRef('typed');
+  // Whether this browser saw the questions before: counted with each card action.
+  const discoveryVisit = useRef('first');
   const metadataAbort = useRef(null);
   // The page shows v4's notice only once the service says it keeps to v4.
   const knownNotice = ops => ops.answer_archive === true && (ops.notice === 'v3'
@@ -309,7 +381,9 @@ function App() {
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
   const showLoginResult = next => {
     setAccount(next);
-    setLoginStep(!next?.enabled || next.unavailable ? '' : next.founding ? 'verified' : next.authenticated ? 'member' : 'incomplete');
+    const step = !next?.enabled || next.unavailable ? '' : next.founding ? 'verified' : next.authenticated ? 'member' : 'incomplete';
+    setLoginStep(step);
+    if (step) track('Ask Verify Result', {surface: 'ask', result: step});
   };
 
   useEffect(() => {
@@ -342,6 +416,18 @@ function App() {
     return () => { metadataAbort.current?.abort(); metadataAbort.current = null; };
   }, []);
   useEffect(() => {
+    const controller = new AbortController();
+    void discoveryPool(controller.signal).then(pool => {
+      if (controller.signal.aborted || !pool.length) return;
+      const seen = readSeen();
+      const picked = pickDiscovery(pool, seen);
+      rememberSeen(seen, picked.map(item => item.public_id));
+      discoveryVisit.current = seen.length ? 'return' : 'first';
+      setDiscovery(picked);
+    });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
     if (!busy) return;
     const started = Date.now();
     setElapsed(0);
@@ -361,6 +447,7 @@ function App() {
   const situation = mode === 'ask' && personal ? contextText(background) : '';
   const login = () => {
     loginCleanup.current?.();
+    track('Ask Verify Start', {surface: 'ask'});
     setLoginStep('pending');
     loginCleanup.current = beginAskLogin({question, context: situation, intent}, () => { void readAskAccount().then(showLoginResult); });
   };
@@ -395,13 +482,43 @@ function App() {
     input.current?.scrollIntoView({behavior: scrollBehavior(), block: 'nearest'});
   });
   // Starters carry their intent; follow-ups stay in the current mode.
-  const prefill = (value, nextIntent) => {
+  const prefill = (value, nextIntent, from = 'followup') => {
     if (nextIntent) { setMode(nextIntent === 'find' ? 'find' : 'ask'); setPersonal(nextIntent === 'apply'); }
+    questionFrom.current = from;
     setQuestion(value); setError(''); focusInput();
+  };
+  const toggleCard = card => {
+    if (openCard === card.public_id) { setOpenCard(''); return; }
+    setOpenCard(card.public_id);
+    track('Ask Discovery Open', {surface: 'ask', visit: discoveryVisit.current});
+    const known = cardDetails[card.public_id];
+    if (known && known !== 'failed') return;
+    setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
+    void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => ({...prev, [card.public_id]: detail || 'failed'})));
+  };
+  const askSimilar = card => {
+    track('Ask Discovery Similar', {surface: 'ask', visit: discoveryVisit.current});
+    prefill(card.question, undefined, 'card');
+  };
+  const likeCard = async card => {
+    const vote = !cardVotes[card.public_id]?.voted;
+    const result = await voteDiscovery(card.public_id, card.revision, vote);
+    if (!result) return;
+    setCardVotes(prev => ({...prev, [card.public_id]: result}));
+    track('Ask Discovery Vote', {surface: 'ask', vote});
+  };
+  const selectCardSource = (prefix, id) => {
+    setCardSource(`${prefix}:${id}`);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(`${prefix}-source-${id}`);
+      target?.closest('details:not([open])')?.setAttribute('open', '');
+      target?.scrollIntoView({behavior: scrollBehavior(), block: 'center'});
+    });
   };
   const newChat = () => {
     if (busy) return;
     setMessages([]); setQuestion(''); setBackground({goal: '', facts: '', tried: ''}); setPersonal(false); setEditingSituation(false);
+    questionFrom.current = 'typed';
     setSelected(''); setSourceTurn(null); setError('');
     conversationId.current = null;
     window.scrollTo({top: 0, behavior: scrollBehavior()});
@@ -417,6 +534,7 @@ function App() {
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
+    if (!retry) { track('Ask Question', {surface: 'ask', from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -551,7 +669,7 @@ function App() {
       {!conversation && <p className="mode-hint">{hint}</p>}
       <label className="sr-only" htmlFor="question">你的问题</label>
       <textarea id="question" ref={input} maxLength={2000} value={question} rows={conversation ? 1 : 3}
-        onChange={event => setQuestion(event.target.value)} placeholder={conversation ? (mode === 'find' ? '还想读哪方面的？' : '接着问，或者换一个问题') : placeholder}
+        onChange={event => { setQuestion(event.target.value); if (!event.target.value.trim()) questionFrom.current = 'typed'; }} placeholder={conversation ? (mode === 'find' ? '还想读哪方面的？' : '接着问，或者换一个问题') : placeholder}
         onKeyDown={event => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
         }}/>
@@ -591,7 +709,7 @@ function App() {
     </form>
     <div className="composer-meta">
       <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
-      <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
+      <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: 'ask'}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
@@ -623,14 +741,22 @@ function App() {
           <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
         </section>
         {composer}
-        <section className="starters" aria-labelledby="starters-title">
+        {discovery.length > 0 ? <section className="starters discovery" aria-labelledby="discovery-title">
+          <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p></div>
+          <div className="discovery-list">
+            {discovery.map(card => <QuestionCard key={card.public_id} card={card}
+              open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
+              signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
+              onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}
+          </div>
+        </section> : <section className="starters" aria-labelledby="starters-title">
           <div className="starters-head"><h2 id="starters-title">不知道从哪问起？</h2><p>选一个，改成你自己的问题。</p></div>
           <div className="starter-grid">
-            {EXAMPLES.map(example => <button type="button" key={example.question} className="starter" onClick={() => prefill(example.question, example.intent)}>
+            {EXAMPLES.map(example => <button type="button" key={example.question} className="starter" onClick={() => prefill(example.question, example.intent, 'example')}>
               <span className="starter-tag">{example.tag}</span><span><Phrases text={example.question}/></span>
             </button>)}
           </div>
-        </section>
+        </section>}
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
           <p><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<ArrowUpRight size={13}/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<ArrowUpRight size={13}/></a></p>
@@ -663,6 +789,7 @@ function App() {
                     <p>再补充一点，回答会更贴合你</p>
                     {m.result.clarifying_questions.map(item => <button type="button" key={item} onClick={() => {
                       setMode('ask'); setQuestion(m.question); setPersonal(true); setEditingSituation(true);
+                      questionFrom.current = 'clarify';
                       setBackground(prev => ({...prev, facts: prev.facts ? `${prev.facts}\n${item}：` : `${item}：`}));
                       requestAnimationFrame(() => document.getElementById('context-facts')?.focus());
                     }}><Plus size={15}/>{item}</button>)}
@@ -691,7 +818,7 @@ function App() {
                         ? loginStep === 'verified' && <b className="account-verified">验证成功，可以重新提问了。</b>
                         : <span className="quota-actions">
                             {account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
-                            <a className="inline-link" href={LINKS.stay} target="_blank" rel="noopener noreferrer">如何成为Founding Member<ArrowUpRight size={14}/></a>
+                            <a className="inline-link" href={stayLink('quota_card')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'quota_card'})}>如何成为Founding Member<ArrowUpRight size={14}/></a>
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
@@ -707,7 +834,7 @@ function App() {
             <p>{provisional ? (busy && latestWithSources === messages.at(-1) ? '候选材料，回答还在整理。' : '检索到的材料，可以先读原文。') : sourcesOnly ? `共${railSources.length}份，点开阅读。` : `回答用到的${railSources.length}份原文，点开核对。`}</p>
           </div>
           {railSources.map(source => <SourceCard key={`${source.id}-${source.url}`} source={source} prefix="rail" selected={selected === source.id} onOpen={setSelected}/>)}
-          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer">去社区接着聊<ArrowUpRight size={14}/></a>
+          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: 'ask', location: 'rail'})}>去社区接着聊<ArrowUpRight size={14}/></a>
         </aside>}
       </div>}
     </main>

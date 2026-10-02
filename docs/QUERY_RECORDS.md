@@ -9,6 +9,7 @@
 - 只有在v4提示下提交的问答可以公开；v3（提示写明「记录仅立正可查看」）和v1记录永不公开。存档须逐条保存提示版本。
 - 「结合我的处境」原文随问答存档，只供所有者分析，永不公开；带处境的问答（intent为apply或带背景）一律不公开。
 - Ops后台拆到独立仓库（另一会话负责），两边按下面的约定各自上线。
+- 展示（2026-10-02）：主页和本页面的首页卡片「大家最近在问」已就绪，读Ops的公开发现接口；在v4 writer上线并有已发布问答之前，卡片不会出现，页面照旧显示示例问题。
 
 前后端约定：
 - 前端（个人站主页与本仓库页面）已支持v4，但只在`/api/meta`宣布`ops_logging: {enabled: true, retention: "until_deleted", answer_archive: true, notice: "v4", context_archive: true, public_display: "deidentified"}`时显示v4提示，并在请求里带`query_log_notice: "v4"`、`conversation_id`和照常的`context`。字段不全或notice是未知版本时：主页退回v1提示与v1标记，本页面暂停发送并提示保存设置尚未确认。
