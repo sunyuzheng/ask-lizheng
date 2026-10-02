@@ -30,7 +30,7 @@ from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
 from .ops_records import OpsRecorder, archived_answer
-from .curate import CURATE_BODY_LIMIT, CURATE_HEADER, CurateRequest, curate_question, verify_curate_proof
+from .curate import CURATE_BODY_LIMIT, CURATE_HEADER, CurateRequest, SeedRequest, ThemesRequest, curate_question, generic_themes, verify_curate_proof
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -258,26 +258,73 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
                     and application.state.quota.enabled and application.state.quota.ready)
 
-    @application.post("/api/curate")
-    async def curate(request: Request):
-        """Ops' automatic feed: one question's public version. Signed with a key derived for this alone."""
+    async def feed_request(request: Request, model_type):
+        """Ops' feed routes: a body signed for this route with the curate key, then parsed strictly."""
         token = os.getenv("AI_BUILDER_TOKEN", "")
         if not token:
-            return JSONResponse(status_code=503, content={"code": "model_unavailable"})
+            return None, None, JSONResponse(status_code=503, content={"code": "model_unavailable"})
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)
             if len(body) > CURATE_BODY_LIMIT:
-                return JSONResponse(status_code=413, content={"code": "input_too_large"})
-        verify_curate_proof(token, bytes(body), request.headers.get(CURATE_HEADER))
+                return None, None, JSONResponse(status_code=413, content={"code": "input_too_large"})
+        verify_curate_proof(token, bytes(body), request.headers.get(CURATE_HEADER), path=request.url.path)
         try:
-            payload = CurateRequest.model_validate_json(bytes(body))
+            return token, model_type.model_validate_json(bytes(body)), None
         except ValueError:
-            return JSONResponse(status_code=422, content={"code": "invalid_input"})
+            return None, None, JSONResponse(status_code=422, content={"code": "invalid_input"})
+
+    @application.post("/api/curate")
+    async def curate(request: Request):
+        """Ops' automatic feed: one question's public version. Signed with a key derived for this alone."""
+        token, payload, failure = await feed_request(request, CurateRequest)
+        if failure:
+            return failure
         try:
             return await curate_question(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), payload)
         except (ProviderFailure, TimeoutError) as exc:
             return JSONResponse(status_code=503, content={"code": getattr(exc, "code", "provider_timeout")})
+
+    @application.post("/api/themes")
+    async def themes(request: Request):
+        """The first batch: common themes of earlier questions, as fresh generic questions only."""
+        token, payload, failure = await feed_request(request, ThemesRequest)
+        if failure:
+            return failure
+        try:
+            return {"themes": await generic_themes(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), payload)}
+        except (ProviderFailure, TimeoutError) as exc:
+            return JSONResponse(status_code=503, content={"code": getattr(exc, "code", "provider_timeout")})
+
+    @application.post("/api/seed-answer")
+    async def seed_answer(request: Request):
+        """A generic theme question answered as /api/ask would, with no quota, record or situation."""
+        token, payload, failure = await feed_request(request, SeedRequest)
+        if failure:
+            return failure
+        # Readers come first: take a free answer slot or let Ops try again next run.
+        try:
+            await asyncio.wait_for(application.state.slots.acquire(), timeout=1)
+        except TimeoutError:
+            return JSONResponse(status_code=503, content={"code": "provider_busy"})
+        try:
+            question = payload.question.strip()
+            semantic = await application.state.semantic.candidates(application.state.provider, token, question + "\n")
+            passages = await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12, semantic) if semantic \
+                else await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12)
+            if not passages or not any(not passage.discovery for passage in passages):
+                return JSONResponse(status_code=422, content={"code": "unsupported"})
+            cards = application.state.index.reasoning_bundle(question, "", [], passages, semantic)
+            answer = await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL),
+                {"question": question, "context": "", "intent": "understand", "history": [], "reasoning_cards": cards}, passages)
+            result = assemble_answer(answer, passages)
+            if result["status"] != "answered":
+                return JSONResponse(status_code=422, content={"code": result["status"]})
+            return {"answer": archived_answer(result)}
+        except (ProviderFailure, TimeoutError) as exc:
+            return JSONResponse(status_code=503, content={"code": getattr(exc, "code", "provider_timeout")})
+        finally:
+            application.state.slots.release()
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):

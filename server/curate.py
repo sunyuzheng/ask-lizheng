@@ -116,7 +116,7 @@ PROMPT = """你在为「问问立正」整理公开问答。提问的人在提�
 summary 不超过300字；段落最多3段，每段标题不超过40字；source_ids 和 source_reasons 只能用回答里出现过的出处编号，reason 不超过100字。"""
 
 
-def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float | None = None) -> None:
+def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float | None = None, path: str = "/api/curate") -> None:
     secret = derived_secret(token, CURATE_PURPOSE)
     if not isinstance(proof, str) or not re.fullmatch(r"v1\.[0-9]{10}\.[a-f0-9]{64}", proof):
         raise AdmissionError("invalid_admission", 403)
@@ -124,7 +124,9 @@ def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float |
     current = int(now if now is not None else time.time())
     if int(expiry) <= current or int(expiry) > current + 60:
         raise AdmissionError("invalid_admission", 403)
-    message = f"ask-curate:v1:{expiry}:{hashlib.sha256(body).hexdigest()}"
+    # /api/curate kept its first message; the other feed routes name themselves, so a proof fits one route only.
+    route = "" if path == "/api/curate" else path + ":"
+    message = f"ask-curate:v1:{route}{expiry}:{hashlib.sha256(body).hexdigest()}"
     expected = hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise AdmissionError("invalid_admission", 403)
@@ -194,3 +196,79 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
             messages = [*messages, {"role": "assistant", "content": content if isinstance(content, str) else ""},
                         {"role": "user", "content": "上面的输出不符合要求：" + str(exc)[:600] + "。请只输出修正后的完整 JSON 对象。"}]
     raise ProviderFailure("invalid_answer")
+
+
+# The first batch: themes drawn from questions asked before v4, which may never be shown themselves.
+# Ops sends their text here once; only generic questions, written fresh, come back.
+THEMES_PROMPT = """下面是「问问立正」此前收到的提问，只供你归纳主题；这些提问不能公开，你的输出会公开。
+请找出被问得最多的共性主题，最多30个，每个主题至少有2条提问属于它。对每个主题：
+- topic_label：不超过10个字的主题名，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」；
+- question：用你自己的话写一个通用的问题，不超过60字，任何人都可能这样问。不能照抄或接近照抄任何一条提问，不能带任何个人信息、公司、人名、城市、具体数字或个人经历；
+- count：属于这个主题的提问条数。
+跳过健康、法律纠纷、感情、财务等隐私话题，跳过测试、乱码和没有意义的提问。
+只输出一个 JSON 对象：{"themes": [{"topic_label": "", "question": "", "count": 2}]}，按 count 从大到小。"""
+
+
+class ThemesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1]
+    questions: list[str] = Field(min_length=1, max_length=300)
+
+
+class Theme(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_label: str = Field(min_length=1, max_length=16)
+    question: str = Field(min_length=4, max_length=120)
+    count: int = Field(ge=1, le=1000)
+
+
+class ThemesReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    themes: list[Theme] = Field(max_length=40)
+
+
+def borrowed(question: str, asked: list[str]) -> bool:
+    """True when a generic question repeats an asker's wording: a run of 12 or more characters, or nearly the whole."""
+    import difflib
+    plain = re.sub(r"[\s，。？！、：；,.?!:;「」“”\"'（）()]", "", question)
+    for item in asked:
+        other = re.sub(r"[\s，。？！、：；,.?!:;「」“”\"'（）()]", "", item)
+        match = difflib.SequenceMatcher(None, plain, other, autojunk=False)
+        if match.find_longest_match(0, len(plain), 0, len(other)).size >= 12 or match.ratio() > .8:
+            return True
+    return False
+
+
+async def generic_themes(client: httpx.AsyncClient, token: str, model: str, request: ThemesRequest) -> list[dict]:
+    asked = [item[:2000] for item in request.questions if item.strip()]
+    payload = {"model": model, "temperature": .2, "max_tokens": 4000, "response_format": {"type": "json_object"},
+               "messages": [{"role": "system", "content": THEMES_PROMPT},
+                            {"role": "user", "content": json.dumps({"questions": asked}, ensure_ascii=False)}], **model_options(model)}
+    async with asyncio.timeout(CURATE_SECONDS):
+        response = await client.post("https://space.ai-builders.com/backend/v1/chat/completions", json=payload,
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+            timeout=httpx.Timeout(CURATE_SECONDS, connect=10, pool=5), follow_redirects=False)
+    provider_status(response)
+    try:
+        choice = (response.json().get("choices") or [{}])[0]
+        content = choice.get("message", {}).get("content")
+        if choice.get("finish_reason") == "length" or not isinstance(content, str):
+            raise ValueError()
+        themes = ThemesReply.model_validate_json(content).themes
+    except (ValueError, ValidationError, TypeError, AttributeError):
+        raise ProviderFailure("invalid_answer") from None
+    out, labels = [], set()
+    for theme in sorted(themes, key=lambda item: -item.count):
+        label, question = theme.topic_label.strip(), theme.question.strip()
+        # Fresh wording only, and one question per topic.
+        if theme.count < 2 or label in labels or len(label) > 10 or borrowed(question, asked):
+            continue
+        labels.add(label)
+        out.append({"topic_label": label, "question": question, "count": theme.count})
+    return out
+
+
+class SeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1]
+    question: str = Field(min_length=4, max_length=120)

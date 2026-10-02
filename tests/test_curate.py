@@ -136,3 +136,75 @@ def test_unsigned_or_malformed_requests_never_reach_the_model(context_pack, toke
         assert call(client, {**request(), "visitor_id": "x"}).status_code == 422
         assert call(client, request(topics=[{"key": "short", "label": "x"}])).status_code == 422
     assert not seen
+
+
+
+def signed_for(path, body: bytes):
+    secret = derived_secret(TOKEN, CURATE_PURPOSE)
+    expiry = int(time.time()) + 30
+    signature = hmac.new(secret.encode(), f"ask-curate:v1:{path}:{expiry}:{hashlib.sha256(body).hexdigest()}".encode(), hashlib.sha256).hexdigest()
+    return f"v1.{expiry}.{signature}"
+
+
+def post_feed(client, path, body: dict, proof=None):
+    raw = json.dumps(body, ensure_ascii=False).encode()
+    return client.post(path, content=raw, headers={CURATE_HEADER: proof or signed_for(path, raw), "Content-Type": "application/json"})
+
+
+ASKED = ["我在某某公司做产品三年，怎么判断自己是真的学会了AI？", "学了很多AI工具，怎么知道自己真的会了？", "用AI后效率高了，为什么工资没涨？"]
+
+
+def test_themes_return_fresh_generic_questions_only(context_pack, token):
+    reply = {"themes": [
+        {"topic_label": "学会还是看懂", "question": "学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？", "count": 2},
+        # Repeats an asker's words: dropped.
+        {"topic_label": "照抄的主题", "question": "怎么判断自己是真的学会了AI？", "count": 2},
+        {"topic_label": "AI提效与价值", "question": "效率提高了，为什么价值没有跟着变？", "count": 1},
+        {"topic_label": "学会还是看懂", "question": "同一个主题的第二个问题，应该被去掉？", "count": 2},
+        {"topic_label": "一个超过十个字的主题名称太长", "question": "主题名太长的问题会被去掉吗？", "count": 3},
+    ]}
+    seen, transport = provider(reply)
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        response = post_feed(client, "/api/themes", {"v": 1, "questions": ASKED})
+    assert response.status_code == 200
+    assert response.json() == {"themes": [{"topic_label": "学会还是看懂", "question": "学了很多工具以后，怎样确认自己真的掌握了，而不只是看懂？", "count": 2}]}
+    assert "不能公开" in seen[0]["messages"][0]["content"]
+
+
+def test_feed_proofs_are_bound_to_their_route(context_pack, token):
+    seen, transport = provider({"themes": []})
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        raw = json.dumps({"v": 1, "questions": ASKED}, ensure_ascii=False).encode()
+        assert post_feed(client, "/api/themes", {"v": 1, "questions": ASKED}, proof=signed(raw)).status_code == 403
+        assert post_feed(client, "/api/themes", {"v": 1, "questions": ASKED}, proof=signed_for("/api/seed-answer", raw)).status_code == 403
+        assert post_feed(client, "/api/themes", {"v": 1, "questions": []}).status_code == 422
+    assert not seen
+
+
+def test_seed_answer_answers_like_ask_without_records(context_pack, token, monkeypatch):
+    from test_backend import answer_for
+    seen = []
+    async def generate(client, token, model, request, passages, **callbacks):
+        seen.append(request)
+        return answer_for()
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    stored = []
+    app = create_app(context_pack, query_record_transport=httpx.MockTransport(lambda request: stored.append(request) or httpx.Response(200, json={"ok": True})))
+    with TestClient(app) as client:
+        response = post_feed(client, "/api/seed-answer", {"v": 1, "question": "职业选择怎么做？"})
+        assert response.status_code == 200, response.text
+        answer = response.json()["answer"]
+        assert answer["status"] == "answered" and answer["sources"]
+        assert app.state.slots._value == 3
+    assert seen[0]["context"] == "" and seen[0]["history"] == [] and seen[0]["intent"] == "understand"
+    assert not stored
+
+
+def test_seed_answer_waits_for_readers(context_pack, token, monkeypatch):
+    async def generate(*args, **kwargs): pytest.fail("no free slot, no model call")
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    app = create_app(context_pack)
+    with TestClient(app) as client:
+        for _ in range(3):
+            app.state.slots._value -= 1
+        assert post_feed(client, "/api/seed-answer", {"v": 1, "question": "职业选择怎么做？"}).json() == {"code": "provider_busy"}
