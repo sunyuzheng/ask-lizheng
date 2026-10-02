@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
-import {beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
+import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {MARK_PATHS} from './mark.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
@@ -39,6 +39,7 @@ const LINKS = {
 };
 const MESSAGES = {
   quota: '今天的3次已经用完。北京时间每天0点恢复；Founding Member验证后不限次。',
+  networkQuota: '今天来自这个网络的免费提问已经很多了，北京时间每天0点恢复；Founding Member验证后不限次。',
   membership: '暂时无法核验Founding Member身份，请稍后再试。这次不扣次数。',
   busy: '现在提问的人有点多，请稍等一会儿再试。',
   unreachable: '暂时连不上，请稍后再试。',
@@ -171,16 +172,19 @@ function Candidates({sources, turnId, onSelect}) {
   </div>;
 }
 
-function AccountLine({account, busy, onLogin, onLogout, onRetry}) {
+// `step` is where a Founding verification stands, so it never looks like nothing happened.
+function AccountLine({account, busy, step, onLogin, onLoginHere, onLogout, onRetry}) {
   if (!account?.enabled) return null;
-  if (account.unavailable) return <p className="account"><span>暂时读不到今天的次数。</span><button type="button" className="text-button" onClick={onRetry}>重试</button></p>;
-  if (account.founding) return <p className="account"><span className="account-strong">Founding Member · 不限次</span><button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></p>;
+  if (account.unavailable) return <p className="account" aria-live="polite"><span>暂时读不到今天的次数。</span><button type="button" className="text-button" onClick={onRetry}>重试</button></p>;
+  if (account.founding) return <p className="account" aria-live="polite">{step === 'verified' ? <b className="account-verified">验证成功 · Founding Member · 不限次</b> : <span className="account-strong">Founding Member · 不限次</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></p>;
   const remaining = account.remaining ?? 3;
-  return <p className="account">
+  return <p className="account" aria-live="polite">
     <span className={remaining === 0 ? 'account-empty' : 'account-strong'}>{remaining === 0 ? '今天的3次已用完，北京时间0点恢复' : `今天还能问${remaining}次`}</span>
     {account.authenticated
-      ? <><span>已登录，未核验到Founding资格</span><button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></>
-      : account.login_ready && <button type="button" className="text-button" disabled={busy} onClick={onLogin}>Founding Member？验证后不限次</button>}
+      ? <><span className={step === 'member' ? 'account-notice' : undefined}>已登录，未核验到Founding资格</span><button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></>
+      : step === 'pending'
+        ? <><span className="account-pending">请在弹出的窗口里完成验证</span><button type="button" className="text-button" onClick={onLoginHere}>没看到窗口？在本页验证</button></>
+        : account.login_ready && <>{step === 'incomplete' && <span>这次没有完成验证</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogin}>Founding Member？验证后不限次</button></>}
   </p>;
 }
 
@@ -245,11 +249,17 @@ function App() {
   const [copied, setCopied] = useState(null);
   const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
+  const [loginStep, setLoginStep] = useState('');
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
+  const showLoginResult = next => {
+    setAccount(next);
+    setLoginStep(!next?.enabled || next.unavailable ? '' : next.founding ? 'verified' : next.authenticated ? 'member' : 'incomplete');
+  };
 
   useEffect(() => {
-    finishAskLogin();
+    const signedIn = finishAskLogin();
+    // A draft means this tab is back from signing in on this page.
     const draft = takeAskDraft();
     if (draft) {
       setQuestion(draft.question);
@@ -257,7 +267,7 @@ function App() {
       setPersonal(draft.intent === 'apply' || !!draft.context);
       if (draft.context) setBackground({goal: '', facts: draft.context, tried: ''});
     }
-    refreshAccount();
+    void readAskAccount().then(signedIn || draft ? showLoginResult : setAccount);
     const onFocus = () => { if (!abort.current) refreshAccount(); };
     window.addEventListener('focus', onFocus);
     return () => { window.removeEventListener('focus', onFocus); loginCleanup.current?.(); };
@@ -285,9 +295,14 @@ function App() {
   const situation = mode === 'ask' && personal ? contextText(background) : '';
   const login = () => {
     loginCleanup.current?.();
-    loginCleanup.current = beginAskLogin({question, context: situation, intent}, refreshAccount);
+    setLoginStep('pending');
+    loginCleanup.current = beginAskLogin({question, context: situation, intent}, () => { void readAskAccount().then(showLoginResult); });
   };
-  const logout = () => { void logoutAsk().then(refreshAccount); };
+  const loginHere = () => {
+    loginCleanup.current?.(true);
+    askLoginHere({question, context: situation, intent});
+  };
+  const logout = () => { setLoginStep(''); void logoutAsk().then(refreshAccount); };
   const openAbout = (focusInput = false) => setAbout({focusInput});
   const latestWithSources = messages.find(m => m.id === sourceTurn) || (busy ? messages.at(-1) : messages.filter(m => m.result || m.previewSources?.length).at(-1));
   const railSources = latestWithSources?.result?.sources || latestWithSources?.previewSources || [];
@@ -329,6 +344,7 @@ function App() {
   async function submit(event, retry) {
     event?.preventDefault();
     if (abort.current || (!retry && !question.trim())) return;
+    if (loginStep !== 'pending') setLoginStep('');
     const history = messages.filter(m => m.result).slice(-6).map(m => ({question: m.question, summary: m.result.summary}));
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history, query_log_notice: 'v1'};
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
@@ -349,6 +365,8 @@ function App() {
       if (!response.ok) {
         let body;
         try { body = await response.json(); } catch {}
+        // `scope: network`: a shared network's daily guest limit ran out, not this person's own 3.
+        if (body?.code === 'quota_exhausted' && body.scope === 'network') throw failure('quota_exhausted', MESSAGES.networkQuota);
         if (body?.code === 'quota_exhausted') { seeQuota({remaining: 0}); throw failure('quota_exhausted', MESSAGES.quota); }
         if (body?.code === 'membership_unavailable') throw failure(body.code, MESSAGES.membership);
         throw failure(body?.code, response.status === 429 ? MESSAGES.busy : MESSAGES.unreachable);
@@ -502,7 +520,7 @@ function App() {
     </form>
     <div className="composer-meta">
       <p className="notice">{NOTICE}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
-      <AccountLine account={account} busy={busy} onLogin={login} onLogout={logout} onRetry={refreshAccount}/>
+      <AccountLine account={account} busy={busy} step={loginStep} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
     {meta?.offline && <p className="form-error">暂时连不上服务。问题可以先写好，恢复后再发送。</p>}
@@ -597,10 +615,12 @@ function App() {
                 {m.error && (m.errorCode === 'quota_exhausted'
                   ? <div className="turn-alert quota" role="alert">
                       <p>{m.error}</p>
-                      {account?.login_ready && !account.authenticated && <button type="button" className="pill-button" onClick={login}>验证Founding身份</button>}
+                      {account?.founding
+                        ? loginStep === 'verified' && <b className="account-verified">验证成功，可以重新提问了。</b>
+                        : account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
-                {!busy && last && m.errorCode !== 'quota_exhausted' && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
+                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
               </article>;
             })}
           </section>
