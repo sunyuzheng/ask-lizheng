@@ -36,6 +36,7 @@ const LINKS = {
   context: 'https://github.com/sunyuzheng/lizheng-open-context',
   site: 'https://www.lizheng.ai/',
   community: 'https://www.superlinear.academy/c/tools/lizheng-context',
+  stay: 'https://stay.superlinear.academy/',
 };
 const MESSAGES = {
   quota: '今天的3次已经用完。北京时间每天0点恢复；Founding Member验证后不限次。',
@@ -173,19 +174,33 @@ function Candidates({sources, turnId, onSelect}) {
 }
 
 // `step` is where a Founding verification stands, so it never looks like nothing happened.
-function AccountLine({account, busy, step, onLogin, onLoginHere, onLogout, onRetry}) {
+function AccountLine({account, busy, step, foundingOpen, onToggleFounding, onLogin, onLoginHere, onLogout, onRetry}) {
   if (!account?.enabled) return null;
   if (account.unavailable) return <p className="account" aria-live="polite"><span>暂时读不到今天的次数。</span><button type="button" className="text-button" onClick={onRetry}>重试</button></p>;
   if (account.founding) return <p className="account" aria-live="polite">{step === 'verified' ? <b className="account-verified">验证成功 · Founding Member · 不限次</b> : <span className="account-strong">Founding Member · 不限次</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></p>;
   const remaining = account.remaining ?? 3;
+  const howToJoin = <button type="button" className="text-button account-toggle" aria-expanded={foundingOpen} aria-controls="founding-info" onClick={onToggleFounding}>如何成为</button>;
   return <p className="account" aria-live="polite">
     <span className={remaining === 0 ? 'account-empty' : 'account-strong'}>{remaining === 0 ? '今天的3次已用完，北京时间0点恢复' : `今天还能问${remaining}次`}</span>
     {account.authenticated
-      ? <><span className={step === 'member' ? 'account-notice' : undefined}>已登录，未核验到Founding资格</span><button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></>
+      ? <><span className={step === 'member' ? 'account-notice' : undefined}>已登录，未核验到Founding资格</span>{howToJoin}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></>
       : step === 'pending'
         ? <><span className="account-pending">请在弹出的窗口里完成验证</span><button type="button" className="text-button" onClick={onLoginHere}>没看到窗口？在本页验证</button></>
-        : account.login_ready && <>{step === 'incomplete' && <span>这次没有完成验证</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogin}>Founding Member？验证后不限次</button></>}
+        : account.login_ready && <>{step === 'incomplete' && <span>这次没有完成验证</span>}<span className="account-offer">Founding Member不限次：<button type="button" className="text-button" disabled={busy} onClick={onLogin}>验证身份</button><span className="account-sep" aria-hidden="true">·</span>{howToJoin}</span></>}
   </p>;
+}
+
+// What a Founding Member is and how to become one, opened from the count line.
+function FoundingInfo({account, busy, step, onLogin}) {
+  return <div className="founding-info" id="founding-info">
+    <p className="founding-title">什么是Founding Member</p>
+    <p>Stay Superlinear前3,000位新年费会员是Founding Member，一年$149/¥999。AI Builder、AI Architect的老学员也是。</p>
+    <p>会员每年有12+场嘉宾大师课，每个月和鸭哥与立正直播答疑，问问立正也不限次。</p>
+    <p className="founding-actions">
+      <a className="founding-join" href={LINKS.stay} target="_blank" rel="noopener noreferrer">了解会员<ArrowUpRight size={15}/></a>
+      {!account.authenticated && account.login_ready && step !== 'pending' && <button type="button" className="text-button" disabled={busy} onClick={onLogin}>已经是？验证身份</button>}
+    </p>
+  </div>;
 }
 
 function About({close, meta, account, focusInput}) {
@@ -222,7 +237,7 @@ function About({close, meta, account, focusInput}) {
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>
-      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p></div>}
+      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p><p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={LINKS.stay} target="_blank" rel="noopener noreferrer">了解会员<ArrowUpRight size={13}/></a></p></div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<ArrowUpRight size={14}/></a>
@@ -250,6 +265,7 @@ function App() {
   const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
+  const [foundingOpen, setFoundingOpen] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
   const showLoginResult = next => {
@@ -520,8 +536,9 @@ function App() {
     </form>
     <div className="composer-meta">
       <p className="notice">{NOTICE}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
-      <AccountLine account={account} busy={busy} step={loginStep} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
+      <AccountLine account={account} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => setFoundingOpen(open => !open)} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
+    {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
     {meta?.offline && <p className="form-error">暂时连不上服务。问题可以先写好，恢复后再发送。</p>}
     {meta?.mode === 'search-only' && <p className="form-note">现在只能检索原文，模型连上后才能生成回答。</p>}
@@ -617,7 +634,10 @@ function App() {
                       <p>{m.error}</p>
                       {account?.founding
                         ? loginStep === 'verified' && <b className="account-verified">验证成功，可以重新提问了。</b>
-                        : account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
+                        : <span className="quota-actions">
+                            {account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
+                            <a className="inline-link" href={LINKS.stay} target="_blank" rel="noopener noreferrer">如何成为Founding Member<ArrowUpRight size={14}/></a>
+                          </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
                 {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
