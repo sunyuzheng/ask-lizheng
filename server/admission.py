@@ -23,6 +23,7 @@ MESSAGES = {
     "quota_exhausted": "今天的回答额度已用完或正在使用，请稍后再试。",
     "attempt_replayed": "这次请求已提交过，请重新发起。",
     "ops_storage_unavailable": "问题暂时无法可靠保存，这次没有开始生成回答，请稍后重试。",
+    "answer_archive_failed": "这次回答未能确认归档，请重试；问题和已找到的材料仍保留。",
 }
 
 

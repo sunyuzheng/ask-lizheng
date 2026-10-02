@@ -32,7 +32,7 @@ const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
 const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
 const KIND = {application: '结合你的处境', source: '材料里的观点', synthesis: 'AI综合'};
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
-const OPS_NOTICE = '提问及匿名使用、对话统计会保存至站点所有者手动删除；不保存背景和完整回答。请勿填写私密信息。';
+const OPS_NOTICE = '提问、完整回答及出处、匿名使用和对话统计会保存至站点所有者手动删除；不保存补充背景原文和模型内部推理。请勿填写私密信息。';
 const LINKS = {
   context: 'https://github.com/sunyuzheng/lizheng-open-context',
   site: 'https://www.lizheng.ai/',
@@ -232,8 +232,8 @@ function About({close, meta, account, focusInput}) {
       <div className="about-row"><h3>把答案带回现实</h3><p>AI可以整理材料、提出假设，但你的具体情况未必在材料里。建议是否适用，要靠你的行动和反馈来判断。也可以直接追问：这个判断成立的条件是什么？</p></div>
       <div className="about-row"><h3>随时回到出处</h3><p>文章保留日期，视频尽量链接到具体时间点。嘉宾的观点归嘉宾，AI的整理和推断也会标出来。AI可能读错或漏掉条件，重要的判断请打开原文核对；材料里没有的内容，它会说明材料不足。</p></div>
       <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
-        <li>{meta?.ops_logging?.enabled ? '提问文本、匿名使用标识、对话分组和轮次、问题字数、提问方式和入口，以及提问时间、模型、回答状态和耗时，会保存至站点所有者手动删除，用于查看使用情况和改进回答。旧版记录仍在30天后自动删除。' : '提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。'}</li>
-        <li>不保存补充背景、对话历史、完整回答和模型内部推理；提问记录不关联邮箱、账号或IP。</li>
+        <li>{meta?.ops_logging?.enabled ? '提问文本、完整回答及来源快照、匿名使用标识、对话分组和轮次、问题字数、提问方式和入口，以及提问时间、模型、回答状态和耗时，会保存至站点所有者手动删除。旧版记录仍在30天后自动删除。' : '提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。'}</li>
+        <li>不保存补充背景和对话历史原文、模型内部推理；提问记录不关联邮箱、账号或IP。完整回答可能概括你提供的处境。</li>
         <li>当前对话只在这个页面里，刷新就会清除。</li>
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
@@ -270,7 +270,9 @@ function App() {
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
   const conversationId = useRef(null);
   const metadataAbort = useRef(null);
-  const storageReady = meta?.query_logging?.enabled === true && typeof meta?.ops_logging?.enabled === 'boolean' && !meta?.settings_error;
+  const storageConfirmed = value => value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean'
+    && (!value.ops_logging.enabled || (value.ops_logging.notice === 'v3' && value.ops_logging.answer_archive === true));
+  const storageReady = storageConfirmed(meta) && !meta?.settings_error;
   const refreshMeta = () => {
     metadataAbort.current?.abort();
     const controller = new AbortController();
@@ -281,7 +283,7 @@ function App() {
       .then(response => response.ok ? response.json() : Promise.reject())
       .then(value => {
         if (metadataAbort.current !== controller) return;
-        const ready = value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean';
+        const ready = storageConfirmed(value);
         setMeta(ready ? value : {...value, settings_error: true});
       })
       .catch(() => { if (metadataAbort.current === controller) setMeta({settings_error: true}); })
@@ -387,7 +389,7 @@ function App() {
     const ops = meta?.ops_logging?.enabled === true;
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
-      query_log_notice: ops ? 'v2' : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
+      query_log_notice: ops ? 'v3' : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -436,7 +438,7 @@ function App() {
           received = true;
           seeQuota(value.quota);
           update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000)});
-        } else if (name === 'error') throw failure(value.code, MESSAGES.failed);
+        } else if (name === 'error') throw failure(value.code, value.code === 'answer_archive_failed' ? '这次回答未能确认归档，请重试；问题和已找到的材料仍保留。' : MESSAGES.failed);
       };
       try {
         while (!received) {

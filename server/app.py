@@ -29,7 +29,7 @@ from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
-from .ops_records import OpsRecorder
+from .ops_records import OpsRecorder, archived_answer
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -64,7 +64,7 @@ class AskRequest(BaseModel):
     context: str = Field(default="", max_length=2500)
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
-    query_log_notice: Literal["v1", "v2"] | None = None
+    query_log_notice: Literal["v1", "v3"] | None = None
     conversation_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("conversation_id")
@@ -76,7 +76,7 @@ class AskRequest(BaseModel):
 
     @model_validator(mode="after")
     def ops_notice_requires_conversation(self):
-        if self.query_log_notice == "v2" and self.conversation_id is None:
+        if self.query_log_notice == "v3" and self.conversation_id is None:
             raise ValueError("Conversation UUID required")
         return self
 
@@ -249,7 +249,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
                 "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
-                "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted"}}
+                "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v3", "answer_archive": True}}
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
@@ -274,9 +274,9 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
         principal = request.state.principal if application.state.quota.enabled else None
-        if (application.state.ops_records.enabled or payload.query_log_notice == "v2") and not ops_ready():
+        if (application.state.ops_records.enabled or payload.query_log_notice == "v3") and not ops_ready():
             raise AdmissionError("ops_storage_unavailable", 503)
-        if payload.query_log_notice == "v2" and (not principal or not principal.visitor or not principal.entrypoint):
+        if payload.query_log_notice == "v3" and (not principal or not principal.visitor or not principal.entrypoint):
             raise AdmissionError("invalid_admission")
         rate_check(request, "ask", subject=principal.subject if principal else None)
         try:
@@ -292,11 +292,46 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         generation_task = None
         quota_finished = False
         resources_released = False
+        slot_released = False
         record_created_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         record_started = time.monotonic()
         record_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         record_status = "cancelled"
         ops_record_id = None
+        record_answer = None
+        record_error_code = "request_cancelled"
+        record_duration_ms = None
+        archive_confirmed = False
+
+        def release_slot():
+            nonlocal slot_released
+            if not slot_released:
+                slot_released = True
+                application.state.slots.release()
+
+        async def finish_archive():
+            nonlocal record_duration_ms, archive_confirmed
+            if ops_record_id is None or archive_confirmed:
+                return True
+            if record_duration_ms is None:
+                record_duration_ms = max(0, int((time.monotonic() - record_started) * 1000))
+            # Keep this body stable across both the initial final write and
+            # cancellation cleanup. A lost ACK must never become null/error.
+            try:
+                confirmed = await application.state.ops_records.finish(ops_record_id, record_status,
+                    record_duration_ms, answer=record_answer, error_code=record_error_code)
+            except Exception:
+                confirmed = False
+            archive_confirmed = confirmed
+            return confirmed
+
+        def capture_answer(result):
+            nonlocal record_answer, record_status, record_error_code
+            if ops_record_id is not None:
+                record_answer = archived_answer(result)
+                record_status = result["status"]
+                record_error_code = result.get("failure_code")
+                release_slot()
 
         async def release_resources():
             nonlocal resources_released
@@ -323,15 +358,14 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                             except (AdmissionError, TimeoutError):
                                 pass
             finally:
-                application.state.slots.release()
-                if ops_record_id is not None:
+                release_slot()
+                if ops_record_id is not None and not archive_confirmed:
                     # Once start was attempted, its acknowledgement may have
                     # been lost. An idempotent finish also resolves that case.
                     with anyio.CancelScope(shield=True):
                         try:
                             async with asyncio.timeout(5):
-                                await application.state.ops_records.finish(ops_record_id, record_status,
-                                    max(0, int((time.monotonic() - record_started) * 1000)))
+                                await finish_archive()
                         except Exception:
                             pass
                 # No identity/background/history enters the record. Enqueue
@@ -343,7 +377,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 except Exception:
                     pass
 
-        if payload.query_log_notice == "v2":
+        if payload.query_log_notice == "v3":
             try:
                 record = application.state.ops_records.prepare(question=payload.question, created_at=record_created_at,
                     model=record_model, principal=principal, conversation_id=payload.conversation_id, intent=payload.intent)
@@ -352,13 +386,26 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             except BaseException as exc:
                 if not isinstance(exc, asyncio.CancelledError):
                     record_status = "error"
+                    record_error_code = "ops_storage_unavailable"
                 await release_resources()
                 raise
 
         async def events():
-            nonlocal generation_task, record_status
+            nonlocal generation_task, record_status, record_answer, record_error_code
             async def settled_result(result):
-                nonlocal quota_finished, record_status
+                nonlocal quota_finished, record_status, record_answer, record_error_code
+                if ops_record_id is not None:
+                    capture_answer(result)
+                    # Generation is over; durable storage must not occupy one
+                    # of the scarce model/retrieval slots while awaiting ACK.
+                    release_slot()
+                    with anyio.CancelScope(shield=True):
+                        if not await finish_archive():
+                            raise AdmissionError("answer_archive_failed", 503)
+                    # A disconnect may have arrived while the archive ACK was
+                    # shielded. Observe it before a synchronous/local quota
+                    # implementation can commit without an async checkpoint.
+                    await anyio.lowlevel.checkpoint_if_cancelled()
                 quota = await application.state.quota.finish(reservation, result["status"] == "answered")
                 quota_finished = True
                 record_status = result["status"]
@@ -399,6 +446,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     return
                 if not application.state.index.documents:
                     record_status = "error"
+                    record_error_code = "context_unavailable"
                     yield sse("error", {"message": "公开资料暂时无法读取，请稍后再试。", "code": "context_unavailable"})
                     return
                 token = os.getenv("AI_BUILDER_TOKEN", "")
@@ -437,15 +485,20 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 except ProviderFailure as exc:
                     result = sources_only(passages, FAILURES[exc.code], payload.intent)
                     result.update(retryable=True, failure_code=exc.code)
+                capture_answer(result)
                 if not await request.is_disconnected():
                     yield sse("result", await settled_result(result))
             except asyncio.CancelledError:
                 raise
             except AdmissionError as exc:
-                record_status = "error"
+                if record_answer is None:
+                    record_status = "error"
+                    record_error_code = exc.code
                 yield sse("error", exc.payload())
             except Exception:
-                record_status = "error"
+                if record_answer is None:
+                    record_status = "error"
+                    record_error_code = "request_failed"
                 # Do not include exception strings: providers may echo input.
                 yield sse("error", {"message": "这次处理没有完成，请稍后再试。", "code": "request_failed"})
             finally:

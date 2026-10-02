@@ -66,16 +66,4 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 
 服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
 
-输入及检索到的公开片段会由 Builder 的模型服务处理。默认模型为 `deepseek-v4-flash`。前端展示30天保存提示后，提交可附 `query_log_notice: "v1"`；只有额度已启用并完成准入且记录开关开启时，保存这次问题文本、时间、模型、状态与耗时。不保存补充背景、历史、完整回答或模型思考，不关联账号或邮箱；旧客户端未附提示版本则不记录。记录自动过期，详情见[QUERY_RECORDS.md](QUERY_RECORDS.md)。这些约束不替第三方服务承诺其保存政策。
-
-## 账号与额度（默认关闭）
-
-浏览器通过同源`GET /api/ask-lizheng/auth/session`读取enabled、authenticated、founding、remaining及reset_at；邮箱核验入口使用`/api/ask-lizheng/auth/login`，验证码发送与确认分别为同源POST `email-request`（email）及`email-verify`（code）；仅成功核验邮箱后查询Founding标签。原生表单与JSON调用均受同源校验，验证码10分钟、最多5次、一次消费。可选Academy SSO可显式选择provider=logto。退出为同源POST `/api/ask-lizheng/auth/logout`。前端携带同源cookie，不传会员档位。主页与独立页的请求经过同一Vercel转发；启用后Builder直接调用没有有效证明会被拒绝。
-
-只有最终校验通过的answered回答结算一次；内部修复不重复计次，其他最终状态、失败及生成中的取消释放预留。SSE可包含quota事件，最终result可包含quota。HTTP429的quota_exhausted与一般rate_limited分开，前者有remaining及reset_at字段；转发只接收带专用X-Ask-Error-Code标记且有界的额度错误。重复attempt返回409，不缓存或重放回答。
-
-内部`X-Ask-Admission`使用`v1.<base64url JSON>.<base64url HMAC-SHA256>`，无padding。签名覆盖ASCII `v1.`加encoded JSON，secret是至少32字节UTF-8。JSON精确字段为v:1、sub、tier(public/founding)、attempt(小写规范UUID)、exp(Unix整数秒)、method、path及body_sha256。POST固定path为/api/ask，摘要对应精确转发body；GET /api/quota的摘要对应空body。有效期由转发签发60秒，Builder上限120秒，不接受浏览器自行签发。证明、摘要及问题正文不进入额度账本。
-
-详细规则、隐私边界及启用配置见[ACCOUNT_QUOTAS.md](ACCOUNT_QUOTAS.md)和[ACCOUNT_AUTH_HANDOFF.md](ACCOUNT_AUTH_HANDOFF.md)。
-
-生产额度存储通过Vercel固定端点`POST /api/ask-lizheng/quota-storage`，正文是compact UTF-8 JSON，但Content-Type使用application/octet-stream保留待签名的精确字节。内部X-Ask-Quota-Proof格式为`v1.<expiry>.<hex HMAC-SHA256>`；签名文本为`ask-quota-store:v1:<expiry>:<sha256(body)>`，45秒有效，服务端最多接受未来60秒。这里只传opaque quota metadata，不传问题、回答、邮箱或平台token。端点认可固定Lua与Ask额度namespace，数据库凭证留在Vercel；重试使用同一grant/command，保证预留、结算、释放幂等。
+输入及检索到的公开片段由Builder模型服务处理，默认模型仍为`deepseek-v4-flash`。旧`query_log_notice:"v1"`仅保存提问及元数据30天。新页面确认v3配置并展示提示后，提交`query_log_notice:"v3",conversation_id:<UUID>`，问题先可靠保存，完整已核验回答和当时所用来源在result发送前确认保存，持续至所有者手动删除。不关联账号/邮箱，不单独保存背景或历史摘要；回答可能引用背景，不保存模型内部推理。失去存档确认时明确返回`answer_archive_failed`且不扣额度。缺少提示版本的客户端不开始存档；第三方模型服务的处理规则由其管理。详见[记录协议](QUERY_RECORDS.md)。

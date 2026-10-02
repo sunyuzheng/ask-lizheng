@@ -245,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enable-quota", action="store_true", help="Use the fixed signed remote quota store; no private environment values are published.")
     parser.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
     parser.add_argument("--enable-query-log", action="store_true", help="Save disclosed questions for 30 days through the fixed signed storage endpoint.")
-    parser.add_argument("--enable-ops", action="store_true", help="Require durable disclosed v2 questions until owner deletion; requires quota and query logging.")
+    parser.add_argument("--enable-ops", action="store_true", help="Require disclosed v3 question/answer archives until owner deletion; requires quota and query logging.")
     approval = parser.add_mutually_exclusive_group()
     approval.add_argument("--dry-run", action="store_true", help="Print the exact review; never read credentials or make network calls.")
     approval.add_argument("--approved-sha", help="Digest of the exact payload explicitly approved by the user.")

@@ -1,14 +1,18 @@
 # 提问记录
 
-## v2 owner-only ops 候选
+## v3私人问答归档候选
 
-用户授权新问题保留至手动删除，旧v1记录继续原30天期限。`ASK_OPS_ENABLED=true`仅在额度和提问记录配置都ready时启用；部署review加`--enable-quota --enable-query-log --enable-ops`，没有新secret env。
+用户要求提问和回答一起存档，持续保存到所有者手动删除。旧v1提问记录继续原30天期限，不迁移、不延长。启用`ASK_OPS_ENABLED=true`需quota和query logging均ready，部署review用`--enable-quota --enable-query-log --enable-ops`；无需新增secret。
 
-新页面须先显示v2说明，再提交`query_log_notice:"v2"`及canonical UUID `conversation_id`。同一对话追问、手动重试沿用UUID，新对话重置。relay在签名admission v1 claims中仅为v2加入成对的`visitor`和`entrypoint`；访客为签名guest标识，入口只允许home或standalone。客户端不能提供身份。服务端以quota-store派生hex密钥的UTF-8字节再次HMAC访客和对话UUID，不保存账号或邮箱关联，也不把这些字段送给模型。
+新页面先从meta确认`ops_logging.enabled=true,notice="v3",answer_archive=true,retention="until_deleted"`，显示问答保存提示后提交`query_log_notice:"v3"`及canonical UUID `conversation_id`。同一页面连续提问、重试沿用会话UUID，新对话重置。relay仅为v3签入匿名`visitor`和`entrypoint`；服务端再次HMAC为存档标识，不保存邮箱、账号、IP或独立的人数统计。
 
-固定写入端点不变。v2证明为`X-Ask-Query-Proof: v2.<expiry>.<hex>`，45秒有效；签名字符串为`ask-ops-store:v2:<expiry>:<sha256(compact UTF-8 body)>`，请求仍是application/octet-stream。start正文为`{v:2,event:'start',record_id,question,created_at,model,visitor_id,conversation_id,intent,entrypoint}`；finish正文为`{v:2,event:'finish',record_id,status,duration_ms}`。同一写入的两次重试使用相同UUID和正文，只有证明到期时间可更新。Node ACK为`{"ok":true}`，原子分配turn_number及计算问题字数。
+固定端点仍为个人站query-storage。证明为`X-Ask-Query-Proof: v3.<expiry>.<hex>`，45秒有效；HMAC域`ask-ops-store:v3:<expiry>:<sha256(compact UTF-8 body)>`。正文上限262144字节，Content-Type为application/octet-stream。start正文为`{v:3,event:'start',record_id,question,created_at,model,visitor_id,conversation_id,intent,entrypoint}`；finish正文为`{v:3,event:'finish',record_id,status,duration_ms,answer,error_code}`。ACK必须严格为`{"ok":true}`。
 
-start在输入验证和quota reserve后、模型调用前等待确认，每次最多2秒、最多两次；不能确认则503 `ops_storage_unavailable`，不调用模型且退款、释放并发槽。断线和失败清理会有界、抗取消地写finish；finish失败不能影响回答，已保存的问题仍在，后台需把未确认完成的generating状态明确显示为未知，不推测成功。旧v1沿用下文的best-effort流程；v2不重复写v1。公开端点没有记录读取能力，owner-only读取和手动删除由个人站负责。
+start在准入/额度预留后、模型调用前确认。final answer从服务端已核验的最终result捕获，字段仅status、summary、sections、sources、followups、clarifying_questions、limitations和可选retryable/failure_code；来源保留当时的标题、链接、作者、日期、片段、归属说明与时间点。排除quota、账号、原始provider JSON、partial和内部推理。不单独保存提交的背景/历史；回答可能引用背景，提交前明确提示。
+
+每次写入最多2秒、最多两次，重试沿用UUID与冻结正文。start失败不调用模型并退额度。完整结果须等待finish ACK再发SSE result，生成槽先释放。final ACK无法确认则返回`answer_archive_failed`，不冒充成功、不扣这次额度，cleanup有界重试同一实际回答，不能改写成null/error而丢失已生成答案。取消/异常没有完整结果时保存null answer及安全错误标记。进程崩溃或存储持续故障可能留下generating，后台显示“尚未确认”，不能推断为已答。
+
+v3固定Redis命名空间`ask-ops:{v3}:`，原子记录和索引均无TTL；手动删除同时移除问答、来源、会话关联和指标，并保留24小时无正文tombstone防止延迟重试复活。公开接口没有问答读取权限。私人Ops由个人站验证owner邮箱后读取、导出和单条删除。无新提示的旧客户端仍只执行已披露的v1规则，不保存完整回答。
 
 ## v1 历史协议（30天）
 
