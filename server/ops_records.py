@@ -36,14 +36,22 @@ class OpsRecorder:
         self.secret = derived_secret(token, QUOTA_STORE_PURPOSE) if self.enabled and token else ""
 
     def prepare(self, *, question: str, created_at: str, model: str, principal: Principal,
-                conversation_id: str, intent: str) -> dict:
+                conversation_id: str, intent: str, notice: str = "v3", context: str = "",
+                has_history: bool = False) -> dict:
         if not self.secret or not principal or not principal.visitor or principal.entrypoint not in {"home", "standalone"}:
             raise AdmissionError("invalid_admission")
         visitor = hmac.new(self.secret.encode("utf-8"), ("ask-ops:visitor:v3:" + principal.visitor).encode("utf-8"), hashlib.sha256).hexdigest()
         conversation = hmac.new(self.secret.encode("utf-8"), ("ask-ops:conversation:v3:" + visitor + ":" + conversation_id).encode("utf-8"), hashlib.sha256).hexdigest()
-        return {"v": 3, "event": "start", "record_id": str(uuid4()), "question": question,
-                "created_at": created_at, "model": model, "visitor_id": visitor,
-                "conversation_id": conversation, "intent": intent, "entrypoint": principal.entrypoint}
+        record = {"v": 3, "event": "start", "record_id": str(uuid4()), "question": question,
+                  "created_at": created_at, "model": model, "visitor_id": visitor,
+                  "conversation_id": conversation, "intent": intent, "entrypoint": principal.entrypoint}
+        if notice == "v4":
+            # Asked under the v4 notice. Any situation or earlier turn may have shaped the
+            # answer, so such records are marked and never published; the situation text is
+            # kept for the owner only, as the notice says.
+            record.update({"notice_version": "v4", "has_background": "1" if context.strip() or has_history else "0",
+                           "context": context.strip()})
+        return record
 
     async def _write(self, record: dict) -> bool:
         # Reuse exactly the same UUID/body across lost-response retries. No

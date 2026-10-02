@@ -30,6 +30,7 @@ from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
 from .ops_records import OpsRecorder, archived_answer
+from .curate import CURATE_BODY_LIMIT, CURATE_HEADER, CurateRequest, curate_question, verify_curate_proof
 
 ROOT = Path(__file__).resolve().parents[1]
 Intent = Literal["understand", "apply", "find"]
@@ -64,7 +65,7 @@ class AskRequest(BaseModel):
     context: str = Field(default="", max_length=2500)
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
-    query_log_notice: Literal["v1", "v3"] | None = None
+    query_log_notice: Literal["v1", "v3", "v4"] | None = None
     conversation_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("conversation_id")
@@ -76,7 +77,7 @@ class AskRequest(BaseModel):
 
     @model_validator(mode="after")
     def ops_notice_requires_conversation(self):
-        if self.query_log_notice == "v3" and self.conversation_id is None:
+        if self.query_log_notice in {"v3", "v4"} and self.conversation_id is None:
             raise ValueError("Conversation UUID required")
         return self
 
@@ -249,11 +250,34 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
                 "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
-                "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v3", "answer_archive": True}}
+                # v4: answers may be published with personal details removed; the situation is kept for the owner only.
+                "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v4", "answer_archive": True,
+                                "context_archive": True, "public_display": "deidentified"}}
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
                     and application.state.quota.enabled and application.state.quota.ready)
+
+    @application.post("/api/curate")
+    async def curate(request: Request):
+        """Ops' automatic feed: one question's public version. Signed with a key derived for this alone."""
+        token = os.getenv("AI_BUILDER_TOKEN", "")
+        if not token:
+            return JSONResponse(status_code=503, content={"code": "model_unavailable"})
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > CURATE_BODY_LIMIT:
+                return JSONResponse(status_code=413, content={"code": "input_too_large"})
+        verify_curate_proof(token, bytes(body), request.headers.get(CURATE_HEADER))
+        try:
+            payload = CurateRequest.model_validate_json(bytes(body))
+        except ValueError:
+            return JSONResponse(status_code=422, content={"code": "invalid_input"})
+        try:
+            return await curate_question(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), payload)
+        except (ProviderFailure, TimeoutError) as exc:
+            return JSONResponse(status_code=503, content={"code": getattr(exc, "code", "provider_timeout")})
 
     @application.get("/api/search")
     async def search(request: Request, q: str = Query(min_length=1, max_length=2000), intent: Intent = "find"):
@@ -274,9 +298,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
         principal = request.state.principal if application.state.quota.enabled else None
-        if (application.state.ops_records.enabled or payload.query_log_notice == "v3") and not ops_ready():
+        archived = payload.query_log_notice in {"v3", "v4"}
+        if (application.state.ops_records.enabled or archived) and not ops_ready():
             raise AdmissionError("ops_storage_unavailable", 503)
-        if payload.query_log_notice == "v3" and (not principal or not principal.visitor or not principal.entrypoint):
+        if archived and (not principal or not principal.visitor or not principal.entrypoint):
             raise AdmissionError("invalid_admission")
         rate_check(request, "ask", subject=principal.subject if principal else None)
         try:
@@ -377,10 +402,11 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 except Exception:
                     pass
 
-        if payload.query_log_notice == "v3":
+        if archived:
             try:
                 record = application.state.ops_records.prepare(question=payload.question, created_at=record_created_at,
-                    model=record_model, principal=principal, conversation_id=payload.conversation_id, intent=payload.intent)
+                    model=record_model, principal=principal, conversation_id=payload.conversation_id, intent=payload.intent,
+                    notice=payload.query_log_notice, context=payload.context, has_history=bool(payload.history))
                 ops_record_id = record["record_id"]
                 await application.state.ops_records.start(record)
             except BaseException as exc:

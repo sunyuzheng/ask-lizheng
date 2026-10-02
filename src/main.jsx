@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {discoveryDetail, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
+import {discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
 import {MARK_PATHS} from './mark.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
@@ -349,6 +349,10 @@ function App() {
   const [foundingOpen, setFoundingOpen] = useState(false);
   // Questions others asked: this visit's picks, each answer once opened, and this visit's likes.
   const [discovery, setDiscovery] = useState([]);
+  // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
+  const [more, setMore] = useState({items: [], next: null, started: false, done: false, loading: false, pages: 0});
+  const [poolSize, setPoolSize] = useState(0);
+  const shownIds = useRef(new Set());
   const [openCard, setOpenCard] = useState('');
   const [cardDetails, setCardDetails] = useState({});
   const [cardVotes, setCardVotes] = useState({});
@@ -430,10 +434,20 @@ function App() {
       const picked = pickDiscovery(pool, seen);
       rememberSeen(seen, picked.map(item => item.public_id));
       discoveryVisit.current = seen.length ? 'return' : 'first';
+      shownIds.current = new Set(picked.map(item => item.public_id));
+      setPoolSize(pool.length);
       setDiscovery(picked);
     });
     return () => controller.abort();
   }, []);
+  // lizheng.ai links here as #questions: once the picks show, go to them and open the deeper list.
+  const openQuestions = useRef(location.hash === '#questions');
+  useEffect(() => {
+    if (!openQuestions.current || !discovery.length) return;
+    openQuestions.current = false;
+    requestAnimationFrame(() => document.getElementById('questions')?.scrollIntoView({block: 'start'}));
+    void loadMore();
+  }, [discovery.length]);
   useEffect(() => {
     if (!busy) return;
     const started = Date.now();
@@ -514,6 +528,21 @@ function App() {
     setCardVotes(prev => ({...prev, [card.public_id]: result}));
     track('Ask Discovery Vote', {surface: 'ask', vote});
   };
+  const moreState = useRef(more);
+  moreState.current = more;
+  async function loadMore() {
+    const current = moreState.current;
+    if (current.loading || current.done) return;
+    setMore(prev => ({...prev, loading: true}));
+    let page = await discoveryPage(current.next);
+    // The list changed since the last page: start over; shown questions are skipped below.
+    if (page?.expired) page = await discoveryPage(null);
+    if (!page) { setMore(prev => ({...prev, loading: false})); return; }
+    const fresh = page.items.filter(item => !shownIds.current.has(item.public_id));
+    fresh.forEach(item => shownIds.current.add(item.public_id));
+    setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
+    track('Ask Discovery More', {surface: 'ask', page: current.pages + 1});
+  }
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
     requestAnimationFrame(() => {
@@ -748,14 +777,16 @@ function App() {
           <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
         </section>
         {composer}
-        {discovery.length > 0 ? <section className="starters discovery" aria-labelledby="discovery-title">
+        {discovery.length > 0 ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p></div>
           <div className="discovery-list">
-            {discovery.map(card => <QuestionCard key={card.public_id} card={card}
+            {[...discovery, ...more.items].map(card => <QuestionCard key={card.public_id} card={card}
               open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
               signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
               onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}
           </div>
+          {(more.started ? !more.done : poolSize > discovery.length) && <button type="button" className="pill-button discovery-more"
+            disabled={more.loading} onClick={() => void loadMore()}>{more.loading ? '正在读取…' : more.started ? '继续看' : '看更多问题'}<ChevronDown size={15}/></button>}
         </section> : <section className="starters" aria-labelledby="starters-title">
           <div className="starters-head"><h2 id="starters-title">不知道从哪问起？</h2><p>选一个，改成你自己的问题。</p></div>
           <div className="starter-grid">

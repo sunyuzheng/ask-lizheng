@@ -16,6 +16,8 @@ FIELDS = {"v", "sub", "tier", "attempt", "exp", "method", "path", "body_sha256"}
 OPS_FIELDS = {"visitor", "entrypoint"}
 ADMISSION_PURPOSE = "ask-lizheng:admission:v1"
 QUOTA_STORE_PURPOSE = "ask-lizheng:quota-store:v1"
+# Ops holds only this derived key, to ask for one question's public, de-identified version.
+CURATE_PURPOSE = "ask-lizheng:curate:v1"
 MESSAGES = {
     "admission_required": "请从问问立正页面发起请求。",
     "invalid_admission": "这次请求的身份验证已失效，请重新发起。",
@@ -41,7 +43,7 @@ class AdmissionError(Exception):
 
 def derived_secret(provider_token: str, purpose: str) -> str:
     """Domain-separated server key; callers use the resulting hex as UTF-8."""
-    if not provider_token or purpose not in {ADMISSION_PURPOSE, QUOTA_STORE_PURPOSE}:
+    if not provider_token or purpose not in {ADMISSION_PURPOSE, QUOTA_STORE_PURPOSE, CURATE_PURPOSE}:
         raise AdmissionError("quota_unavailable", 503)
     return hmac.new(provider_token.encode("utf-8"), purpose.encode("utf-8"), hashlib.sha256).hexdigest()
 

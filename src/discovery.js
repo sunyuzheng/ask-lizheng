@@ -29,6 +29,19 @@ async function list(view, signal) {
   } catch { return []; }
 }
 
+/** The whole pool, newest first, a page at a time. An expired cursor means: start again. */
+export async function discoveryPage(cursor) {
+  try {
+    const response = await fetch(`/api/ask-lizheng/discovery/questions?window=all&sort=recent&limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      {cache: 'no-store', credentials: 'omit'});
+    if (response.status === 409) return {expired: true, items: [], next: null};
+    if (!response.ok) return null;
+    const value = await response.json();
+    const next = typeof value?.next_cursor === 'string' && /^[A-Za-z0-9_-]{1,512}$/.test(value.next_cursor) ? value.next_cursor : null;
+    return {expired: false, items: Array.isArray(value?.items) ? value.items.filter(card) : [], next};
+  } catch { return null; }
+}
+
 export async function discoveryPool(signal) {
   const pool = new Map();
   for (const item of (await Promise.all(VIEWS.map(view => list(view, signal)))).flat()) {

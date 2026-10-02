@@ -885,6 +885,14 @@ main {
   gap: 12px;
 }
 
+.discovery-more {
+  margin-top: 16px;
+}
+
+.discovery {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
 .qcard {
   border-radius: 14px;
   background: var(--paper);

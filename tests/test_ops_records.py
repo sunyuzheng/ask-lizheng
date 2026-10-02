@@ -136,7 +136,8 @@ def test_durable_ack_before_model_and_exact_finish_no_legacy_record(context_pack
     store = MemoryQuotaStore()
     app = create_app(context_pack, quota_store=store, query_record_transport=httpx.MockTransport(transport))
     with TestClient(app) as client:
-        assert client.get("/api/meta").json()["ops_logging"] == {"enabled": True, "retention": "until_deleted", "notice": "v3", "answer_archive": True}
+        assert client.get("/api/meta").json()["ops_logging"] == {"enabled": True, "retention": "until_deleted", "notice": "v4", "answer_archive": True,
+            "context_archive": True, "public_display": "deidentified"}
         response = post(client, payload(context="synthetic private background", history=[{"question": "synthetic history", "summary": "old summary"}]), **identity())
         assert events(response)[-1][1]["status"] == "answered" and app.state.slots._value == 3
         assert [r["event"] for r in stored] == ["start", "finish"] and stored[1]["status"] == "answered"
@@ -424,3 +425,40 @@ def test_persistent_anyio_cancel_refunds_and_finishes(context_pack, enabled, ops
             assert (await app.state.quota.store.status(Principal("anon:synthetic", "public", str(uuid4()))))["remaining"] == 3
             assert generated_cancelled == ([True] if phase == "generation" else [])
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("request_updates,background,context", [
+    ({}, "0", ""),
+    ({"context": "  目前的情况与限制：synthetic处境  "}, "1", "目前的情况与限制：synthetic处境"),
+    ({"history": [{"question": "synthetic earlier", "summary": "synthetic summary"}]}, "1", ""),
+])
+def test_v4_start_marks_notice_background_and_keeps_situation_for_owner(context_pack, enabled, ops, monkeypatch, request_updates, background, context):
+    stored = []
+    async def generate(*args, **kwargs): return answer_for()
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    def transport(request): stored.append(json.loads(request.content)); return httpx.Response(200, json={"ok": True})
+    app = create_app(context_pack, quota_store=MemoryQuotaStore(), query_record_transport=httpx.MockTransport(transport))
+    with TestClient(app) as client:
+        response = post(client, payload(query_log_notice="v4", intent="understand", **request_updates), **identity())
+        assert events(response)[-1][1]["status"] == "answered"
+    start, finish = stored
+    assert (start["notice_version"], start["has_background"], start["context"]) == ("v4", background, context)
+    assert set(finish) == {"v", "event", "record_id", "status", "duration_ms", "answer", "error_code"}
+    # History is never stored, only counted as background.
+    assert "synthetic earlier" not in json.dumps(stored, ensure_ascii=False)
+
+
+def test_v3_start_keeps_its_original_shape(context_pack, enabled, ops, monkeypatch):
+    stored = []
+    async def generate(*args, **kwargs): return answer_for()
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    def transport(request): stored.append(json.loads(request.content)); return httpx.Response(200, json={"ok": True})
+    app = create_app(context_pack, quota_store=MemoryQuotaStore(), query_record_transport=httpx.MockTransport(transport))
+    with TestClient(app) as client:
+        post(client, payload(context="synthetic private background"), **identity())
+    assert set(stored[0]) == {"v", "event", "record_id", "question", "created_at", "model", "visitor_id", "conversation_id", "intent", "entrypoint"}
+    assert "synthetic private background" not in json.dumps(stored, ensure_ascii=False)
+
+
+def test_v4_requires_a_conversation():
+    with pytest.raises(ValueError): AskRequest(**payload(query_log_notice="v4", conversation_id=None))
