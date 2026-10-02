@@ -285,7 +285,8 @@ async def generic_themes(client: httpx.AsyncClient, token: str, model: str, requ
         if theme.count < 2:
             report["rare"] += 1
             continue
-        if not label or len(label) > 10:
+        # Asked for 10 characters; a little over is still a fine tag, so only clearly long names go.
+        if not label or len(label) > 14:
             report["label"] += 1
             continue
         if label in labels or label in existing:

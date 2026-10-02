@@ -160,7 +160,7 @@ def test_themes_return_fresh_generic_questions_only(context_pack, token):
                                                    "怎么判断自己是真的学会了AI？"], "count": 2},
         {"topic_label": "AI提效与价值", "questions": ["效率提高了，为什么价值没有跟着变？"], "count": 1},
         {"topic_label": "学会还是看懂", "questions": ["同一个主题的第二组问题，应该被去掉？"], "count": 2},
-        {"topic_label": "一个超过十个字的主题名称太长", "questions": ["主题名太长的问题会被去掉吗？"], "count": 3},
+        {"topic_label": "一个明显超过十四个字的主题名称实在太长了", "questions": ["主题名太长的问题会被去掉吗？"], "count": 3},
         {"topic_label": "已有主题", "questions": ["已经发布过的主题不再重复？"], "count": 4},
     ]}
     # The question that repeats an asker's words gets one rewrite.
