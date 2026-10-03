@@ -879,6 +879,18 @@ main {
     0 18px 36px -28px rgb(20 30 20 / 0.45);
 }
 
+/* When a question appeared; green while it is under an hour old. */
+.qcard-time {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.qcard-time.fresh {
+  color: var(--green-text);
+}
+
 /* Questions others asked, in place of the examples once some are published. */
 .discovery-list {
   display: grid;

@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
+import {askedAgo, discoveryDetail, discoveryPage, discoveryPool, newestFirst, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
 import {IN_APP} from './in-app.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
@@ -289,7 +289,8 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
   return <article className={`qcard ${open ? 'open' : ''}`}>
     <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
-      {card.topic_label && <span className="starter-tag">{card.topic_label}</span>}
+      {card.published_at && <time className={`qcard-time ${Date.now() - Date.parse(card.published_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.published_at}
+        title={new Date(card.published_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.published_at)}</time>}
       <span className="qcard-question">{card.question}</span>
       {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
       {meta && <span className="qcard-meta">{meta}</span>}
@@ -499,7 +500,7 @@ function App() {
       discoveryVisit.current = seen.length ? 'return' : 'first';
       shownIds.current = new Set(picked.map(item => item.public_id));
       setPoolSize(pool.length);
-      setDiscovery(picked);
+      setDiscovery(newestFirst(picked));
     });
     return () => controller.abort();
   }, []);

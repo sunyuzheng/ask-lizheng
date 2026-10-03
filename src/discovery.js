@@ -67,6 +67,23 @@ export function rememberSeen(seen, shown) {
 // questions first, then older ones, then the last set, each group in a random order that leans
 // toward common topics, so a refresh shows something else while the pool allows. One per topic
 // where possible. The same rules as lizheng.ai's homepage, which tests them.
+// When a question appeared, the way people say it: 刚刚, 12分钟前, 3小时前, 2天前, then the date.
+// Questions appear about 15 to 30 minutes after they are asked (Ops publishes every 15 minutes).
+export function askedAgo(iso, now = Date.now()) {
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return '';
+  const minutes = Math.max(0, Math.floor((now - time) / 60000));
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes}分钟前`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}小时前`;
+  if (minutes < 7 * 24 * 60) return `${Math.floor(minutes / (24 * 60))}天前`;
+  const date = new Date(time);
+  return `${date.getFullYear() === new Date(now).getFullYear() ? '' : `${date.getFullYear()}年`}${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+// The picks show newest first, so their times read like a feed.
+export const newestFirst = cards => [...cards].sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
+
 export function pickDiscovery(pool, seen, count = 4, random = Math.random) {
   const weight = item => 1 + Math.log2(1 + item.topic_question_count);
   const shuffled = items => items.map(item => ({item, key: random() ** (1 / weight(item))}))
