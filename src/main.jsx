@@ -289,8 +289,10 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
   return <article className={`qcard ${open ? 'open' : ''}`}>
     <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
-      {card.published_at && <time className={`qcard-time ${Date.now() - Date.parse(card.published_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.published_at}
-        title={new Date(card.published_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.published_at)}</time>}
+      {card.asked_at
+        ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
+          title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
+        : <span className="qcard-time">常被问到</span>}
       <span className="qcard-question">{card.question}</span>
       {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
       {meta && <span className="qcard-meta">{meta}</span>}

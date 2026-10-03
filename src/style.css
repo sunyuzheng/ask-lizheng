@@ -882,7 +882,7 @@ main {
     0 18px 36px -28px rgb(20 30 20 / 0.45);
 }
 
-/* When a question appeared; green while it is under an hour old. */
+/* When a question was asked, or 常被问到 for a common one; green while under an hour old. */
 .qcard-time {
   font-size: 12.5px;
   font-weight: 500;

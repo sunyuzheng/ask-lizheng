@@ -67,8 +67,8 @@ export function rememberSeen(seen, shown) {
 // questions first, then older ones, then the last set, each group in a random order that leans
 // toward common topics, so a refresh shows something else while the pool allows. One per topic
 // where possible. The same rules as lizheng.ai's homepage, which tests them.
-// When a question appeared, the way people say it: 刚刚, 12分钟前, 3小时前, 2天前, then the date.
-// Questions appear about 15 to 30 minutes after they are asked (Ops publishes every 15 minutes).
+// When a question was asked, the way people say it: 刚刚, 23分钟前, 3小时前, 2天前, then the date.
+// Ops gives the time to five minutes; a question shows up 15 to 30 minutes after it is asked.
 export function askedAgo(iso, now = Date.now()) {
   const time = Date.parse(iso);
   if (!Number.isFinite(time)) return '';
@@ -81,8 +81,9 @@ export function askedAgo(iso, now = Date.now()) {
   return `${date.getFullYear() === new Date(now).getFullYear() ? '' : `${date.getFullYear()}年`}${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-// The picks show newest first, so their times read like a feed.
-export const newestFirst = cards => [...cards].sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
+// The picks show the most recently asked first, so their times read like a feed. Seeds, common
+// questions written fresh rather than asked, have no time and come last.
+export const newestFirst = cards => [...cards].sort((a, b) => (Date.parse(b.asked_at) || 0) - (Date.parse(a.asked_at) || 0));
 
 export function pickDiscovery(pool, seen, count = 4, random = Math.random) {
   const weight = item => 1 + Math.log2(1 + item.topic_question_count);
