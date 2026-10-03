@@ -1,10 +1,10 @@
-import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
-import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
+import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, Layers, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, newestFirst, pickDiscovery, readSeen, rememberSeen, sameQuestion, voteDiscovery} from './discovery.js';
+import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, sameQuestion, similarCount, voteDiscovery} from './discovery.js';
 import {IN_APP} from './in-app.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
@@ -274,17 +274,20 @@ function FoundingInfo({account, busy, step, onLogin}) {
 }
 
 // One published question. Its answer opens in place and reads like one in a conversation.
-function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
+// A card picked for being asked often leads with how many similar askings it stands for; the
+// others lead with when they were asked and show that count below, when it says more than one.
+function QuestionCard({card, similar, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
   const prefix = `q-${card.public_id}`;
   const likes = vote?.likes ?? card.likes;
-  // A count only when it says more than this one question.
-  const meta = [card.topic_question_count >= 2 && `${card.topic_question_count}次类似提问`, likes > 0 && `${likes}人觉得有帮助`]
+  const often = card.role === 'common' && similar >= 2;
+  const meta = [!often && similar >= 2 && `${similar}次类似提问`, likes > 0 && `${likes}人觉得有帮助`]
     .filter(Boolean).join(' · ');
   const select = id => onSelect(prefix, id);
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
   return <article className={`qcard ${open ? 'open' : ''}`}>
     <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
-      {card.asked_at
+      {often ? <span className="qcard-time often"><Layers size={13} aria-hidden="true"/>{similar}次类似提问</span>
+        : card.asked_at
         ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
           title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
         : <span className="qcard-time common">常被问到</span>}
@@ -412,6 +415,8 @@ function App() {
   // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
   const [more, setMore] = useState({items: [], next: null, started: false, done: false, loading: false, pages: 0});
   const [poolSize, setPoolSize] = useState(0);
+  // Every published card read so far, folded ones included, to count each card's similar askings.
+  const [known, setKnown] = useState([]);
   const shownIds = useRef(new Set());
   // Questions already on the page, so 看更多问题 skips the same question asked another way.
   const shownQuestions = useRef([]);
@@ -501,7 +506,8 @@ function App() {
       shownQuestions.current = picked.map(item => item.question);
       setAskedRecently(askedLastDay(pool));
       setPoolSize(pool.length);
-      setDiscovery(newestFirst(picked));
+      setKnown(pool);
+      setDiscovery(picked);
     });
     return () => controller.abort();
   }, []);
@@ -599,6 +605,9 @@ function App() {
     setCardVotes(prev => ({...prev, [card.public_id]: result}));
     track('Ask Discovery Vote', {surface: SURFACE, vote});
   };
+  // How many similar askings each shown card stands for, over every card read so far.
+  const similar = useMemo(() => new Map([...discovery, ...more.items].map(card => [card.public_id, similarCount(card, known)])),
+    [discovery, more.items, known]);
   const moreState = useRef(more);
   moreState.current = more;
   async function loadMore() {
@@ -609,6 +618,7 @@ function App() {
     // The list changed since the last page: start over; shown questions are skipped below.
     if (page?.expired) page = await discoveryPage(null);
     if (!page) { setMore(prev => ({...prev, loading: false})); return; }
+    setKnown(prev => [...prev, ...page.items.filter(item => !prev.some(other => other.public_id === item.public_id))]);
     const fresh = [];
     for (const item of page.items) {
       if (shownIds.current.has(item.public_id)) continue;
@@ -859,7 +869,7 @@ function App() {
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
             {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}</div>
           <div className="discovery-list">
-            {[...discovery, ...more.items].map(card => <QuestionCard key={card.public_id} card={card}
+            {[...discovery, ...more.items].map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
               open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
               signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
               onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}

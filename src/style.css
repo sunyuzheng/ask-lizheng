@@ -898,6 +898,16 @@ main {
   color: var(--muted);
 }
 
+/* Picked for being asked often: how many similar askings it stands for, in ink. */
+.qcard-time.often {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.qcard-time.often svg {
+  color: var(--muted);
+}
+
 :is(.qcard-time.fresh, .discovery-live)::before {
   content: "";
   width: 6px;
