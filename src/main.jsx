@@ -282,6 +282,7 @@ function FoundingInfo({account, busy, step, onLogin}) {
 // One published question. Its answer opens in place and reads like one in a conversation.
 // A card picked for being asked often leads with how many similar askings it stands for; the
 // others lead with when they were asked and show that count below, when it says more than one.
+const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问'], ['picks', '没看过']];
 const EMPTY_LIST = Object.freeze({items: [], next: null, started: false, done: false, loading: false, pages: 0});
 
 function QuestionCard({card, similar, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
@@ -429,8 +430,9 @@ function App() {
     watchUsage(document.getElementById('questions'), 'd_seen');
   }, [hasDiscovery]);
   // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
-  // What 别人在问什么 lists: this visit's picks, or every question, newest first or most asked first,
-  // so a question seen on an earlier visit can always be found again.
+  // What 别人在问什么 lists: every question newest first (最近问) or most asked first (最常问), so a
+  // question seen on an earlier visit can always be found again, or this visit's picks, which put
+  // questions this browser has not seen first (没看过, the default).
   const [view, setView] = useState('picks');
   const viewState = useRef(view);
   const [more, setMore] = useState(EMPTY_LIST);
@@ -528,12 +530,14 @@ function App() {
     });
     return () => controller.abort();
   }, []);
-  // lizheng.ai links here as #questions: once the picks show, go to them and list every question.
-  const openQuestions = useRef(location.hash === '#questions');
+  // lizheng.ai links here to list every question: #recent (or the older #questions) newest first,
+  // #frequent most asked first. Once the picks show, go to the list.
+  const openList = useRef({'#questions': 'recent', '#recent': 'recent', '#frequent': 'frequent'}[location.hash] || '');
   useEffect(() => {
-    if (!openQuestions.current || !discovery.length) return;
-    openQuestions.current = false;
-    showView('recent');
+    if (!openList.current || !discovery.length) return;
+    const list = openList.current;
+    openList.current = '';
+    showView(list);
     requestAnimationFrame(() => document.getElementById('questions')?.scrollIntoView({block: 'start'}));
   }, [discovery.length]);
   useEffect(() => {
@@ -652,9 +656,8 @@ function App() {
     markUsage('d_more');
     track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
   }
-  // Choosing the list that shows already returns to this visit's picks.
-  function showView(next) {
-    const target = viewState.current === next ? 'picks' : next;
+  function showView(target) {
+    if (viewState.current === target) return;
     viewState.current = target;
     listed.current = {ids: new Set(), questions: []};
     moreState.current = EMPTY_LIST;
@@ -909,9 +912,8 @@ function App() {
         {discovery.length > 0 ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
             {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}
-            <div className="discovery-views" role="group" aria-label="看全部问题">
-              <button type="button" aria-pressed={view === 'recent'} onClick={() => showView('recent')}>最近问</button>
-              <button type="button" aria-pressed={view === 'frequent'} onClick={() => showView('frequent')}>最常问</button>
+            <div className="discovery-views" role="group" aria-label="怎样看这些问题">
+              {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
             </div></div>
           <div className="discovery-list" aria-busy={more.loading}>
             {(view === 'picks' ? discovery : more.items.map(card => ({...card, role: view === 'frequent' ? 'common' : 'fresh'}))).map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
