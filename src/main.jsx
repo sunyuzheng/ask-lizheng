@@ -458,6 +458,10 @@ function App() {
   // Whether this browser saw the questions before: counted with each card action.
   const discoveryVisit = useRef('first');
   const metadataAbort = useRef(null);
+  // The page loads from lizheng.ai at once, but the settings come from Builder, which sleeps when
+  // idle and takes up to half a minute to wake: say so while it wakes, and keep asking.
+  const [metaWaking, setMetaWaking] = useState(false);
+  const metaTimers = useRef([]);
   // The page shows v4's notice only once the service says it keeps to v4.
   const knownNotice = ops => ops.answer_archive === true && (ops.notice === 'v3'
     || (ops.notice === 'v4' && ops.retention === 'until_deleted' && ops.context_archive === true && ops.public_display === 'deidentified'));
@@ -465,21 +469,39 @@ function App() {
     && (!value.ops_logging.enabled || knownNotice(value.ops_logging));
   const storageReady = storageConfirmed(meta) && !meta?.settings_error;
   const publicArchive = storageReady && meta.ops_logging.enabled && meta.ops_logging.notice === 'v4';
+  // Asks for up to a minute, 20 seconds a try, then offers 重试.
   const refreshMeta = () => {
     metadataAbort.current?.abort();
-    const controller = new AbortController();
-    metadataAbort.current = controller;
+    metaTimers.current.forEach(clearTimeout);
     setMeta(null);
-    const deadline = setTimeout(() => controller.abort(), 4000);
-    fetch('/api/meta', {signal: controller.signal, cache: 'no-store', credentials: 'same-origin'})
-      .then(response => response.ok ? response.json() : Promise.reject())
-      .then(value => {
-        if (metadataAbort.current !== controller) return;
-        const ready = storageConfirmed(value);
-        setMeta(ready ? value : {...value, settings_error: true});
-      })
-      .catch(() => { if (metadataAbort.current === controller) setMeta({settings_error: true}); })
-      .finally(() => { clearTimeout(deadline); if (metadataAbort.current === controller) metadataAbort.current = null; });
+    setMetaWaking(false);
+    const started = Date.now();
+    metaTimers.current = [setTimeout(() => setMetaWaking(true), 3000)];
+    const attempt = () => {
+      const controller = new AbortController();
+      metadataAbort.current = controller;
+      const deadline = setTimeout(() => controller.abort(), 20000);
+      fetch('/api/meta', {signal: controller.signal, cache: 'no-store', credentials: 'same-origin'})
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then(value => {
+          if (metadataAbort.current !== controller) return;
+          metadataAbort.current = null;
+          metaTimers.current.forEach(clearTimeout);
+          setMetaWaking(false);
+          const ready = storageConfirmed(value);
+          setMeta(ready ? value : {...value, settings_error: true});
+        })
+        .catch(() => {
+          if (metadataAbort.current !== controller) return;
+          if (Date.now() - started < 60000) { metaTimers.current.push(setTimeout(attempt, 2000)); return; }
+          metadataAbort.current = null;
+          metaTimers.current.forEach(clearTimeout);
+          setMetaWaking(false);
+          setMeta({settings_error: true});
+        })
+        .finally(() => clearTimeout(deadline));
+    };
+    attempt();
   };
   const refreshAccount = () => { void readAskAccount().then(setAccount); };
   const showLoginResult = next => {
@@ -523,7 +545,7 @@ function App() {
   }, []);
   useEffect(() => {
     refreshMeta();
-    return () => { metadataAbort.current?.abort(); metadataAbort.current = null; };
+    return () => { metadataAbort.current?.abort(); metadataAbort.current = null; metaTimers.current.forEach(clearTimeout); };
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -889,7 +911,7 @@ function App() {
       </div>
     </form>
     <div className="composer-meta">
-      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
+      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : metaWaking ? '问答服务正在唤醒，通常十几秒，可以先写问题。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
       <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: SURFACE}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {!IN_APP && foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
