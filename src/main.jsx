@@ -56,6 +56,7 @@ const LINKS = {
   site: 'https://www.lizheng.ai/',
   community: 'https://www.superlinear.academy/c/tools/lizheng-context',
   stay: 'https://stay.superlinear.academy/',
+  privacy: 'https://www.lizheng.ai/ask/privacy',
 };
 // Where a link to the membership page sits, so its visits can be told apart there.
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
@@ -304,6 +305,33 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
   </article>;
 }
 
+// The iPhone app asks once before the first question goes to the AI service, as App Store rules
+// require explicit permission before sharing personal data with a third-party AI.
+const CONSENT_KEY = 'ask-app-ai-consent';
+const readConsent = () => { try { return localStorage.getItem(CONSENT_KEY) === 'v1'; } catch { return false; } };
+const saveConsent = () => { try { localStorage.setItem(CONSENT_KEY, 'v1'); } catch { /* asked again next visit */ } };
+
+function AppConsent({onAgree, onCancel}) {
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current?.focus();
+    const handler = event => { if (event.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+  return <div className="backdrop" onClick={onCancel}>
+    <section className="dialog consent" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
+      <h2 id="consent-title">提问会交给AI处理</h2>
+      <p>你的提问会发给Builder Space的AI模型服务，用来生成回答。打开「结合我的处境」时，处境也会一起发过去。</p>
+      <p>问答会保存下来，去掉个人信息后可能整理公开。提问是匿名的，请别填写私密信息。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<ArrowUpRight size={13}/></a></p>
+      <div className="consent-actions">
+        <button type="button" className="ghost-button" onClick={onCancel}>取消</button>
+        <button type="button" className="consent-agree" onClick={onAgree}>同意并提问</button>
+      </div>
+    </section>
+  </div>;
+}
+
 function About({close, meta, account, focusInput, publicArchive}) {
   const ref = useRef(null);
   useEffect(() => {
@@ -345,6 +373,7 @@ function About({close, meta, account, focusInput, publicArchive}) {
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<ArrowUpRight size={14}/></a>
         <a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<ArrowUpRight size={14}/></a>
+        <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<ArrowUpRight size={14}/></a>
       </div>
     </section>
   </div>;
@@ -362,6 +391,8 @@ function App() {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [about, setAbout] = useState(null);
+  const [asking, setAsking] = useState(false);
+  const consented = useRef(false);
   const [selected, setSelected] = useState('');
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
@@ -592,6 +623,7 @@ function App() {
   async function submit(event, retry) {
     event?.preventDefault();
     if (abort.current || !storageReady || (!retry && !question.trim())) return;
+    if (IN_APP && !retry && !consented.current && !readConsent()) { setAsking(true); return; }
     if (loginStep !== 'pending') setLoginStep('');
     const history = messages.filter(m => m.result).slice(-6).map(m => ({question: m.question, summary: m.result.summary}));
     const ops = meta?.ops_logging?.enabled === true;
@@ -906,6 +938,7 @@ function App() {
       </div>}
     </main>
     {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive}/>}
+    {asking && <AppConsent onCancel={() => { setAsking(false); focusInput(); }} onAgree={() => { consented.current = true; saveConsent(); setAsking(false); void submit(); }}/>}
   </div>;
 }
 

@@ -1925,6 +1925,45 @@ main {
   animation: pop 0.28s var(--ease) both;
 }
 
+.consent {
+  width: min(460px, 100%);
+}
+
+.consent h2 {
+  margin: 0 0 12px;
+}
+
+.consent p {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  line-height: 1.75;
+}
+
+.consent .inline-link {
+  margin-left: 4px;
+}
+
+.consent-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.consent-agree {
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.consent-agree:hover {
+  background: #1f7a3d;
+}
+
 .dialog-close {
   position: absolute;
   top: 16px;
