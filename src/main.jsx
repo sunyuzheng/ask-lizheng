@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, discoveryDetail, discoveryPage, discoveryPool, newestFirst, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
+import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, newestFirst, pickDiscovery, readSeen, rememberSeen, sameQuestion, voteDiscovery} from './discovery.js';
 import {IN_APP} from './in-app.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
@@ -144,6 +144,10 @@ function SourceCard({source, selected, onOpen, prefix}) {
       {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<ArrowUpRight size={13}/></a>}
       {memberVideoUrl(source) && <a className="source-video-cta" href={memberVideoUrl(source)} target="_blank" rel="noopener noreferrer" onClick={() => trackSource(source.url)}>观看会员完整视频<ArrowUpRight size={13}/></a>}
     </div>}
+    {memberJoinUrl([source]) && <p className="source-join">
+      <a href={memberJoinUrl([source])} target="_blank" rel="noopener noreferrer">加入 YouTube 频道会员<ArrowUpRight size={13}/></a>
+      <span>与 Founding Member 的提问次数无关</span>
+    </p>}
     {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>从 {source.timecode} 开始看</a>}
     {source.reason && <p className="source-reason">{source.reason}</p>}
     <details onToggle={event => { if (event.currentTarget.open) onOpen?.(source.id); }}>
@@ -154,15 +158,6 @@ function SourceCard({source, selected, onOpen, prefix}) {
       {source.public_copy_url && !(isMemberVideo(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<ArrowUpRight size={13}/></a>}
     </details>
   </article>;
-}
-
-function MemberVideoAccess({sources}) {
-  const url = memberJoinUrl(sources);
-  return url ? <div className="member-video-access">
-    <p>这些来源含 YouTube 频道会员视频。公开文字稿可以直接阅读；观看完整视频需要该频道的会员资格。</p>
-    <a href={url} target="_blank" rel="noopener noreferrer">加入 YouTube 频道会员<ArrowUpRight size={14}/></a>
-    <small>与 Superlinear Founding Member 的提问次数资格不同。</small>
-  </div> : null;
 }
 
 function Markdown({text, sources, onSelect}) {
@@ -292,7 +287,7 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
       {card.asked_at
         ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
           title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
-        : <span className="qcard-time">常被问到</span>}
+        : <span className="qcard-time common">常被问到</span>}
       <span className="qcard-question">{card.question}</span>
       {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
       {meta && <span className="qcard-meta">{meta}</span>}
@@ -307,7 +302,6 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
           <summary><BookOpen size={16}/>回到{answer.sources.length}份原文<ChevronDown size={16}/></summary>
           <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
         </details>}
-        <MemberVideoAccess sources={answer.sources}/>
         <p className="qcard-attribution">{DISCOVERY.attribution}</p>
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">
@@ -419,6 +413,9 @@ function App() {
   const [more, setMore] = useState({items: [], next: null, started: false, done: false, loading: false, pages: 0});
   const [poolSize, setPoolSize] = useState(0);
   const shownIds = useRef(new Set());
+  // Questions already on the page, so 看更多问题 skips the same question asked another way.
+  const shownQuestions = useRef([]);
+  const [askedRecently, setAskedRecently] = useState(0);
   const [openCard, setOpenCard] = useState('');
   const [cardDetails, setCardDetails] = useState({});
   const [cardVotes, setCardVotes] = useState({});
@@ -501,6 +498,8 @@ function App() {
       rememberSeen(seen, picked.map(item => item.public_id));
       discoveryVisit.current = seen.length ? 'return' : 'first';
       shownIds.current = new Set(picked.map(item => item.public_id));
+      shownQuestions.current = picked.map(item => item.question);
+      setAskedRecently(askedLastDay(pool));
       setPoolSize(pool.length);
       setDiscovery(newestFirst(picked));
     });
@@ -610,8 +609,14 @@ function App() {
     // The list changed since the last page: start over; shown questions are skipped below.
     if (page?.expired) page = await discoveryPage(null);
     if (!page) { setMore(prev => ({...prev, loading: false})); return; }
-    const fresh = page.items.filter(item => !shownIds.current.has(item.public_id));
-    fresh.forEach(item => shownIds.current.add(item.public_id));
+    const fresh = [];
+    for (const item of page.items) {
+      if (shownIds.current.has(item.public_id)) continue;
+      shownIds.current.add(item.public_id);
+      if (shownQuestions.current.some(question => sameQuestion(question, item.question))) continue;
+      shownQuestions.current.push(item.question);
+      fresh.push(item);
+    }
     setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
     track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
   }
@@ -851,7 +856,8 @@ function App() {
         </section>
         {composer}
         {discovery.length > 0 ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
-          <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p></div>
+          <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
+            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}</div>
           <div className="discovery-list">
             {[...discovery, ...more.items].map(card => <QuestionCard key={card.public_id} card={card}
               open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
@@ -910,7 +916,6 @@ function App() {
                     <summary><BookOpen size={16}/>回到{sources.length}份原文<ChevronDown size={16}/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
-                  <MemberVideoAccess sources={sources}/>
                   <div className="answer-actions">
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? <Check size={15}/> : <Copy size={15}/>}{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
                     {m.result.status === 'answered' && <>

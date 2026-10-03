@@ -63,10 +63,6 @@ export function rememberSeen(seen, shown) {
   try { localStorage.setItem(SEEN, JSON.stringify([...seen.filter(id => !shown.includes(id)), ...shown].slice(-60))); } catch {}
 }
 
-// The questions a visit shows. A first visit gets the most asked topics. Later visits put unseen
-// questions first, then older ones, then the last set, each group in a random order that leans
-// toward common topics, so a refresh shows something else while the pool allows. One per topic
-// where possible. The same rules as lizheng.ai's homepage, which tests them.
 // When a question was asked, the way people say it: 刚刚, 23分钟前, 3小时前, 2天前, then the date.
 // Ops gives the time to five minutes; a question shows up 15 to 30 minutes after it is asked.
 export function askedAgo(iso, now = Date.now()) {
@@ -81,10 +77,35 @@ export function askedAgo(iso, now = Date.now()) {
   return `${date.getFullYear() === new Date(now).getFullYear() ? '' : `${date.getFullYear()}年`}${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+// Two questions that differ only in punctuation or a word or two read as one, even when the
+// curation filed them under different topics; only one of them is shown.
+const shape = text => String(text || '').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+const pairs = text => { const s = shape(text), out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
+export function sameQuestion(a, b) {
+  const x = pairs(a), y = pairs(b);
+  if (!x.size || !y.size) return shape(a) === shape(b);
+  let both = 0;
+  for (const pair of x) if (y.has(pair)) both++;
+  // Mostly the same characters, or the shorter one nearly contained in the longer (a question
+  // with 「AI时代」 added). On the 46 questions published by 2026-10-03, this matched only three
+  // rewordings of one question.
+  return both / (x.size + y.size - both) >= 0.6 || (Math.min(x.size, y.size) >= 6 && both / Math.min(x.size, y.size) >= 0.8);
+}
+
+// How many published questions were asked in the last day. The pool holds the 20 newest, so
+// below 20 the count is exact; at 20 there may be more, and the page says 20+.
+export const askedLastDay = (pool, now = Date.now()) => pool.filter(card => now - Date.parse(card.asked_at) < 24 * 3600000).length;
+
 // The picks show the most recently asked first, so their times read like a feed. Seeds, common
 // questions written fresh rather than asked, have no time and come last.
 export const newestFirst = cards => [...cards].sort((a, b) => (Date.parse(b.asked_at) || 0) - (Date.parse(a.asked_at) || 0));
 
+// The questions a visit shows. The most recently asked one this browser has not seen comes first,
+// so a visit shows what people are asking now. A first visit then gets the most asked topics.
+// Later visits put unseen questions first, then older ones, then the last set, each group in a
+// random order that leans toward common topics, so a refresh shows something else while the pool
+// allows. One per topic where possible, and never one question asked two ways. The same rules as
+// lizheng.ai's homepage, which tests them.
 export function pickDiscovery(pool, seen, count = 4, random = Math.random) {
   const weight = item => 1 + Math.log2(1 + item.topic_question_count);
   const shuffled = items => items.map(item => ({item, key: random() ** (1 / weight(item))}))
@@ -99,12 +120,16 @@ export function pickDiscovery(pool, seen, count = 4, random = Math.random) {
       ...shuffled(pool.filter(item => last.has(item.public_id))),
     ];
   }
+  const newest = pool.filter(item => Date.parse(item.asked_at) && !seen.includes(item.public_id))
+    .sort((a, b) => Date.parse(b.asked_at) - Date.parse(a.asked_at))[0];
+  if (newest) order = [newest, ...order.filter(item => item !== newest)];
   const picked = [], topics = new Set();
+  const repeats = item => picked.some(other => sameQuestion(other.question, item.question));
   for (const item of order) {
     const topic = item.topic_key || item.public_id;
-    if (picked.length < count && !topics.has(topic)) { picked.push(item); topics.add(topic); }
+    if (picked.length < count && !topics.has(topic) && !repeats(item)) { picked.push(item); topics.add(topic); }
   }
-  for (const item of order) if (picked.length < count && !picked.includes(item)) picked.push(item);
+  for (const item of order) if (picked.length < count && !picked.includes(item) && !repeats(item)) picked.push(item);
   return picked;
 }
 
