@@ -425,10 +425,12 @@ main {
 
 /* ---------- Composer ---------- */
 
+/* A cream card even on the forest stage, so its text is ink: typed words, the situation fields. */
 .composer {
   position: relative;
   border-radius: 14px;
   background: var(--card);
+  color: var(--ink);
   box-shadow: 0 0 0 1px var(--rule);
   transition: box-shadow 0.2s;
 }
