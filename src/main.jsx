@@ -6,6 +6,7 @@ import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, sameQuestion, similarCount, voteDiscovery} from './discovery.js';
 import {IN_APP} from './in-app.js';
+import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
@@ -101,7 +102,7 @@ const sourceKind = url => {
       : /superlinear\.academy$|circle\.so$/.test(host) ? 'community' : 'other';
   } catch { return 'other'; }
 };
-const trackSource = url => track('Ask Source Click', {surface: SURFACE, kind: sourceKind(url)});
+const trackSource = url => { markUsage('source'); track('Ask Source Click', {surface: SURFACE, kind: sourceKind(url)}); };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scrollBehavior = () => (reducedMotion() ? 'auto' : 'smooth');
@@ -412,6 +413,15 @@ function App() {
   const [foundingOpen, setFoundingOpen] = useState(false);
   // Questions others asked: this visit's picks, each answer once opened, and this visit's likes.
   const [discovery, setDiscovery] = useState([]);
+  // Anonymous usage of this page view for the owner's dashboard (usage.js): reading time, scroll
+  // depth, whether the list of questions others asked was seen, and what was used.
+  useEffect(() => startUsage(IN_APP ? 'app' : 'ask'), []);
+  const hasDiscovery = discovery.length > 0;
+  useEffect(() => {
+    if (!hasDiscovery) return;
+    markUsage('d_shown');
+    watchUsage(document.getElementById('questions'), 'd_seen');
+  }, [hasDiscovery]);
   // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
   const [more, setMore] = useState({items: [], next: null, started: false, done: false, loading: false, pages: 0});
   const [poolSize, setPoolSize] = useState(0);
@@ -588,6 +598,7 @@ function App() {
   const toggleCard = card => {
     if (openCard === card.public_id) { setOpenCard(''); return; }
     setOpenCard(card.public_id);
+    markUsage('d_open');
     track('Ask Discovery Open', {surface: SURFACE, visit: discoveryVisit.current});
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
@@ -595,6 +606,7 @@ function App() {
     void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => ({...prev, [card.public_id]: detail || 'failed'})));
   };
   const askSimilar = card => {
+    markUsage('d_similar');
     track('Ask Discovery Similar', {surface: SURFACE, visit: discoveryVisit.current});
     prefill(card.question, undefined, 'card');
   };
@@ -628,6 +640,7 @@ function App() {
       fresh.push(item);
     }
     setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
+    markUsage('d_more');
     track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
   }
   const selectCardSource = (prefix, id) => {
@@ -658,7 +671,7 @@ function App() {
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
-    if (!retry) { track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
+    if (!retry) { markUsage('ask'); track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -705,6 +718,7 @@ function App() {
         else if (name === 'quota') seeQuota(value);
         else if (name === 'result') {
           received = true;
+          if (value.status === 'answered') markUsage('answer');
           seeQuota(value.quota);
           update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000)});
         } else if (name === 'error') throw failure(value.code, value.code === 'answer_archive_failed' ? '这次回答未能确认归档，请重试；问题和已找到的材料仍保留。' : MESSAGES.failed);
@@ -744,6 +758,7 @@ function App() {
 
   // A long image shares well in chat apps; the PDF keeps the source links clickable.
   async function exportTurn(kind, m) {
+    markUsage('export');
     setExporting(`${m.id}-${kind}`);
     try {
       const {exportAnswer} = await import('./share.js');
