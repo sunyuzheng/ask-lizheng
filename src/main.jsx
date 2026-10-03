@@ -496,6 +496,13 @@ function App() {
       setPersonal(draft.intent === 'apply' || !!draft.context);
       if (draft.context) setBackground({goal: '', facts: draft.context, tried: ''});
     }
+    // A question brought from a public answer page (www.lizheng.ai/ask/…, ?q=): in the box, not sent.
+    const params = new URLSearchParams(location.search);
+    if (params.has('q')) {
+      const brought = (params.get('q') || '').trim().slice(0, 300);
+      if (!draft && brought) { setQuestion(brought); questionFrom.current = 'page'; }
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
     let stopped = false;
     const slow = setTimeout(() => setAccountWaking(true), 1500);
     // A read that times out while Builder wakes gets one more try a second later.
