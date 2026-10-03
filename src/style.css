@@ -20,6 +20,9 @@
   --green-tint: #e4efe3;
   --amber: #7a5512;
   --amber-tint: #f5ead3;
+  --member-ink: #79603f;
+  --member-line: #d9cfbb;
+  --member-surface: #faf8f2;
   --red: #8b3b25;
   --red-tint: #f7e6df;
   --serif: "Noto Serif SC", "Songti SC", "STSong", serif;
@@ -1573,6 +1576,11 @@ main {
   box-shadow: 0 -1px 0 var(--line);
 }
 
+.inline-sources .source-member {
+  background: linear-gradient(150deg, var(--member-surface), var(--paper) 85%);
+  box-shadow: 0 -1px 0 var(--member-line);
+}
+
 .inline-sources .source.selected {
   box-shadow:
     0 -1px 0 var(--line),
@@ -1686,6 +1694,11 @@ main {
     0 0 0 4px rgb(35 131 67 / 0.12);
 }
 
+.source-member {
+  background: linear-gradient(150deg, var(--member-surface), var(--paper) 85%);
+  box-shadow: 0 0 0 1px var(--member-line);
+}
+
 .source-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1705,12 +1718,11 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--amber-tint);
-  color: var(--amber);
+  padding: 0;
+  color: var(--member-ink);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
@@ -1721,24 +1733,47 @@ main {
 .source-access-note,
 .candidate .source-access-note {
   margin-top: 6px;
-  color: var(--amber);
-  font-size: 12.5px;
-  line-height: 1.65;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.source .source-access-note {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #e9e3d6;
 }
 
 .source-access-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 12px;
+}
+
+.source-access-links > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 0;
 }
 
 .source-video-cta {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 6px;
-  color: var(--green-text);
-  font-size: 13px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--member-line);
+  border-radius: 7px;
+  color: var(--member-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.source-video-cta:hover {
+  background: #f0eadf;
 }
 
 .source-quality-note {
@@ -1749,10 +1784,10 @@ main {
 
 .member-video-access {
   margin-top: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--amber-tint);
-  font-size: 13px;
+  padding: 20px 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
   line-height: 1.75;
 }
 
@@ -1760,9 +1795,9 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 5px;
-  font-weight: 600;
-  color: var(--green-text);
+  min-height: 44px;
+  font-weight: 500;
+  color: var(--member-ink);
 }
 
 .member-video-access > small {

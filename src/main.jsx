@@ -132,7 +132,7 @@ const sourceLabel = sourceTypeLabel;
 const sourceDate = source => source.date?.slice(0, 10) || '日期未标明';
 
 function SourceCard({source, selected, onOpen, prefix}) {
-  return <article id={`${prefix}-source-${source.id}`} className={`source ${selected ? 'selected' : ''}`}>
+  return <article id={`${prefix}-source-${source.id}`} className={`source ${isMemberVideo(source) ? 'source-member' : ''} ${selected ? 'selected' : ''}`}>
     <div className="source-meta">
       <span className="source-num">{source.id.slice(1)}</span>
       <span className={isMemberVideo(source) ? 'member-video-badge' : undefined}>{isVideo(source) ? <Video size={14}/> : <FileText size={14}/>}{sourceLabel(source)}</span>
