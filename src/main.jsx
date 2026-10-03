@@ -420,6 +420,9 @@ function App() {
   const [foundingOpen, setFoundingOpen] = useState(false);
   // Questions others asked: this visit's picks, each answer once opened, and this visit's likes.
   const [discovery, setDiscovery] = useState([]);
+  // loading until the list arrives, then ready; none when it cannot be read here (other hosts,
+  // Ops down) or takes past eight seconds, and only then the examples show in its place.
+  const [discoveryState, setDiscoveryState] = useState('loading');
   // Anonymous usage of this page view for the owner's dashboard (usage.js): reading time, scroll
   // depth, whether the list of questions others asked was seen, and what was used.
   useEffect(() => startUsage(IN_APP ? 'app' : 'ask'), []);
@@ -524,8 +527,11 @@ function App() {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
+    const late = setTimeout(() => setDiscoveryState(state => (state === 'loading' ? 'none' : state)), 8000);
     void discoveryPool(controller.signal).then(pool => {
-      if (controller.signal.aborted || !pool.length) return;
+      clearTimeout(late);
+      if (controller.signal.aborted) return;
+      if (!pool.length) { setDiscoveryState('none'); return; }
       const seen = readSeen();
       const picked = pickDiscovery(pool, seen);
       rememberSeen(seen, picked.map(item => item.public_id));
@@ -534,19 +540,21 @@ function App() {
       setPoolSize(pool.length);
       setKnown(pool);
       setDiscovery(picked);
+      setDiscoveryState('ready');
     });
-    return () => controller.abort();
+    return () => { clearTimeout(late); controller.abort(); };
   }, []);
   // lizheng.ai links here to list every question: #recent (or the older #questions) newest first,
   // #frequent most asked first. Once the picks show, go to the list.
+  // The list starts loading at once (the section is on the page from the start); once its first
+  // page is in and the page is long enough, scroll to it.
   const openList = useRef({'#questions': 'recent', '#recent': 'recent', '#frequent': 'frequent'}[location.hash] || '');
-  useEffect(() => {
-    if (!openList.current || !discovery.length) return;
-    const list = openList.current;
+  useEffect(() => { if (openList.current) showView(openList.current); }, []);
+  useLayoutEffect(() => {
+    if (!openList.current || !more.started) return;
     openList.current = '';
-    showView(list);
-    requestAnimationFrame(() => document.getElementById('questions')?.scrollIntoView({block: 'start'}));
-  }, [discovery.length]);
+    document.getElementById('questions')?.scrollIntoView({block: 'start'});
+  }, [more.started]);
   useEffect(() => {
     if (!busy) return;
     const started = Date.now();
@@ -916,14 +924,16 @@ function App() {
         {composer}
         </div></div>
         <div className="home-body">
-        {discovery.length > 0 ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
+        {discoveryState !== 'none' || view !== 'picks' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
             {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}
             <div className="discovery-views" role="group" aria-label="怎样看这些问题">
               {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
             </div></div>
-          <div className="discovery-list" aria-busy={more.loading}>
-            {(view === 'picks' ? discovery : more.items.map(card => ({...card, role: view === 'frequent' ? 'common' : 'fresh'}))).map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
+          <div className="discovery-list" aria-busy={more.loading || (view === 'picks' ? !discovery.length : !more.started)}>
+            {/* While the questions load, the rows they will fill; never the examples first. */}
+            {(view === 'picks' ? !discovery.length : !more.started) ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
+              : (view === 'picks' ? discovery : more.items.map(card => ({...card, role: view === 'frequent' ? 'common' : 'fresh'}))).map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
               open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
               signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
               onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}

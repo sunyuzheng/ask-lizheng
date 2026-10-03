@@ -1033,6 +1033,32 @@ main {
   color: var(--muted);
 }
 
+/* While the questions load: the rows they will fill, faint, so nothing else shows first. */
+.qcard-placeholder {
+  display: grid;
+  gap: 10px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.qcard-placeholder i,
+.qcard-placeholder b {
+  display: block;
+  width: 22%;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--paper-2);
+}
+
+.qcard-placeholder b {
+  width: 64%;
+  height: 18px;
+}
+
+.qcard-placeholder:nth-child(2n) b {
+  width: 50%;
+}
+
 /* One question others asked: a row, its answer opening in place. */
 .qcard {
   border-top: 1px solid var(--rule);
