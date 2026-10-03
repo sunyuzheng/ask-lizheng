@@ -40,10 +40,11 @@ async function list(view, pages, signal) {
   return items;
 }
 
-/** The whole pool, newest first, a page at a time. An expired cursor means: start again. */
-export async function discoveryPage(cursor) {
+/** Every question a page at a time: newest first (recent), or each topic once, most asked first
+ * (frequent). An expired cursor means: start again. */
+export async function discoveryPage(cursor, sort = 'recent') {
   try {
-    const response = await fetch(`/api/ask-lizheng/discovery/questions?window=all&sort=recent&limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+    const response = await fetch(`/api/ask-lizheng/discovery/questions?window=all&sort=${sort === 'frequent' ? 'frequent' : 'recent'}&limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
       {cache: 'no-store', credentials: 'omit'});
     if (response.status === 409) return {expired: true, items: [], next: null};
     if (!response.ok) return null;

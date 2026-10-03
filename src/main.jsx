@@ -1,7 +1,7 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
-import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRight, FileDown, FileText, ImageDown, Info, Layers, LoaderCircle, Plus, RotateCcw, Sparkles, Square, Video, X} from 'lucide-react';
+import {Check, LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, sameQuestion, similarCount, voteDiscovery} from './discovery.js';
@@ -118,6 +118,10 @@ function Mark({className = ''}) {
   </svg>;
 }
 
+// Type, not icons: ↗ marks a link that leaves the page, a small chevron what opens in place.
+const Ext = () => <span className="ext" aria-hidden="true">↗</span>;
+const Chev = () => <span className="chev" aria-hidden="true"/>;
+
 // Chinese text may break anywhere; keep each phrase together and break after punctuation.
 function Phrases({text}) {
   const parts = String(text).match(/[^，。：；、？！]+[，。：；、？！]*/g) || [text];
@@ -136,27 +140,27 @@ function SourceCard({source, selected, onOpen, prefix}) {
   return <article id={`${prefix}-source-${source.id}`} className={`source ${isMemberVideo(source) ? 'source-member' : ''} ${selected ? 'selected' : ''}`}>
     <div className="source-meta">
       <span className="source-num">{source.id.slice(1)}</span>
-      <span className={isMemberVideo(source) ? 'member-video-badge' : undefined}>{isVideo(source) ? <Video size={14}/> : <FileText size={14}/>}{sourceLabel(source)}</span>
+      <span className={isMemberVideo(source) ? 'member-video-badge' : undefined}>{sourceLabel(source)}</span>
       <time>{sourceDate(source)}</time>
     </div>
-    <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={15}/></a>
+    <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
     {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
     {isMemberVideo(source) && <div className="source-access-links">
-      {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<ArrowUpRight size={13}/></a>}
-      {memberVideoUrl(source) && <a className="source-video-cta" href={memberVideoUrl(source)} target="_blank" rel="noopener noreferrer" onClick={() => trackSource(source.url)}>观看会员完整视频<ArrowUpRight size={13}/></a>}
+      {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<Ext/></a>}
+      {memberVideoUrl(source) && <a className="source-video-cta" href={memberVideoUrl(source)} target="_blank" rel="noopener noreferrer" onClick={() => trackSource(source.url)}>观看会员完整视频<Ext/></a>}
     </div>}
     {memberJoinUrl([source]) && <p className="source-join">
-      <a href={memberJoinUrl([source])} target="_blank" rel="noopener noreferrer">加入 YouTube 频道会员<ArrowUpRight size={13}/></a>
+      <a href={memberJoinUrl([source])} target="_blank" rel="noopener noreferrer">加入 YouTube 频道会员<Ext/></a>
       <span>与 Founding Member 的提问次数无关</span>
     </p>}
     {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>从 {source.timecode} 开始看</a>}
     {source.reason && <p className="source-reason">{source.reason}</p>}
     <details onToggle={event => { if (event.currentTarget.open) onOpen?.(source.id); }}>
-      <summary>看片段<ChevronDown size={14}/></summary>
+      <summary>看片段<Chev/></summary>
       <p className="excerpt">{source.excerpt}</p>
       <p className="attribution">{source.author && `${source.author} · `}{source.attribution_note}</p>
       {transcriptQualityNote(source) && <p className="source-quality-note">{transcriptQualityNote(source)}</p>}
-      {source.public_copy_url && !(isMemberVideo(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<ArrowUpRight size={13}/></a>}
+      {source.public_copy_url && !(isMemberVideo(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
     </details>
   </article>;
 }
@@ -167,7 +171,8 @@ function Markdown({text, sources, onSelect}) {
     if (href?.startsWith('#cite-')) {
       const id = href.slice(6);
       return sources.some(source => source.id === id)
-        ? <button type="button" className="cite" onClick={() => onSelect(id)} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</button>
+        // A footnote mark: an inline link (a button would sit apart in the line), joined to the word it marks.
+        ? <>{'\u2060'}<a className="cite" href={`#source-${id}`} onClick={event => { event.preventDefault(); onSelect(id); }} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</a></>
         : null;
     }
     return <span>{children}</span>;
@@ -176,7 +181,7 @@ function Markdown({text, sources, onSelect}) {
 
 // A source named in the boundary note shows as its number, like in the text.
 function Limits({text, sources, onSelect}) {
-  return <div className="limits"><Info size={14}/><div><b>这个回答的边界</b><Markdown text={text.replace(/\[?\b(S\d+)\b\]?/g, '[$1]')} sources={sources} onSelect={onSelect}/></div></div>;
+  return <div className="limits"><div><b>这个回答的边界</b><Markdown text={text.replace(/\[?\b(S\d+)\b\]?/g, '[$1]')} sources={sources} onSelect={onSelect}/></div></div>;
 }
 
 // Sources show as numbers in the text; a section that cites none in its text lists them below.
@@ -199,7 +204,7 @@ function Working({message, elapsed, onStop, onSelect}) {
     <div className="working-top">
       <LoaderCircle size={18} className="spin" aria-hidden="true"/>
       <p role="status">{message.progress?.message || '正在查找相关公开材料…'}</p>
-      <button type="button" className="ghost-button" onClick={onStop}><Square size={11} fill="currentColor"/>停止</button>
+      <button type="button" className="ghost-button" onClick={onStop}>停止</button>
     </div>
     <ol className="steps" aria-label="处理步骤">
       {STEPS.map((label, index) => <li key={label} className={index < step ? 'done' : index === step ? 'current' : ''} aria-current={index === step ? 'step' : undefined}>
@@ -228,16 +233,16 @@ function Working({message, elapsed, onStop, onSelect}) {
 
 function Candidates({sources, turnId, onSelect}) {
   return <div className="candidates">
-    <div className="candidates-head"><BookOpen size={15}/><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
+    <div className="candidates-head"><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
     {sources.slice(0, 2).map(source => <article className="candidate" key={`${source.id}-${source.url}`}>
-      {isMemberVideo(source) && <span className="member-video-badge"><Video size={13}/>会员视频</span>}
-      <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={14}/></a>
+      {isMemberVideo(source) && <span className="member-video-badge">会员视频</span>}
+      <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
       <time>{sourceDate(source)}</time>
       {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
       <p>{source.excerpt?.slice(0, 150)}{source.excerpt?.length > 150 ? '…' : ''}</p>
     </article>)}
     {sources.length > 2 && <details className="candidates-all">
-      <summary>看全部{sources.length}份候选材料<ChevronDown size={14}/></summary>
+      <summary>看全部{sources.length}份候选材料<Chev/></summary>
       {sources.map(source => <SourceCard key={`${source.id}-${source.url}`} source={source} prefix={`turn-${turnId}`} onOpen={id => onSelect(id)}/>)}
     </details>}
   </div>;
@@ -268,7 +273,7 @@ function FoundingInfo({account, busy, step, onLogin}) {
     <p>Stay Superlinear前3,000位新年费会员是Founding Member，一年$149/¥999。AI Builder、AI Architect的老学员也是。</p>
     <p>会员每年有12+场嘉宾大师课，每个月和鸭哥与立正直播答疑，问问立正也不限次。</p>
     <p className="founding-actions">
-      <a className="founding-join" href={stayLink('founding_panel')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'founding_panel'})}>了解会员<ArrowUpRight size={15}/></a>
+      <a className="founding-join" href={stayLink('founding_panel')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'founding_panel'})}>了解会员<Ext/></a>
       {!account.authenticated && account.login_ready && step !== 'pending' && <button type="button" className="text-button" disabled={busy} onClick={onLogin}>已经是？验证身份</button>}
     </p>
   </div>;
@@ -277,6 +282,8 @@ function FoundingInfo({account, busy, step, onLogin}) {
 // One published question. Its answer opens in place and reads like one in a conversation.
 // A card picked for being asked often leads with how many similar askings it stands for; the
 // others lead with when they were asked and show that count below, when it says more than one.
+const EMPTY_LIST = Object.freeze({items: [], next: null, started: false, done: false, loading: false, pages: 0});
+
 function QuestionCard({card, similar, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
   const prefix = `q-${card.public_id}`;
   const likes = vote?.likes ?? card.likes;
@@ -287,7 +294,7 @@ function QuestionCard({card, similar, open, detail, vote, signedIn, selected, on
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
   return <article className={`qcard ${open ? 'open' : ''}`}>
     <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
-      {often ? <span className="qcard-time often"><Layers size={13} aria-hidden="true"/>{similar}次类似提问</span>
+      {often ? <span className="qcard-time often">{similar}次类似提问</span>
         : card.asked_at
         ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
           title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
@@ -295,7 +302,6 @@ function QuestionCard({card, similar, open, detail, vote, signedIn, selected, on
       <span className="qcard-question">{card.question}</span>
       {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
       {meta && <span className="qcard-meta">{meta}</span>}
-      <ChevronDown size={16} className="qcard-chevron" aria-hidden="true"/>
     </button>
     {open && <div className="qcard-body">
       {answer ? <div className="answer">
@@ -303,14 +309,14 @@ function QuestionCard({card, similar, open, detail, vote, signedIn, selected, on
         {answer.sections.map((section, index) => <SectionBlock key={index} section={section} sources={answer.sources} onSelect={select}/>)}
         {answer.limitations && <Limits text={answer.limitations} sources={answer.sources} onSelect={select}/>}
         {answer.sources.length > 0 && <details className="inline-sources">
-          <summary><BookOpen size={16}/>回到{answer.sources.length}份原文<ChevronDown size={16}/></summary>
+          <summary>回到{answer.sources.length}份原文<Chev/></summary>
           <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
         </details>}
         <p className="qcard-attribution">{DISCOVERY.attribution}</p>
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">
-        <button type="button" className="pill-button" onClick={onSimilar}><CornerDownRight size={15}/>问个类似的</button>
-        {signedIn && <button type="button" className={`ghost-button qcard-like ${vote?.voted ? 'on' : ''}`} aria-pressed={!!vote?.voted} onClick={onLike}>{vote?.voted && <Check size={15}/>}{vote?.voted ? '觉得有帮助' : '有帮助'}</button>}
+        <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
+        {signedIn && <button type="button" className={`ghost-button qcard-like ${vote?.voted ? 'on' : ''}`} aria-pressed={!!vote?.voted} onClick={onLike}>{vote?.voted ? '觉得有帮助' : '有帮助'}</button>}
       </div>
     </div>}
   </article>;
@@ -334,7 +340,7 @@ function AppConsent({onAgree, onCancel}) {
     <section className="dialog consent" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
       <h2 id="consent-title">提问会交给AI处理</h2>
       <p>你的提问会发给Builder Space的AI模型服务，用来生成回答。打开「结合我的处境」时，处境也会一起发过去。</p>
-      <p>问答会保存下来，去掉个人信息后可能整理公开。提问是匿名的，请别填写私密信息。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<ArrowUpRight size={13}/></a></p>
+      <p>问答会保存下来，去掉个人信息后可能整理公开。提问是匿名的，请别填写私密信息。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
       <div className="consent-actions">
         <button type="button" className="ghost-button" onClick={onCancel}>取消</button>
         <button type="button" className="consent-agree" onClick={onAgree}>同意并提问</button>
@@ -379,12 +385,12 @@ function About({close, meta, account, focusInput, publicArchive}) {
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>}
-      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p>{!IN_APP && <p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'about'})}>了解会员<ArrowUpRight size={13}/></a></p>}</div>}
+      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p>{!IN_APP && <p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'about'})}>了解会员<Ext/></a></p>}</div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
-        <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<ArrowUpRight size={14}/></a>
-        <a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<ArrowUpRight size={14}/></a>
-        <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<ArrowUpRight size={14}/></a>
+        <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<Ext/></a>
+        <a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a>
+        <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a>
       </div>
     </section>
   </div>;
@@ -423,13 +429,16 @@ function App() {
     watchUsage(document.getElementById('questions'), 'd_seen');
   }, [hasDiscovery]);
   // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
-  const [more, setMore] = useState({items: [], next: null, started: false, done: false, loading: false, pages: 0});
+  // What 别人在问什么 lists: this visit's picks, or every question, newest first or most asked first,
+  // so a question seen on an earlier visit can always be found again.
+  const [view, setView] = useState('picks');
+  const viewState = useRef(view);
+  const [more, setMore] = useState(EMPTY_LIST);
   const [poolSize, setPoolSize] = useState(0);
   // Every published card read so far, folded ones included, to count each card's similar askings.
   const [known, setKnown] = useState([]);
-  const shownIds = useRef(new Set());
-  // Questions already on the page, so 看更多问题 skips the same question asked another way.
-  const shownQuestions = useRef([]);
+  // In a full list: what it already shows, so a question asked another way is listed once.
+  const listed = useRef({ids: new Set(), questions: []});
   const [askedRecently, setAskedRecently] = useState(0);
   const [openCard, setOpenCard] = useState('');
   const [cardDetails, setCardDetails] = useState({});
@@ -512,8 +521,6 @@ function App() {
       const picked = pickDiscovery(pool, seen);
       rememberSeen(seen, picked.map(item => item.public_id));
       discoveryVisit.current = seen.length ? 'return' : 'first';
-      shownIds.current = new Set(picked.map(item => item.public_id));
-      shownQuestions.current = picked.map(item => item.question);
       setAskedRecently(askedLastDay(pool));
       setPoolSize(pool.length);
       setKnown(pool);
@@ -521,13 +528,13 @@ function App() {
     });
     return () => controller.abort();
   }, []);
-  // lizheng.ai links here as #questions: once the picks show, go to them and open the deeper list.
+  // lizheng.ai links here as #questions: once the picks show, go to them and list every question.
   const openQuestions = useRef(location.hash === '#questions');
   useEffect(() => {
     if (!openQuestions.current || !discovery.length) return;
     openQuestions.current = false;
+    showView('recent');
     requestAnimationFrame(() => document.getElementById('questions')?.scrollIntoView({block: 'start'}));
-    void loadMore();
   }, [discovery.length]);
   useEffect(() => {
     if (!busy) return;
@@ -623,25 +630,42 @@ function App() {
   const moreState = useRef(more);
   moreState.current = more;
   async function loadMore() {
-    const current = moreState.current;
-    if (current.loading || current.done) return;
+    const sort = viewState.current, current = moreState.current;
+    if (sort === 'picks' || current.loading || current.done) return;
+    moreState.current = {...current, loading: true};
     setMore(prev => ({...prev, loading: true}));
-    let page = await discoveryPage(current.next);
-    // The list changed since the last page: start over; shown questions are skipped below.
-    if (page?.expired) page = await discoveryPage(null);
+    let page = await discoveryPage(current.next, sort);
+    // The list changed since the last page: start over; listed questions are skipped below.
+    if (page?.expired) page = await discoveryPage(null, sort);
+    if (viewState.current !== sort) return;
     if (!page) { setMore(prev => ({...prev, loading: false})); return; }
     setKnown(prev => [...prev, ...page.items.filter(item => !prev.some(other => other.public_id === item.public_id))]);
     const fresh = [];
     for (const item of page.items) {
-      if (shownIds.current.has(item.public_id)) continue;
-      shownIds.current.add(item.public_id);
-      if (shownQuestions.current.some(question => sameQuestion(question, item.question))) continue;
-      shownQuestions.current.push(item.question);
+      if (listed.current.ids.has(item.public_id)) continue;
+      listed.current.ids.add(item.public_id);
+      if (listed.current.questions.some(question => sameQuestion(question, item.question))) continue;
+      listed.current.questions.push(item.question);
       fresh.push(item);
     }
     setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
     markUsage('d_more');
     track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
+  }
+  // Choosing the list that shows already returns to this visit's picks.
+  function showView(next) {
+    const target = viewState.current === next ? 'picks' : next;
+    viewState.current = target;
+    listed.current = {ids: new Set(), questions: []};
+    moreState.current = EMPTY_LIST;
+    setView(target);
+    setMore(EMPTY_LIST);
+    setOpenCard('');
+    const top = document.getElementById('questions');
+    if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({block: 'start', behavior: scrollBehavior()});
+    if (target === 'picks') return;
+    track('Ask Discovery Sort', {surface: SURFACE, sort: target});
+    void loadMore();
   }
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
@@ -835,14 +859,14 @@ function App() {
             <select value={mode} onChange={event => setMode(event.target.value)}>
               {MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
-            <ChevronDown size={14} aria-hidden="true"/>
+            <Chev/>
           </label>}
         </div>
         <div className="send-group">
           {!busy && <kbd className="shortcut">{isMac ? '⌘ Enter' : 'Ctrl Enter'} 发送</kbd>}
           {busy
-            ? <button type="button" className="send stop" onClick={() => abort.current?.abort()} aria-label="停止回答"><Square size={14} fill="currentColor"/></button>
-            : <button type="submit" className="send" disabled={!storageReady || !question.trim() || outOfQuota} aria-label="发送问题"><ArrowUp size={20}/></button>}
+            ? <button type="button" className="send stop" onClick={() => abort.current?.abort()} aria-label="停止回答">停止</button>
+            : <button type="submit" className="send" disabled={!storageReady || !question.trim() || outOfQuota} aria-label="发送问题">提问</button>}
         </div>
       </div>
     </form>
@@ -864,33 +888,41 @@ function App() {
           <Mark/><span>问问立正</span>
         </button>
         <nav className="header-nav" aria-label="页面">
-          {conversation && <button type="button" className="pill-button" onClick={newChat} disabled={busy}><Plus size={15}/>新问题</button>}
-          <button type="button" className="header-link" onClick={() => openAbout(false)} aria-label="怎样用好它"><Info size={16}/><span>怎样用好它</span></button>
-          <a className="header-link site-link" href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<ArrowUpRight size={14}/></a>
+          {conversation && <button type="button" className="header-link new-chat" onClick={newChat} disabled={busy}>新问题</button>}
+          <button type="button" className="header-link" onClick={() => openAbout(false)} aria-label="怎样用好它"><span className="long">怎样用好它</span><span className="short">说明</span></button>
+          <a className="header-link site-link" href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a>
         </nav>
       </div>
     </header>
 
     <main id="main-content" tabIndex={-1}>
       {!conversation ? <div className="home">
+        <div className="stage"><div className="stage-inner">
         <section className="hero">
-          <p className="eyebrow">AI问答 · 基于立正公开的文章和视频</p>
           <h1>把一个问题，<br/>问得更明白。</h1>
           <p className="intro"><Phrases text="想理解一个观点，或者用到自己的处境里？AI会从立正公开的文章和视频里找相关内容，整理成回答，并标明出处。"/></p>
           <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
         </section>
         {composer}
+        </div></div>
+        <div className="home-body">
         {discovery.length > 0 ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
-            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}</div>
-          <div className="discovery-list">
-            {[...discovery, ...more.items].map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
+            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}
+            <div className="discovery-views" role="group" aria-label="看全部问题">
+              <button type="button" aria-pressed={view === 'recent'} onClick={() => showView('recent')}>最近问</button>
+              <button type="button" aria-pressed={view === 'frequent'} onClick={() => showView('frequent')}>最常问</button>
+            </div></div>
+          <div className="discovery-list" aria-busy={more.loading}>
+            {(view === 'picks' ? discovery : more.items.map(card => ({...card, role: view === 'frequent' ? 'common' : 'fresh'}))).map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
               open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
               signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
               onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}
           </div>
-          {(more.started ? !more.done : poolSize > discovery.length) && <button type="button" className="pill-button discovery-more"
-            disabled={more.loading} onClick={() => void loadMore()}>{more.loading ? '正在读取…' : more.started ? '继续看' : '看更多问题'}<ChevronDown size={15}/></button>}
+          {view === 'picks'
+            ? poolSize > discovery.length && <button type="button" className="pill-button discovery-more" onClick={() => showView('recent')}>看更多问题<Chev/></button>
+            : (!more.started || !more.done) && <button type="button" className="pill-button discovery-more"
+              disabled={more.loading || !more.started} onClick={() => void loadMore()}>{more.loading || !more.started ? '正在读取…' : '继续看'}<Chev/></button>}
         </section> : <section className="starters" aria-labelledby="starters-title">
           <div className="starters-head"><h2 id="starters-title">不知道从哪问起？</h2><p>选一个，改成你自己的问题。</p></div>
           <div className="starter-grid">
@@ -901,8 +933,9 @@ function App() {
         </section>}
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
-          <p><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<ArrowUpRight size={13}/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<ArrowUpRight size={13}/></a></p>
+          <p><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
+        </div>
       </div> : <div className="layout">
         <div className="thread-column">
           <h1 className="sr-only">问问立正，当前对话</h1>
@@ -914,17 +947,17 @@ function App() {
               const select = id => selectSource(id, m.id);
               return <article key={m.id} id={`turn-${m.id}`} className="turn">
                 <header className="question">
-                  <span>你的问题</span>
+                  <span className="sr-only">你的问题</span>
                   <h2><Phrases text={m.question}/></h2>
-                  {m.context && <details className="question-context"><summary>你的处境<ChevronDown size={13}/></summary><p>{m.context}</p></details>}
+                  {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
                 {!m.result && (working || m.previewSources?.length > 0) && (working
                   ? <Working message={m} elapsed={elapsed} onStop={() => abort.current?.abort()} onSelect={select}/>
                   : <section className="working idle"><Candidates sources={m.previewSources} turnId={m.id} onSelect={select}/></section>)}
                 {m.result && <div className="answer">
                   {m.result.status === 'sources-only'
-                    ? <p className="answer-meta"><BookOpen size={15}/><span>找到的材料</span></p>
-                    : <p className="answer-meta"><Sparkles size={15}/><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
+                    ? <p className="answer-meta"><span>找到的材料</span></p>
+                    : <p className="answer-meta"><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
                   {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!m.context}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
@@ -934,23 +967,23 @@ function App() {
                       questionFrom.current = 'clarify';
                       setBackground(prev => ({...prev, facts: prev.facts ? `${prev.facts}\n${item}：` : `${item}：`}));
                       requestAnimationFrame(() => document.getElementById('context-facts')?.focus());
-                    }}><Plus size={15}/>{item}</button>)}
+                    }}>{item}</button>)}
                   </div>}
                   {m.result.limitations && <Limits text={m.result.limitations} sources={sources} onSelect={select}/>}
                   {sources.length > 0 && <details className="inline-sources" open>
-                    <summary><BookOpen size={16}/>回到{sources.length}份原文<ChevronDown size={16}/></summary>
+                    <summary>回到{sources.length}份原文<Chev/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
                   <div className="answer-actions">
-                    <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? <Check size={15}/> : <Copy size={15}/>}{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
+                    <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
                     {m.result.status === 'answered' && <>
-                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('png', m)}>{exporting === `${m.id}-png` ? <LoaderCircle size={15} className="spin"/> : <ImageDown size={15}/>}{exporting === `${m.id}-png` ? '正在生成…' : '保存图片'}</button>
-                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('pdf', m)}>{exporting === `${m.id}-pdf` ? <LoaderCircle size={15} className="spin"/> : <FileDown size={15}/>}{exporting === `${m.id}-pdf` ? '正在生成…' : '下载PDF'}</button>
+                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('png', m)}>{exporting === `${m.id}-png` ? '正在生成…' : '保存图片'}</button>
+                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('pdf', m)}>{exporting === `${m.id}-pdf` ? '正在生成…' : '下载PDF'}</button>
                     </>}
                   </div>
                   {last && m.result.followups?.length > 0 && <div className="followups">
                     <p>可以接着问<span>点一下放进输入框，改好再发</span></p>
-                    {m.result.followups.map(item => <button type="button" key={item} onClick={() => prefill(item)}><CornerDownRight size={15}/>{item}</button>)}
+                    {m.result.followups.map(item => <button type="button" key={item} onClick={() => prefill(item)}>{item}</button>)}
                   </div>}
                 </div>}
                 {m.error && (m.errorCode === 'quota_exhausted'
@@ -960,11 +993,11 @@ function App() {
                         ? loginStep === 'verified' && <b className="account-verified">验证成功，可以重新提问了。</b>
                         : <span className="quota-actions">
                             {account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
-                            {!IN_APP && <a className="inline-link" href={stayLink('quota_card')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'quota_card'})}>如何成为Founding Member<ArrowUpRight size={14}/></a>}
+                            {!IN_APP && <a className="inline-link" href={stayLink('quota_card')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'quota_card'})}>如何成为Founding Member<Ext/></a>}
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
-                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}><RotateCcw size={15}/>重新生成回答</button>}
+                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
               </article>;
             })}
           </section>
@@ -976,7 +1009,7 @@ function App() {
             <p>{provisional ? (busy && latestWithSources === messages.at(-1) ? '候选材料，回答还在整理。' : '检索到的材料，可以先读原文。') : sourcesOnly ? `共${railSources.length}份，点开阅读。` : `回答用到的${railSources.length}份原文，点开核对。`}</p>
           </div>
           {railSources.map(source => <SourceCard key={`${source.id}-${source.url}`} source={source} prefix="rail" selected={selected === source.id} onOpen={setSelected}/>)}
-          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: SURFACE, location: 'rail'})}>去社区接着聊<ArrowUpRight size={14}/></a>
+          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: SURFACE, location: 'rail'})}>去社区接着聊<Ext/></a>
         </aside>}
       </div>}
     </main>
