@@ -19,10 +19,11 @@ const C = {
 };
 const SERIF = '"Noto Serif SC", "Songti SC", "STSong", serif';
 const SANS = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif';
+// Labels as on the page: AI synthesis is the default and goes unlabeled.
 const KIND = {
-  application: ['结合你的处境', C.amberTint, C.amber],
+  application: ['AI推演', C.amberTint, C.amber],
+  personal: ['结合你的处境', C.amberTint, C.amber],
   source: ['材料里的观点', C.greenTint, C.greenText],
-  synthesis: ['AI综合', C.sand, C.muted],
 };
 const font = (weight, size, family = SANS) => `${weight} ${size}px ${family}`;
 
@@ -200,10 +201,14 @@ function header() {
 // A section heading with its kind badge after the last line, or under it when
 // the line is full.
 function headingRows(ctx, heading, kind) {
-  const [label, bg, fg] = KIND[kind] || KIND.synthesis;
+  const style = {size: 34, lh: 1.5, weight: 700, family: SERIF, color: C.ink, keep: true};
+  if (!KIND[kind]) {
+    const lh = Math.round(style.size * style.lh);
+    return wrap(ctx, units([{text: heading}], style), INNER).map(line => ({h: lh, keep: true, draw(c, y) { drawLine(c, line, PAD, y + lh / 2, style.size); }}));
+  }
+  const [label, bg, fg] = KIND[kind];
   ctx.font = font(500, 20);
   const bw = ctx.measureText(label).width + 28;
-  const style = {size: 34, lh: 1.5, weight: 700, family: SERIF, color: C.ink, keep: true};
   const lines = wrap(ctx, units([{text: heading}], style), INNER);
   const lh = Math.round(style.size * style.lh);
   const badge = (c, x, mid) => {
@@ -218,8 +223,8 @@ function headingRows(ctx, heading, kind) {
   return rows;
 }
 
-function limitsRow(ctx, text) {
-  const lines = textRows(ctx, [{text}], {size: 23, lh: 1.75, weight: 400, color: C.muted}, {width: INNER - 56});
+function limitsRow(ctx, text, cites) {
+  const lines = textRows(ctx, inlineRuns(text.replace(/\[?\b(S\d+)\b\]?/g, '[$1]'), cites), {size: 23, lh: 1.75, weight: 400, color: C.muted}, {width: INNER - 56});
   const h = 28 + 36 + lines.reduce((sum, r) => sum + r.h, 0) + 24;
   return {h, draw(c, y) {
     c.fillStyle = C.sand; roundRect(c, PAD, y, INNER, h, 20); c.fill();
@@ -291,7 +296,7 @@ function footerRow() {
   }};
 }
 
-function layout(ctx, {question, result, date}) {
+function layout(ctx, {question, result, date, personal}) {
   // Number sources 1..n in the shared file; the answer's ids skip sources it did not use.
   const cites = new Map((result.sources || []).map((s, i) => [s.id, String(i + 1)]));
   const rows = [header(), gap(62)];
@@ -305,7 +310,8 @@ function layout(ctx, {question, result, date}) {
     rows.push(...textRows(ctx, inlineRuns(block.text, cites), {size: 32, lh: 1.75, weight: 600, color: C.ink, strong: C.ink}));
   }
   for (const section of result.sections || []) {
-    rows.push(gap(46), ...headingRows(ctx, section.heading, section.kind), gap(8));
+    const kind = section.kind === 'application' && personal ? 'personal' : section.kind;
+    rows.push(gap(46), ...headingRows(ctx, section.heading, kind), gap(8));
     markdownBlocks(section.body).forEach((block, i) => {
       if (i) rows.push(gap(16));
       rows.push(...textRows(ctx, inlineRuns(block.text, cites),
@@ -313,7 +319,7 @@ function layout(ctx, {question, result, date}) {
         block.marker ? {indent: 40, marker: block.marker} : {}));
     });
   }
-  if (result.limitations) rows.push(gap(44), limitsRow(ctx, result.limitations));
+  if (result.limitations) rows.push(gap(44), limitsRow(ctx, result.limitations, cites));
   if (result.sources?.length) {
     rows.push(gap(54), {h: 52, keep: true, draw(c, y) {
       c.textBaseline = 'middle';

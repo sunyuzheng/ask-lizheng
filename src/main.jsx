@@ -33,7 +33,10 @@ const BACKGROUND = [
 ];
 const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
 const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
-const KIND = {application: '结合你的处境', source: '材料里的观点', synthesis: 'AI综合'};
+// Every answer is labeled as AI-written at the top, so only the sections that differ say so:
+// a faithful paraphrase of the material, or the AI applying it (to the reader's situation when given).
+const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
+  : kind === 'application' ? (personal ? '结合你的处境' : 'AI推演') : '';
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
 // v4: answers may be published with personal details removed; the situation is kept for analysis only.
 const V4_NOTICE = '很多问题是共性的。提交即同意保存问答，去掉个人信息后可能整理公开，帮到更多人。请勿填写私密信息。';
@@ -120,8 +123,9 @@ function Phrases({text}) {
   return parts.length < 2 ? text : parts.map((part, index) => <span key={index} className="phrase">{part}</span>);
 }
 
-function Kind({kind}) {
-  return <span className={`kind kind-${kind || 'synthesis'}`}>{KIND[kind] || KIND.synthesis}</span>;
+function Kind({kind, personal}) {
+  const label = kindLabel(kind, personal);
+  return label ? <span className={`kind kind-${kind}`}>{label}</span> : null;
 }
 const isVideo = source => source.source_type?.includes('video');
 const sourceLabel = sourceTypeLabel;
@@ -174,11 +178,17 @@ function Markdown({text, sources, onSelect}) {
   }}}>{content}</ReactMarkdown>;
 }
 
-function SectionBlock({section, sources, onSelect}) {
+// A source named in the boundary note shows as its number, like in the text.
+function Limits({text, sources, onSelect}) {
+  return <div className="limits"><Info size={14}/><div><b>这个回答的边界</b><Markdown text={text.replace(/\[?\b(S\d+)\b\]?/g, '[$1]')} sources={sources} onSelect={onSelect}/></div></div>;
+}
+
+// Sources show as numbers in the text; a section that cites none in its text lists them below.
+function SectionBlock({section, sources, onSelect, personal}) {
   return <section className="answer-section">
-    <div className="section-head"><h3>{section.heading}</h3><Kind kind={section.kind}/></div>
+    <div className="section-head"><h3>{section.heading}</h3><Kind kind={section.kind} personal={personal}/></div>
     <Markdown text={section.body} sources={sources} onSelect={onSelect}/>
-    {section.source_ids?.length > 0 && <div className="section-sources">
+    {section.source_ids?.length > 0 && !/\[S\d+\]/.test(section.body) && <div className="section-sources">
       <span>出处</span>
       {section.source_ids.map(id => <button type="button" key={id} onClick={() => onSelect(id)} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</button>)}
     </div>}
@@ -214,7 +224,7 @@ function Working({message, elapsed, onStop, onSelect}) {
     {message.partial && <div className="partial">
       <h3>正在写的回答</h3>
       <small>这些段落的出处编号已经核对，完整回答还在生成。</small>
-      {message.partial.sections.map((section, index) => <SectionBlock key={index} section={section} sources={message.partial.sources} onSelect={onSelect}/>)}
+      {message.partial.sections.map((section, index) => <SectionBlock key={index} section={section} sources={message.partial.sources} onSelect={onSelect} personal={!!message.context}/>)}
     </div>}
     {candidates.length > 0 && <Candidates sources={candidates} turnId={message.id} onSelect={onSelect}/>}
   </section>;
@@ -289,7 +299,7 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
       {answer ? <div className="answer">
         <div className="summary"><Markdown text={answer.summary} sources={answer.sources} onSelect={select}/></div>
         {answer.sections.map((section, index) => <SectionBlock key={index} section={section} sources={answer.sources} onSelect={select}/>)}
-        {answer.limitations && <p className="limits"><Info size={15}/><span><b>这个回答的边界</b>{answer.limitations}</span></p>}
+        {answer.limitations && <Limits text={answer.limitations} sources={answer.sources} onSelect={select}/>}
         {answer.sources.length > 0 && <details className="inline-sources">
           <summary><BookOpen size={16}/>回到{answer.sources.length}份原文<ChevronDown size={16}/></summary>
           <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
@@ -719,7 +729,7 @@ function App() {
     setExporting(`${m.id}-${kind}`);
     try {
       const {exportAnswer} = await import('./share.js');
-      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date()});
+      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!m.context});
       const file = new File([blob], name, {type});
       if (kind === 'png' && window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({files: [file]})) {
         try { await navigator.share({files: [file], title: '问问立正'}); return; }
@@ -882,7 +892,7 @@ function App() {
                     ? <p className="answer-meta"><BookOpen size={15}/><span>找到的材料</span></p>
                     : <p className="answer-meta"><Sparkles size={15}/><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
-                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select}/>)}
+                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!m.context}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
                     <p>再补充一点，回答会更贴合你</p>
                     {m.result.clarifying_questions.map(item => <button type="button" key={item} onClick={() => {
@@ -892,7 +902,7 @@ function App() {
                       requestAnimationFrame(() => document.getElementById('context-facts')?.focus());
                     }}><Plus size={15}/>{item}</button>)}
                   </div>}
-                  {m.result.limitations && <p className="limits"><Info size={15}/><span><b>这个回答的边界</b>{m.result.limitations}</span></p>}
+                  {m.result.limitations && <Limits text={m.result.limitations} sources={sources} onSelect={select}/>}
                   {sources.length > 0 && <details className="inline-sources" open>
                     <summary><BookOpen size={16}/>回到{sources.length}份原文<ChevronDown size={16}/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>

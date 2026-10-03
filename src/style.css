@@ -960,7 +960,7 @@ main {
 
 .qcard-body .summary {
   margin-top: 0;
-  font-size: 17px;
+  font-size: 17.5px;
 }
 
 .qcard-body .answer-section {
@@ -1340,11 +1340,13 @@ main {
   color: var(--muted);
 }
 
+/* The answer in a sentence or two: the line a reader should remember. */
 .summary {
   margin-top: 12px;
-  font-size: 18.5px;
-  font-weight: 500;
-  line-height: 1.85;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.7;
   color: var(--ink);
 }
 
@@ -1353,7 +1355,7 @@ main {
 }
 
 .answer-section {
-  margin-top: 32px;
+  margin-top: 28px;
   animation: rise 0.4s var(--ease) both;
 }
 
@@ -1366,7 +1368,7 @@ main {
 
 .section-head h3 {
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: 18.5px;
   font-weight: 700;
   line-height: 1.5;
 }
@@ -1416,17 +1418,17 @@ main {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 19px;
-  height: 19px;
+  min-width: 17px;
+  height: 17px;
   margin: 0 2px;
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 5px;
   background: var(--green-tint);
   color: var(--green-text);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1;
-  vertical-align: 2px;
+  vertical-align: 3px;
   transition: background 0.2s, color 0.2s;
 }
 
@@ -1504,28 +1506,28 @@ main {
   box-shadow: 0 0 0 1px rgb(35 131 67 / 0.5);
 }
 
+/* Only real gaps or conditions reach here, so one quiet line is enough. */
 .limits {
   display: flex;
-  gap: 10px;
-  margin-top: 26px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--sand);
-  font-size: 14px;
-  line-height: 1.8;
+  gap: 8px;
+  margin-top: 22px;
+  font-size: 13.5px;
+  line-height: 1.75;
   color: var(--muted);
 }
 
 .limits > svg {
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .limits b {
-  display: block;
-  margin-bottom: 2px;
+  margin-right: 6px;
   font-weight: 600;
-  color: var(--ink-2);
+}
+
+.limits p {
+  display: inline;
 }
 
 .inline-sources {
@@ -2133,7 +2135,7 @@ main {
   }
 
   .summary {
-    font-size: 17.5px;
+    font-size: 18.5px;
   }
 
   .answer-section p,

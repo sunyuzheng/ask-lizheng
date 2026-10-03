@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from server.answers import ModelAnswer, assemble_answer, validate_answer
+from server.answers import ModelAnswer, assemble_answer, misattributed, validate_answer
 from server.app import create_app
 from server.retrieval import ContextIndex
 
@@ -315,6 +315,40 @@ def test_invalid_source_gets_one_targeted_repair(context_pack, monkeypatch):
         result = items[-1][1]
         assert result["status"] == "answered"
         assert len(attempts) == 2
+
+
+def test_naming_yuzheng_for_another_speaker_gets_one_rewrite(context_pack, monkeypatch):
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    attempts = []
+    def provider(request):
+        body = json.loads(request.content)
+        evidence = json.loads(body["messages"][1]["content"])["sources"]
+        guest = next(item["id"] for item in evidence if item.get("author") == "Guest Author")
+        attempts.append(body)
+        if len(attempts) == 1:
+            answer = answer_for(guest, f"立正提到，职业选择要评估生活约束 [{guest}]。")
+        else:
+            assert "不是立正本人的材料" in body["messages"][-1]["content"]
+            answer = answer_for(guest, f"一位作者提到，职业选择要评估生活约束 [{guest}]。")
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        result = events(client.post("/api/ask", json={"question": "职业选择要评估生活约束吗"}))[-1][1]
+        assert result["status"] == "answered" and "立正" not in result["sections"][0]["body"]
+        assert len(attempts) == 2
+
+
+def test_a_second_naming_slip_keeps_the_answer(index):
+    passages = index.retrieve("职业选择要评估生活约束吗")
+    guest = next(passage.source["id"] for passage in passages if passage.source["author"] == "Guest Author")
+    answer = answer_for(guest, f"立正提到，职业选择要评估生活约束 [{guest}]。立正的文章没有讨论这一点。")
+    assert misattributed(answer, passages) == [f"立正提到，职业选择要评估生活约束 [{guest}]。"]
+
+
+def test_citations_stay_with_their_sentence(index):
+    passages = index.retrieve("职业选择如何积累能力与作品")
+    sid = passages[0].source["id"]
+    answer = answer_for(sid, f"先比较能力与作品。[{sid}] 再找一个差距。[{sid}][{sid}]")
+    assert assemble_answer(answer, passages)["sections"][0]["body"] == f"先比较能力与作品[{sid}]。再找一个差距[{sid}][{sid}]。"
 
 
 @pytest.mark.parametrize("failure", ["invalid-json", "unknown-source", "timeout", "busy", "bad-auth"])

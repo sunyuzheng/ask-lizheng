@@ -78,7 +78,15 @@ intent=apply：围绕用户的目标、约束与具体处境作有依据的应�
 当用户追问“先试哪一步／先做什么”时，只选择一个值得先做的动作，解释它能验证什么，以及怎样观察反馈；不再罗列整套流程或承诺几分钟就能完成。
 intent=find：先给具体阅读起点，选择最有用的 3 至 5 份来源，解释每份适合解答什么以及建议从哪份开始。用简短段落帮助用户选择材料，不把找内容写成长篇人生建议；推荐原文的理由放 source_reasons。
 
-summary 应直接承载回答的核心，用一至两句先答，不在摘要罗列行动步骤，不写“根据资料我将为你……”这类流程说明。sections 最多 3 个实质段落，必要时为空。复杂问题优先解释关键关系，可以通过追问继续展开。不要把同一个判断拆成重复的几节；篇幅以解释清楚问题为准。普通概念或个人困惑通常合计约 400 至 700 字即可，不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；“做过几个项目”不等于要求生产系统分层，不引入 L1-L6、部署或工程验收，除非用户明确问这些。需要行动建议时，给一个用来检验当前判断的小尝试，解释观察什么反馈；不要自行拼成多步骤压力测试、规定 5/10/60 分钟或精确间隔。资料中的实验时间也不能自动变成给读者的日程要求。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。只返回符合 JSON schema 的对象。"""
+写法：让人读一遍就懂、记得住。详略按读者作判断的需要分配，不按材料多少分配。
+- summary 就是答案：一到两句，通常不超过80字，直接回答所问；不罗列选项或步骤，不写“关键在于”“本质上”“根据资料我将为你……”。读者只读这一句也知道答案。
+- sections 是 1 至 3 个要点，按重要性排列，同一判断不拆成几节。heading 写成一句判断，读者只扫标题也能看懂要点，不超过20字，不用“先分清”“再看”这类导航语。body 以一段为主，通常 80 至 200 字：说清为什么成立、在什么条件下成立，配一个具体例子或一个可以试的做法；只展开会改变读者判断的细节，其余留给 followups。
+- 全文（summary 加 sections）通常 300 至 600 字，简单问题更短；宁可少讲一点，让读者追问。
+- 一句只说一件事，少用分号和破折号把几层意思串成长句。“不是……而是……”全篇最多用一次。不在段尾复述上一段，不写“把这两段合起来”“换句话说”“所以说”这类总结。
+- 观点直接说，出处用 [S1] 标在句末。不用“材料里”“资料里”“材料把”“材料建议”“材料给的”带出观点，全篇提到“材料”最多一次，用于说明材料的缺口或条件。写“立正认为”“立正主张”“他提到”只限 content_origin 为 yuzheng-published-text 或 yuzheng-spoken-source 的来源；多人节目（speaker_classification 为 mixed-speakers 或 mixed-or-unresolved）只在片段里明确是谁说的时才写那个人，否则直接陈述观点并标出处，不归到任何人名下；嘉宾、社区成员的观点写明是谁；AI 翻译或 AI 综合不能写成立正的观点。
+- 用读者问题里的词和日常说法；必要的术语第一次出现时用一句话解释。材料里的例子只取能说明问题的部分，一两句带过。
+- limitations 只在材料缺少关键内容、或结论有明确的适用条件时写，一到两句、不超过80字，否则为空字符串；提到具体来源时说是哪篇文章或哪期视频，不写 S 编号。不写“材料只提供框架，不能替你判断”这类通用免责：页面已说明回答由 AI 整理。
+其他：普通概念或个人困惑不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；“做过几个项目”不等于要求生产系统分层，不引入 L1-L6、部署或工程验收，除非用户明确问这些。需要行动建议时，给一个用来检验当前判断的小尝试，解释观察什么反馈；不要自行拼成多步骤压力测试、规定 5/10/60 分钟或精确间隔。资料中的实验时间也不能自动变成给读者的日程要求。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。只返回符合 JSON schema 的对象。"""
 
 
 class ProviderFailure(Exception):
@@ -256,7 +264,7 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
         payload["response_format"] = {"type": "json_object"}
         payload["messages"][0]["content"] += "\n输出 JSON 必须符合以下 schema（所有字段必填，不得增加字段）：" + json.dumps(strict_schema(), ensure_ascii=False)
     if model == "deepseek-v4-flash":
-        payload["messages"][0]["content"] += "\n本轮先给紧凑回答：summary加所有sections的正文合计以400至700字为目标，最多两个主要解释段落；复杂细节留给followups。优先保留成立条件和来源，不重复同一判断。用户未提供处境时，summary和正文都用可能原因、条件或核对问题，不能直接把资料中的组织制度、瓶颈或能力缺口诊断成用户事实。"
+        payload["messages"][0]["content"] += "\n本轮先给紧凑回答：summary加所有sections的正文合计以300至600字为目标，通常一到两个要点；复杂细节留给followups。优先保留成立条件和来源，不重复同一判断。用户未提供处境时，summary和正文都用可能原因、条件或核对问题，不能直接把资料中的组织制度、瓶颈或能力缺口诊断成用户事实。"
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
     deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
@@ -297,6 +305,12 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
                     raise
                 raise InvalidAnswer("输出不是完整、有效且符合 schema 的 JSON；请检查所有字段及数量和长度限制。") from None
             validate_answer(answer, passages)
+            # Naming 立正 for another speaker's words gets one rewrite when time allows; it is
+            # a wording fix, so a second slip keeps the answer rather than failing it.
+            if not attempt and deadline - time.monotonic() > ATTRIBUTION_REPAIR_SECONDS:
+                if sentences := misattributed(answer, passages):
+                    raise InvalidAnswer("有句子把不是立正本人的材料写成了立正的观点：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
+                                        + "。只有 content_origin 为 yuzheng-published-text 或 yuzheng-spoken-source 的来源可以写“立正认为”“立正提到”；其他来源直接陈述观点并标出处，或写明实际说话人。其余内容保持不变。")
             return answer
         except InvalidAnswer as exc:
             if attempt:
@@ -348,7 +362,35 @@ def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
         raise InvalidAnswer("后续问题必须非空且每个不超过 250 字。")
 
 
+# Sources that carry 立正's own view: his published writing and his solo talks.
+OWN_VIEW_ORIGINS = frozenset({"yuzheng-published-text", "yuzheng-spoken-source"})
+# A repair takes about as long as an answer; with less time left, keep the answer as it is.
+ATTRIBUTION_REPAIR_SECONDS = 40
+
+
+def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
+    """Sentences that name 立正 yet cite only sources that are not his own view, such as a
+    multi-speaker show whose speakers are unconfirmed. Uncited sentences are left alone."""
+    origins = {passage.source["id"]: passage.evidence.get("content_origin", "") for passage in passages}
+    found = []
+    for text in [answer.summary, *(section.body for section in answer.sections)]:
+        for sentence in re.findall(r"[^。！？]+[。！？]?(?:\s*\[S\d+\])*", text):
+            cited = re.findall(r"\bS\d+\b", sentence)
+            if cited and "立正" in sentence.replace("问问立正", "") and not any(origins.get(c) in OWN_VIEW_ORIGINS for c in cited):
+                found.append(sentence.strip())
+    return found
+
+
+def cite_before_stop(text: str) -> str:
+    """Keep citations with the sentence they support: in “…上。[S3] 立正…” the number reads as
+    the next sentence's, so it moves before the full stop."""
+    return re.sub(r"([。！？；])\s*((?:\[S\d+\]\s*)+)", lambda match: match.group(2).replace(" ", "") + match.group(1), text)
+
+
 def assemble_answer(answer: ModelAnswer, passages: list[Passage]) -> dict:
+    answer = answer.model_copy(update={
+        "summary": cite_before_stop(answer.summary), "limitations": cite_before_stop(answer.limitations),
+        "sections": [section.model_copy(update={"body": cite_before_stop(section.body)}) for section in answer.sections]})
     used = set(source_id for section in answer.sections for source_id in section.source_ids)
     used.update(re.findall(r"\bS\d+\b", answer.summary + " " + answer.limitations))
     reasons = {item.source_id: item.reason for item in answer.source_reasons}
