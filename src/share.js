@@ -240,9 +240,15 @@ function sourceRow(ctx, source, number) {
   const all = wrap(ctx, units([{text: source.title || ''}], style), INNER - 70);
   const titleLines = all.slice(0, 2);
   const access = sourceAccessNote(source);
-  const h = 24 + titleLines.length * 40 + 34 + 24 + (access ? 34 : 0);
   const type = sourceTypeLabel(source);
   const meta = [type, source.date?.slice(0, 10) || '日期未标明', source.timecode ? `从 ${source.timecode} 开始` : ''].filter(Boolean).join(' · ');
+  // An image cannot be clicked, so the address must be readable in full: when it does not fit
+  // after the details (a video with a start time, say), it gets lines of its own.
+  const url = plainUrl(source.url);
+  ctx.font = font(400, 21);
+  const urlLines = ctx.measureText(`${meta} · ${url}`).width <= INNER - 70 ? null
+    : wrap(ctx, units([{text: url}], {size: 21, weight: 400, color: C.greenText}), INNER - 70);
+  const h = 24 + titleLines.length * 40 + 34 + (urlLines ? urlLines.length * 30 : 0) + 24 + (access ? 34 : 0);
   return {h, link: source.url, draw(c, y) {
     c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2);
     c.fillStyle = C.greenTint; roundRect(c, PAD, y + 26, 44, 44, 10); c.fill();
@@ -257,12 +263,16 @@ function sourceRow(ctx, source, number) {
       ty += 40;
     });
     c.font = font(400, 21); c.fillStyle = C.muted;
-    const metaText = `${meta} · `;
-    c.fillText(metaText, PAD + 70, ty + 17);
-    const mw = c.measureText(metaText).width;
-    c.fillStyle = C.greenText;
-    c.fillText(fitEllipsis(c, plainUrl(source.url), INNER - 70 - mw), PAD + 70 + mw, ty + 17);
-    if (access) { c.fillStyle = C.amber; c.fillText(access, PAD + 70, ty + 51); }
+    if (urlLines) {
+      c.fillText(meta, PAD + 70, ty + 17);
+      for (const line of urlLines) { ty += 30; drawLine(c, line, PAD + 70, ty + 17, 21); }
+    } else {
+      const metaText = `${meta} · `;
+      c.fillText(metaText, PAD + 70, ty + 17);
+      c.fillStyle = C.greenText;
+      c.fillText(url, PAD + 70 + c.measureText(metaText).width, ty + 17);
+    }
+    if (access) { c.font = font(400, 21); c.fillStyle = C.amber; c.fillText(access, PAD + 70, ty + 51); }
   }};
 }
 
@@ -331,7 +341,7 @@ function layout(ctx, {question, result, date, personal}) {
       rows.push(sourceRow(ctx, source, String(i + 1)));
       if (isMemberVideo(source) && source.text_access === 'public' && source.public_copy_url) {
         const copyRows = textRows(ctx, [{text: `公开文字稿：${plainUrl(source.public_copy_url)}`}], {size: 19, lh: 1.5, weight: 400, color: C.greenText}, {indent: 70});
-        rows.push(...copyRows.map(row => ({...row, link: source.public_copy_url})));
+        rows.push(...copyRows.map(row => ({...row, link: source.public_copy_url})), gap(14));
       }
     });
     const join = memberJoinUrl(result.sources);
