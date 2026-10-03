@@ -5,6 +5,7 @@ import {ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, CornerDownRig
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
+import {IN_APP} from './in-app.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
@@ -58,6 +59,8 @@ const LINKS = {
 };
 // Where a link to the membership page sits, so its visits can be told apart there.
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
+// Visits in the iPhone app count as their own surface.
+const SURFACE = IN_APP ? 'app' : 'ask';
 // Questions others asked, published with personal details removed.
 const DISCOVERY = {
   title: '别人在问什么',
@@ -94,7 +97,7 @@ const sourceKind = url => {
       : /superlinear\.academy$|circle\.so$/.test(host) ? 'community' : 'other';
   } catch { return 'other'; }
 };
-const trackSource = url => track('Ask Source Click', {surface: 'ask', kind: sourceKind(url)});
+const trackSource = url => track('Ask Source Click', {surface: SURFACE, kind: sourceKind(url)});
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scrollBehavior = () => (reducedMotion() ? 'auto' : 'smooth');
@@ -240,14 +243,14 @@ function AccountLine({account, waking, busy, step, foundingOpen, onToggleFoundin
   if (account.unavailable) return <p className="account" aria-live="polite"><span>暂时读不到今天的次数。</span><button type="button" className="text-button" onClick={onRetry}>重试</button></p>;
   if (account.founding) return <p className="account" aria-live="polite">{step === 'verified' ? <b className="account-verified">验证成功 · Founding Member · 不限次</b> : <span className="account-strong">Founding Member · 不限次</span>}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></p>;
   const remaining = account.remaining ?? 3;
-  const howToJoin = <button type="button" className="text-button account-toggle" aria-expanded={foundingOpen} aria-controls="founding-info" onClick={onToggleFounding}>如何成为</button>;
+  const howToJoin = IN_APP ? null : <button type="button" className="text-button account-toggle" aria-expanded={foundingOpen} aria-controls="founding-info" onClick={onToggleFounding}>如何成为</button>;
   return <p className="account" aria-live="polite">
     <span className={remaining === 0 ? 'account-empty' : 'account-strong'}>{remaining === 0 ? '今天的3次已用完，北京时间0点恢复' : `今天还能问${remaining}次`}</span>
     {account.authenticated
       ? <><span className={step === 'member' ? 'account-notice' : undefined}>已登录，未核验到Founding资格</span>{howToJoin}<button type="button" className="text-button" disabled={busy} onClick={onLogout}>退出</button></>
       : step === 'pending'
         ? <><span className="account-pending">请在弹出的窗口里完成验证</span><button type="button" className="text-button" onClick={onLoginHere}>没看到窗口？在本页验证</button></>
-        : account.login_ready && <>{step === 'incomplete' && <span>这次没有完成验证</span>}<span className="account-offer">Founding Member不限次：<button type="button" className="text-button" disabled={busy} onClick={onLogin}>验证身份</button><span className="account-sep" aria-hidden="true">·</span>{howToJoin}</span></>}
+        : account.login_ready && <>{step === 'incomplete' && <span>这次没有完成验证</span>}<span className="account-offer">Founding Member不限次：<button type="button" className="text-button" disabled={busy} onClick={onLogin}>验证身份</button>{howToJoin && <><span className="account-sep" aria-hidden="true">·</span>{howToJoin}</>}</span></>}
   </p>;
 }
 
@@ -258,7 +261,7 @@ function FoundingInfo({account, busy, step, onLogin}) {
     <p>Stay Superlinear前3,000位新年费会员是Founding Member，一年$149/¥999。AI Builder、AI Architect的老学员也是。</p>
     <p>会员每年有12+场嘉宾大师课，每个月和鸭哥与立正直播答疑，问问立正也不限次。</p>
     <p className="founding-actions">
-      <a className="founding-join" href={stayLink('founding_panel')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'founding_panel'})}>了解会员<ArrowUpRight size={15}/></a>
+      <a className="founding-join" href={stayLink('founding_panel')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'founding_panel'})}>了解会员<ArrowUpRight size={15}/></a>
       {!account.authenticated && account.login_ready && step !== 'pending' && <button type="button" className="text-button" disabled={busy} onClick={onLogin}>已经是？验证身份</button>}
     </p>
   </div>;
@@ -337,7 +340,7 @@ function About({close, meta, account, focusInput, publicArchive}) {
         <li>提问和必要的上下文会发送给Builder Space的模型服务处理，处理规则由该服务管理。请只写愿意交给AI处理的内容。</li>
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>}
-      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p><p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'about'})}>了解会员<ArrowUpRight size={13}/></a></p></div>}
+      {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p>{!IN_APP && <p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'about'})}>了解会员<ArrowUpRight size={13}/></a></p>}</div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<ArrowUpRight size={14}/></a>
@@ -413,7 +416,7 @@ function App() {
     setAccount(next);
     const step = !next?.enabled || next.unavailable ? '' : next.founding ? 'verified' : next.authenticated ? 'member' : 'incomplete';
     setLoginStep(step);
-    if (step) track('Ask Verify Result', {surface: 'ask', result: step});
+    if (step) track('Ask Verify Result', {surface: SURFACE, result: step});
   };
 
   useEffect(() => {
@@ -482,12 +485,18 @@ function App() {
     box.style.height = 'auto';
     box.style.height = `${Math.min(box.scrollHeight, Math.max(160, window.innerHeight / 3))}px`;
   }, [question, messages.length > 0]);
+  // The iPhone app's pull-to-refresh brings a new set of questions; it is offered only while
+  // nothing on screen would be lost: no conversation, no unsent question or situation.
+  const canRefresh = messages.length === 0 && !question.trim() && !Object.values(background).some(value => value.trim());
+  useEffect(() => {
+    if (IN_APP) window.webkit?.messageHandlers?.askApp?.postMessage({canRefresh});
+  }, [canRefresh]);
 
   const intent = intentOf(mode, personal);
   const situation = mode === 'ask' && personal ? contextText(background) : '';
   const login = () => {
     loginCleanup.current?.();
-    track('Ask Verify Start', {surface: 'ask'});
+    track('Ask Verify Start', {surface: SURFACE});
     setLoginStep('pending');
     loginCleanup.current = beginAskLogin({question, context: situation, intent}, () => { void readAskAccount().then(showLoginResult); });
   };
@@ -530,14 +539,14 @@ function App() {
   const toggleCard = card => {
     if (openCard === card.public_id) { setOpenCard(''); return; }
     setOpenCard(card.public_id);
-    track('Ask Discovery Open', {surface: 'ask', visit: discoveryVisit.current});
+    track('Ask Discovery Open', {surface: SURFACE, visit: discoveryVisit.current});
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
     setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
     void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => ({...prev, [card.public_id]: detail || 'failed'})));
   };
   const askSimilar = card => {
-    track('Ask Discovery Similar', {surface: 'ask', visit: discoveryVisit.current});
+    track('Ask Discovery Similar', {surface: SURFACE, visit: discoveryVisit.current});
     prefill(card.question, undefined, 'card');
   };
   const likeCard = async card => {
@@ -545,7 +554,7 @@ function App() {
     const result = await voteDiscovery(card.public_id, card.revision, vote);
     if (!result) return;
     setCardVotes(prev => ({...prev, [card.public_id]: result}));
-    track('Ask Discovery Vote', {surface: 'ask', vote});
+    track('Ask Discovery Vote', {surface: SURFACE, vote});
   };
   const moreState = useRef(more);
   moreState.current = more;
@@ -560,7 +569,7 @@ function App() {
     const fresh = page.items.filter(item => !shownIds.current.has(item.public_id));
     fresh.forEach(item => shownIds.current.add(item.public_id));
     setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
-    track('Ask Discovery More', {surface: 'ask', page: current.pages + 1});
+    track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
   }
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
@@ -589,7 +598,7 @@ function App() {
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
-    if (!retry) { track('Ask Question', {surface: 'ask', from: questionFrom.current}); questionFrom.current = 'typed'; }
+    if (!retry) { track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
@@ -764,9 +773,9 @@ function App() {
     </form>
     <div className="composer-meta">
       <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
-      <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: 'ask'}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
+      <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: SURFACE}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
-    {foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
+    {!IN_APP && foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
     {meta?.settings_error && <p className="form-error">保存设置还未确认，暂时不能发送。<button type="button" className="text-button" onClick={refreshMeta}>重试</button></p>}
     {meta?.mode === 'search-only' && <p className="form-note">现在只能检索原文，模型连上后才能生成回答。</p>}
@@ -876,7 +885,7 @@ function App() {
                         ? loginStep === 'verified' && <b className="account-verified">验证成功，可以重新提问了。</b>
                         : <span className="quota-actions">
                             {account?.login_ready && !account.authenticated && <button type="button" className="pill-button" disabled={loginStep === 'pending'} onClick={login}>{loginStep === 'pending' ? '正在等待验证…' : '验证Founding身份'}</button>}
-                            <a className="inline-link" href={stayLink('quota_card')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: 'ask', location: 'quota_card'})}>如何成为Founding Member<ArrowUpRight size={14}/></a>
+                            {!IN_APP && <a className="inline-link" href={stayLink('quota_card')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'quota_card'})}>如何成为Founding Member<ArrowUpRight size={14}/></a>}
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
@@ -892,7 +901,7 @@ function App() {
             <p>{provisional ? (busy && latestWithSources === messages.at(-1) ? '候选材料，回答还在整理。' : '检索到的材料，可以先读原文。') : sourcesOnly ? `共${railSources.length}份，点开阅读。` : `回答用到的${railSources.length}份原文，点开核对。`}</p>
           </div>
           {railSources.map(source => <SourceCard key={`${source.id}-${source.url}`} source={source} prefix="rail" selected={selected === source.id} onOpen={setSelected}/>)}
-          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: 'ask', location: 'rail'})}>去社区接着聊<ArrowUpRight size={14}/></a>
+          <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: SURFACE, location: 'rail'})}>去社区接着聊<ArrowUpRight size={14}/></a>
         </aside>}
       </div>}
     </main>

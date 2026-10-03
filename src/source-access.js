@@ -1,3 +1,5 @@
+import {IN_APP} from './in-app.js';
+
 // Access belongs to verified source metadata, never a title or an Ask account tier.
 export const YOUTUBE_MEMBERSHIP_URL = 'https://www.youtube.com/channel/UC_5lJHgnMP_lb_VpIiXV0hQ/join';
 export const isMemberVideo = source => source?.source_visibility === 'members-only' && source.source_type?.includes('video');
@@ -21,8 +23,9 @@ export function memberVideoUrl(source) {
     return url.href;
   } catch { return null; }
 }
+// No join link inside the iPhone app; each source still says its video needs a channel membership.
 export function memberJoinUrl(sources) {
-  return sources?.some(source => isMemberVideo(source) && source.membership_platform === 'youtube'
+  return !IN_APP && sources?.some(source => isMemberVideo(source) && source.membership_platform === 'youtube'
     && source.membership_url === YOUTUBE_MEMBERSHIP_URL) ? YOUTUBE_MEMBERSHIP_URL : null;
 }
 export function sourceCopyText(source) {
