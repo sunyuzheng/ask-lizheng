@@ -6,6 +6,7 @@ import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, voteDiscovery} from './discovery.js';
 import {MARK_PATHS} from './mark.js';
+import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -119,26 +120,41 @@ function Kind({kind}) {
   return <span className={`kind kind-${kind || 'synthesis'}`}>{KIND[kind] || KIND.synthesis}</span>;
 }
 const isVideo = source => source.source_type?.includes('video');
-const sourceLabel = source => (isVideo(source) ? '视频' : source.source_type === 'context' ? 'AI整理' : '文章');
+const sourceLabel = sourceTypeLabel;
 const sourceDate = source => source.date?.slice(0, 10) || '日期未标明';
 
 function SourceCard({source, selected, onOpen, prefix}) {
   return <article id={`${prefix}-source-${source.id}`} className={`source ${selected ? 'selected' : ''}`}>
     <div className="source-meta">
       <span className="source-num">{source.id.slice(1)}</span>
-      <span>{isVideo(source) ? <Video size={14}/> : <FileText size={14}/>}{sourceLabel(source)}</span>
+      <span className={isMemberVideo(source) ? 'member-video-badge' : undefined}>{isVideo(source) ? <Video size={14}/> : <FileText size={14}/>}{sourceLabel(source)}</span>
       <time>{sourceDate(source)}</time>
     </div>
     <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={15}/></a>
+    {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
+    {isMemberVideo(source) && <div className="source-access-links">
+      {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<ArrowUpRight size={13}/></a>}
+      {memberVideoUrl(source) && <a className="source-video-cta" href={memberVideoUrl(source)} target="_blank" rel="noopener noreferrer" onClick={() => trackSource(source.url)}>观看会员完整视频<ArrowUpRight size={13}/></a>}
+    </div>}
     {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>从 {source.timecode} 开始看</a>}
     {source.reason && <p className="source-reason">{source.reason}</p>}
     <details onToggle={event => { if (event.currentTarget.open) onOpen?.(source.id); }}>
       <summary>看片段<ChevronDown size={14}/></summary>
       <p className="excerpt">{source.excerpt}</p>
       <p className="attribution">{source.author && `${source.author} · `}{source.attribution_note}</p>
-      {source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<ArrowUpRight size={13}/></a>}
+      {transcriptQualityNote(source) && <p className="source-quality-note">{transcriptQualityNote(source)}</p>}
+      {source.public_copy_url && !(isMemberVideo(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<ArrowUpRight size={13}/></a>}
     </details>
   </article>;
+}
+
+function MemberVideoAccess({sources}) {
+  const url = memberJoinUrl(sources);
+  return url ? <div className="member-video-access">
+    <p>这些来源含 YouTube 频道会员视频。公开文字稿可以直接阅读；观看完整视频需要该频道的会员资格。</p>
+    <a href={url} target="_blank" rel="noopener noreferrer">加入 YouTube 频道会员<ArrowUpRight size={14}/></a>
+    <small>与 Superlinear Founding Member 的提问次数资格不同。</small>
+  </div> : null;
 }
 
 function Markdown({text, sources, onSelect}) {
@@ -204,8 +220,10 @@ function Candidates({sources, turnId, onSelect}) {
   return <div className="candidates">
     <div className="candidates-head"><BookOpen size={15}/><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
     {sources.slice(0, 2).map(source => <article className="candidate" key={`${source.id}-${source.url}`}>
+      {isMemberVideo(source) && <span className="member-video-badge"><Video size={13}/>会员视频</span>}
       <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<ArrowUpRight size={14}/></a>
       <time>{sourceDate(source)}</time>
+      {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
       <p>{source.excerpt?.slice(0, 150)}{source.excerpt?.length > 150 ? '…' : ''}</p>
     </article>)}
     {sources.length > 2 && <details className="candidates-all">
@@ -272,6 +290,7 @@ function QuestionCard({card, open, detail, vote, signedIn, selected, onToggle, o
           <summary><BookOpen size={16}/>回到{answer.sources.length}份原文<ChevronDown size={16}/></summary>
           <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
         </details>}
+        <MemberVideoAccess sources={answer.sources}/>
         <p className="qcard-attribution">{DISCOVERY.attribution}</p>
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">
@@ -679,7 +698,7 @@ function App() {
     const text = [
       result.summary,
       ...(result.sections || []).map(section => `${section.heading}\n${section.body}`),
-      ...(result.sources || []).map(source => `${source.title}（${source.date?.slice(0, 10) || ''}）\n${source.url}`),
+      ...(result.sources || []).map(sourceCopyText),
       '由问问立正AI根据公开材料整理，不是立正本人实时回复。',
     ].join('\n\n');
     try {
@@ -837,6 +856,7 @@ function App() {
                     <summary><BookOpen size={16}/>回到{sources.length}份原文<ChevronDown size={16}/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
+                  <MemberVideoAccess sources={sources}/>
                   <div className="answer-actions">
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? <Check size={15}/> : <Copy size={15}/>}{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
                     {m.result.status === 'answered' && <>

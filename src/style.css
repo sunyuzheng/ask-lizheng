@@ -1674,6 +1674,7 @@ main {
 
 .source-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12.5px;
@@ -1684,6 +1685,77 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.member-video-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--amber-tint);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.candidate > .member-video-badge {
+  margin-right: 6px;
+}
+
+.source-access-note,
+.candidate .source-access-note {
+  margin-top: 6px;
+  color: var(--amber);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.source-access-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.source-video-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--green-text);
+  font-size: 13px;
+}
+
+.source-quality-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.member-video-access {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--amber-tint);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.member-video-access > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  font-weight: 600;
+  color: var(--green-text);
+}
+
+.member-video-access > small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .source-num {

@@ -17,6 +17,11 @@ from .semantic import MIN_SIMILARITY
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 TIMESTAMP = re.compile(r"\[(\d{2}:\d{2}:\d{2})\]\((https://www\.youtube\.com/watch\?[^)]+)\)")
 STOP_TERMS = set("怎么 如何 什么 为什么 一个 这个 那个 可以 我们 他们 自己 现在 时候 问题 是否 哪些 有没有 应该 需要 如果 我的 你的 以及 然后 帮我 知道 想要 还是 能够 请问 关于 了解 看看 怎么办 告诉 几个 真的 会了 是真 的学 了几 我做 出了 我是".split())
+SOURCE_ACCESS_FIELDS = (
+    "source_visibility", "text_access", "membership_platform", "membership_url",
+    "membership_verified_at", "transcript_source_kind", "transcript_quality",
+    "speaker_classification",
+)
 QUESTION_FILLERS = re.compile("|".join(sorted(("我想", "我用", "我在", "我觉得", "我感觉", "但感觉", "不知道", "感觉", "应该", "怎么", "如何", "怎么办", "什么", "为什么", "我自己", "自己", "帮我", "请问", "能不能", "有没有", "一个", "很多", "但是", "但", "是否", "现在", "以后"), key=len, reverse=True)))
 CONCEPTS = (
     (("学会", "学习", "教程", "真学", "学到", "learn"), "假学习 学习方法 迁移 撤掉帮助 guided mistakes"),
@@ -212,6 +217,12 @@ class ContextIndex:
                 "attribution_note": doc.attribution_note,
                 "evidence_role": doc.evidence_role or ("metadata-only" if is_discovery(doc) else "unclassified"),
             }
+            # These verified corpus fields describe the original video and its
+            # separately public transcript; model output never owns access labels.
+            for key in SOURCE_ACCESS_FIELDS:
+                value = getattr(doc, key, "")
+                if isinstance(value, str) and value:
+                    source[key] = value
             if not is_discovery(doc) and doc.path.startswith(("corpus/", "context/", "examples/")):
                 source["public_copy_url"] = "https://github.com/sunyuzheng/lizheng-open-context/blob/" + self.source_revision + "/" + quote(doc.path, safe="/")
             if timestamp:
@@ -220,6 +231,7 @@ class ContextIndex:
                         "yuzheng_stance_weight": doc.yuzheng_stance_weight,
                         "content_origin": doc.content_origin, "publisher": doc.publisher,
                         "generation_method": doc.generation_method,
+                        "rights_scope": getattr(doc, "rights_scope", ""), "license": getattr(doc, "license", ""),
                         "discovery_only": is_discovery(doc), "section": doc.section}
             passages.append(Passage(source, evidence, is_discovery(doc)))
             if len(passages) >= limit:

@@ -19,7 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 
 CARDS_PATH = "context/decision-cards.json"
-PRIMARY_ROLES = {"primary-authored", "primary-speech", "published-source"}
+# Primary refers to an actual source body, not whose position its speech proves.
+# Speaker-attributed public transcripts retain their separate stance metadata.
+PRIMARY_ROLES = {"primary-authored", "primary-speech", "speaker-attributed-speech", "published-source"}
 GENERIC_CUES = set("ai 人工智能 项目 产品 用户 目标 工具 价值 标准 目的 感受 框架 比较 采用 学习 学会 效率 成果 报告 建议 提问 处境 阻力 人生 需求 付费 增长 维护 自建 quality learn tutorial question advice outcome productivity".split())
 ROLE_WEIGHTS = {"basis": 1.0, "contrast": .9, "case": .65}
 

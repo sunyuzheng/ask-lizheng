@@ -16,7 +16,9 @@ from .query_records import QUERY_STORE_HEADER, QUERY_STORE_URL, STATUSES, WRITE_
 
 OPS_BODY_LIMIT = 262144
 ANSWER_FIELDS = {"status", "summary", "sections", "sources", "followups", "clarifying_questions", "limitations", "retryable", "failure_code"}
-SOURCE_FIELDS = {"id", "title", "url", "date", "excerpt", "author", "source_type", "reason", "attribution_note", "evidence_role", "public_copy_url", "timecode"}
+SOURCE_FIELDS = {"id", "title", "url", "date", "excerpt", "author", "source_type", "reason", "attribution_note", "evidence_role", "public_copy_url", "timecode",
+                 "source_visibility", "text_access", "membership_platform", "membership_url", "membership_verified_at",
+                 "transcript_source_kind", "transcript_quality", "speaker_classification"}
 
 
 def archived_answer(result: dict) -> dict:

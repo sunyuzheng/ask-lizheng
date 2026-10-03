@@ -4,6 +4,7 @@
 // ask.lizheng.ai. Loaded only when someone saves an answer.
 import qrcode from 'qrcode-generator';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
+import {isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
 
 const SITE = 'https://ask.lizheng.ai/';
 const W = 1080;                                   // layout width; drawn at up to 2x
@@ -233,8 +234,9 @@ function sourceRow(ctx, source, number) {
   const style = {size: 27, weight: 600, color: C.ink};
   const all = wrap(ctx, units([{text: source.title || ''}], style), INNER - 70);
   const titleLines = all.slice(0, 2);
-  const h = 24 + titleLines.length * 40 + 34 + 24;
-  const type = source.source_type?.includes('video') ? '视频' : source.source_type === 'context' ? 'AI整理' : '文章';
+  const access = sourceAccessNote(source);
+  const h = 24 + titleLines.length * 40 + 34 + 24 + (access ? 34 : 0);
+  const type = sourceTypeLabel(source);
   const meta = [type, source.date?.slice(0, 10) || '日期未标明', source.timecode ? `从 ${source.timecode} 开始` : ''].filter(Boolean).join(' · ');
   return {h, link: source.url, draw(c, y) {
     c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2);
@@ -255,6 +257,7 @@ function sourceRow(ctx, source, number) {
     const mw = c.measureText(metaText).width;
     c.fillStyle = C.greenText;
     c.fillText(fitEllipsis(c, plainUrl(source.url), INNER - 70 - mw), PAD + 70 + mw, ty + 17);
+    if (access) { c.fillStyle = C.amber; c.fillText(access, PAD + 70, ty + 51); }
   }};
 }
 
@@ -318,7 +321,18 @@ function layout(ctx, {question, result, date}) {
       c.fillStyle = C.faint; c.font = font(400, 21);
       c.fillText(`回答依据的${result.sources.length}份公开原文`, PAD + 88, y + 28);
     }}, gap(10));
-    result.sources.forEach((source, i) => rows.push(sourceRow(ctx, source, String(i + 1))));
+    result.sources.forEach((source, i) => {
+      rows.push(sourceRow(ctx, source, String(i + 1)));
+      if (isMemberVideo(source) && source.text_access === 'public' && source.public_copy_url) {
+        const copyRows = textRows(ctx, [{text: `公开文字稿：${plainUrl(source.public_copy_url)}`}], {size: 19, lh: 1.5, weight: 400, color: C.greenText}, {indent: 70});
+        rows.push(...copyRows.map(row => ({...row, link: source.public_copy_url})));
+      }
+    });
+    const join = memberJoinUrl(result.sources);
+    if (join) {
+      const joinRows = textRows(ctx, [{text: '观看会员完整视频：加入 YouTube 频道会员（与 Founding 提问额度不同）'}], {size: 21, lh: 1.6, weight: 600, color: C.greenText});
+      rows.push(gap(12), ...joinRows.map(row => ({...row, link: join})));
+    }
   }
   rows.push(gap(56), footerRow());
   return rows;

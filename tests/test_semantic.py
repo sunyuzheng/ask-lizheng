@@ -68,6 +68,24 @@ def test_only_verified_primary_bodies_are_prepared(public_docs):
         prepare_index(root, docs)
 
 
+def test_public_mixed_speech_is_indexed_without_author_stance_upgrade(public_docs):
+    root, docs = public_docs
+    transcript = docs[0]
+    transcript.evidence_role = "speaker-attributed-speech"
+    transcript.content_origin = "mixed-or-unresolved-speech"
+    transcript.yuzheng_stance_weight = "not-evidence"
+    transcript.source_type = "video-transcript"
+    transcript.source_visibility = "members-only"
+    transcript.text_access = "public"
+    transcript.speaker_classification = "mixed-or-unresolved"
+    metadata, inputs = prepare_index(root, docs)
+    assert any(row["document_id"] == transcript.id for row in metadata["entries"])
+    assert "撤掉帮助" in inputs[0]
+    assert transcript.yuzheng_stance_weight == "not-evidence"
+    assert transcript.content_origin == "mixed-or-unresolved-speech"
+    assert transcript.evidence_role == "speaker-attributed-speech"
+
+
 @pytest.mark.parametrize("mutation", ["private", "hash", "hidden", "escape"])
 def test_private_unpinned_or_escaped_sources_are_rejected(public_docs, mutation):
     root, _ = public_docs
