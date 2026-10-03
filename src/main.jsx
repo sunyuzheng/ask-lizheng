@@ -40,7 +40,7 @@ const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
   : kind === 'application' ? (personal ? '结合你的处境' : 'AI推演') : '';
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
 // v4: answers may be published with personal details removed; the situation is kept for analysis only.
-const V4_NOTICE = '很多问题是共性的。提交即同意保存问答，去掉个人信息后可能整理公开，帮到更多人。请勿填写私密信息。';
+const V4_NOTICE = '问答会保存，去掉个人信息后可能公开，帮到有同样问题的人。请别写私密信息。';
 const V4_PARTS = [
   ['为什么保存', '很多问题是共性的，你问的往往也是别人想问的。我们会把常见的问题和回答整理出来，去掉个人信息后公开，比如「今天大家在问什么」；立正也会从中找选题写文章、做视频，并用它们改进回答。'],
   ['保存什么', '提问、完整回答和所用出处，以及匿名的使用统计。'],
