@@ -348,7 +348,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
     async def ask(request: Request, payload: AskRequest):
         current_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         if payload.ai_consent_model is not None and payload.ai_consent_model != current_model:
-            return JSONResponse(status_code=409, content={"code": "ai_consent_changed", "model": current_model})
+            return JSONResponse(status_code=409, content={"code": "ai_consent_changed", "model": current_model},
+                                headers={"X-Ask-Error-Code": "ai_consent_changed"})
         principal = request.state.principal if application.state.quota.enabled else None
         archived = payload.query_log_notice in {"v3", "v4"}
         if (application.state.ops_records.enabled or archived) and not ops_ready():

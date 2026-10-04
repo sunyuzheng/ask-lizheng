@@ -263,6 +263,7 @@ def test_consent_model_mismatch_stops_before_admission_resources(context_pack, m
                                  "ai_consent_model": "previous-model"})
         assert response.status_code == 409
         assert response.json() == {"code": "ai_consent_changed", "model": current_model}
+        assert response.headers["x-ask-error-code"] == "ai_consent_changed"
         assert response.headers["cache-control"] == "no-store"
         assert app.state.slots._value == 3 and not app.state.query_records.tasks
 
