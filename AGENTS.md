@@ -1,5 +1,7 @@
 # Ask Lizheng
 
+How this repository, lizheng-personal-site (pages and storage gateway) and ask-lizheng-ops (owner dashboard and public questions) fit together around one Redis, who owns which keys and where each business rule is enforced: docs/ARCHITECTURE.md. Read it before changing anything another repository reads or writes.
+
 User-facing name: 问问立正. A source-grounded AI interface over lizheng-open-context.
 
 - Use only the explicitly public Open Context projection for retrieval and answers. Never read private personal context, messages, community content or unpublished drafts. The authorized account integration may read only the signed-in user's verified identity and Circle Founding Member tag for access checks; never include these in model context.

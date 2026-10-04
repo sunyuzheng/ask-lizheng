@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {Check, LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, sameQuestion, similarCount, voteDiscovery} from './discovery.js';
+import {askedAgo, askedLastDay, discoveryDetail, discoveryLists, discoveryPage, discoveryView, voteDiscovery, DISCOVERY_LIST_SIZE} from './discovery.js';
 import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
@@ -292,6 +292,8 @@ function AccountLine({account, waking, busy, step, foundingOpen, onToggleFoundin
 
 // Sharing one answer: its own page (what that page shows, then its link and how to send it), a long
 // image or a PDF. `link` is false for an answer that cannot have a page; the image and PDF remain.
+// Sharing an answer: its page, a long image or a PDF. A question others asked already has its
+// page: only its link and how to send it (no onExport).
 function SharePanel({state, link, exporting, onCreate, onCopy, onSend, onExport}) {
   const ready = link && state.phase === 'ready';
   return <div className="share-panel">
@@ -305,8 +307,10 @@ function SharePanel({state, link, exporting, onCreate, onCopy, onSend, onExport}
         {typeof navigator.share === 'function' && <button type="button" className="pill-button" onClick={onSend}>{SHARE.send}</button>}
         <button type="button" className="pill-button" onClick={onCopy}>{state.copied ? SHARE.copiedAgain : SHARE.copy}</button>
       </> : link && <button type="button" className="pill-button" disabled={state.phase === 'working'} onClick={onCreate}>{state.phase === 'working' ? SHARE.creating : SHARE.create}</button>}
-      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('png')}>{exporting === 'png' ? '正在生成…' : '保存图片'}</button>
-      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
+      {onExport && <>
+        <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('png')}>{exporting === 'png' ? '正在生成…' : '保存图片'}</button>
+        <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
+      </>}
     </div>
     {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
   </div>;
@@ -326,14 +330,14 @@ function FoundingInfo({account, busy, step, onLogin}) {
 }
 
 // One published question. Its answer opens in place and reads like one in a conversation.
-// A card picked for being asked often leads with how many similar askings it stands for; the
-// others lead with when they were asked and show that count below, when it says more than one.
-const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问'], ['picks', '没看过']];
-const EMPTY_LIST = Object.freeze({items: [], next: null, started: false, done: false, loading: false, pages: 0});
+// In 最常问 a card leads with how many similar askings it stands for; in 最近问 with when it was
+// asked, showing that count below when it says more than one.
+const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问']];
 
-function QuestionCard({card, similar, open, detail, vote, signedIn, selected, onToggle, onSimilar, onLike, onSelect}) {
+function QuestionCard({card, open, detail, vote, share, signedIn, selected, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect}) {
   const prefix = `q-${card.public_id}`;
   const likes = vote?.likes ?? card.likes;
+  const similar = card.similar_count ?? card.topic_question_count;
   const often = card.role === 'common' && similar >= 2;
   const meta = [!often && similar >= 2 && `${similar}次类似提问`, likes > 0 && `${likes}人觉得有帮助`]
     .filter(Boolean).join(' · ');
@@ -364,7 +368,9 @@ function QuestionCard({card, similar, open, detail, vote, signedIn, selected, on
       <div className="qcard-actions">
         <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
         {signedIn && <button type="button" className={`ghost-button qcard-like ${vote?.voted ? 'on' : ''}`} aria-pressed={!!vote?.voted} onClick={onLike}>{vote?.voted ? '觉得有帮助' : '有帮助'}</button>}
+        <button type="button" className="pill-button" aria-expanded={!!share?.open} onClick={onShare}>分享</button>
       </div>
+      {share?.open && <SharePanel state={share} link onCopy={onCopy} onSend={onSend}/>}
     </div>}
   </article>;
 }
@@ -466,36 +472,31 @@ function App() {
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
   const [foundingOpen, setFoundingOpen] = useState(false);
-  // Questions others asked: this visit's picks, each answer once opened, and this visit's likes.
-  const [discovery, setDiscovery] = useState([]);
+  // Questions others asked: 最近问 and 最常问, the same lists for everyone; each answer once opened,
+  // and this visit's likes and shares.
+  const [questionLists, setQuestionLists] = useState(null);
   // loading until the list arrives, then ready; none when it cannot be read here (other hosts,
   // Ops down) or takes past eight seconds, and only then the examples show in its place.
   const [discoveryState, setDiscoveryState] = useState('loading');
   // Anonymous usage of this page view for the owner's dashboard (usage.js): reading time, scroll
   // depth, whether the list of questions others asked was seen, and what was used.
   useEffect(() => startUsage(IN_APP ? 'app' : 'ask'), []);
+  // Which list shows (最近问 unless only common questions exist yet), its first four or all of it.
+  const [view, setView] = useState('recent');
+  const [expanded, setExpanded] = useState(false);
+  const shownList = useMemo(() => (questionLists ? discoveryView(questionLists, view) : []), [questionLists, view]);
+  const discovery = expanded ? shownList : shownList.slice(0, 4);
   const hasDiscovery = discovery.length > 0;
   useEffect(() => {
     if (!hasDiscovery) return;
     markUsage('d_shown');
     watchUsage(document.getElementById('questions'), 'd_seen');
   }, [hasDiscovery]);
-  // The deep pool under the picks, newest first, a page at a time; shown ids never repeat.
-  // What 别人在问什么 lists: every question newest first (最近问) or most asked first (最常问), so a
-  // question seen on an earlier visit can always be found again, or this visit's picks, which put
-  // questions this browser has not seen first (没看过, the default).
-  const [view, setView] = useState('picks');
-  const viewState = useRef(view);
-  const [more, setMore] = useState(EMPTY_LIST);
-  const [poolSize, setPoolSize] = useState(0);
-  // Every published card read so far, folded ones included, to count each card's similar askings.
-  const [known, setKnown] = useState([]);
-  // In a full list: what it already shows, so a question asked another way is listed once.
-  const listed = useRef({ids: new Set(), questions: []});
   const [askedRecently, setAskedRecently] = useState(0);
   const [openCard, setOpenCard] = useState('');
   const [cardDetails, setCardDetails] = useState({});
   const [cardVotes, setCardVotes] = useState({});
+  const [cardShares, setCardShares] = useState({});
   const [cardSource, setCardSource] = useState('');
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
   const [accountWaking, setAccountWaking] = useState(false);
@@ -503,8 +504,6 @@ function App() {
   const conversationId = useRef(null);
   // How the question box was last filled, counted with each question: typed, example, card, followup or clarify.
   const questionFrom = useRef('typed');
-  // Whether this browser saw the questions before: counted with each card action.
-  const discoveryVisit = useRef('first');
   const metadataAbort = useRef(null);
   // The page loads from lizheng.ai at once, but the settings come from Builder, which sleeps when
   // idle and takes up to half a minute to wake: say so while it wakes, and keep asking.
@@ -599,33 +598,27 @@ function App() {
   useEffect(() => {
     const controller = new AbortController();
     const late = setTimeout(() => setDiscoveryState(state => (state === 'loading' ? 'none' : state)), 8000);
-    void discoveryPool(controller.signal).then(pool => {
+    void discoveryLists(controller.signal).then(lists => {
       clearTimeout(late);
       if (controller.signal.aborted) return;
-      if (!pool.length) { setDiscoveryState('none'); return; }
-      const seen = readSeen();
-      const picked = pickDiscovery(pool, seen);
-      rememberSeen(seen, picked.map(item => item.public_id));
-      discoveryVisit.current = seen.length ? 'return' : 'first';
-      setAskedRecently(askedLastDay(pool));
-      setPoolSize(pool.length);
-      setKnown(pool);
-      setDiscovery(picked);
+      if (!lists || (!lists.recent.length && !lists.frequent.length)) { setDiscoveryState('none'); return; }
+      // Until someone has asked, the common questions written fresh are all there is.
+      if (!openList.current && !discoveryView(lists, 'recent').length) setView('frequent');
+      setAskedRecently(askedLastDay(lists.recent));
+      setQuestionLists(lists);
       setDiscoveryState('ready');
     });
     return () => { clearTimeout(late); controller.abort(); };
   }, []);
-  // lizheng.ai links here to list every question: #recent (or the older #questions) newest first,
-  // #frequent most asked first. Once the picks show, go to the list.
-  // The list starts loading at once (the section is on the page from the start); once its first
-  // page is in and the page is long enough, scroll to it.
+  // lizheng.ai links here to see a whole list: #recent (or the older #questions) or #frequent.
+  // Once it is in and the page is long enough, scroll to it.
   const openList = useRef({'#questions': 'recent', '#recent': 'recent', '#frequent': 'frequent'}[location.hash] || '');
-  useEffect(() => { if (openList.current) showView(openList.current); }, []);
+  useEffect(() => { if (openList.current) { setView(openList.current); setExpanded(true); } }, []);
   useLayoutEffect(() => {
-    if (!openList.current || !more.started) return;
+    if (!openList.current || !questionLists) return;
     openList.current = '';
     document.getElementById('questions')?.scrollIntoView({block: 'start'});
-  }, [more.started]);
+  }, [questionLists]);
   useEffect(() => {
     if (!busy) return;
     const started = Date.now();
@@ -696,7 +689,7 @@ function App() {
     if (openCard === card.public_id) { setOpenCard(''); return; }
     setOpenCard(card.public_id);
     markUsage('d_open');
-    track('Ask Discovery Open', {surface: SURFACE, visit: discoveryVisit.current});
+    track('Ask Discovery Open', {surface: SURFACE, view});
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
     setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
@@ -704,7 +697,7 @@ function App() {
   };
   const askSimilar = card => {
     markUsage('d_similar');
-    track('Ask Discovery Similar', {surface: SURFACE, visit: discoveryVisit.current});
+    track('Ask Discovery Similar', {surface: SURFACE, view});
     prefill(card.question, undefined, 'card');
   };
   const likeCard = async card => {
@@ -714,48 +707,34 @@ function App() {
     setCardVotes(prev => ({...prev, [card.public_id]: result}));
     track('Ask Discovery Vote', {surface: SURFACE, vote});
   };
-  // How many similar askings each shown card stands for, over every card read so far.
-  const similar = useMemo(() => new Map([...discovery, ...more.items].map(card => [card.public_id, similarCount(card, known)])),
-    [discovery, more.items, known]);
-  const moreState = useRef(more);
-  moreState.current = more;
-  async function loadMore() {
-    const sort = viewState.current, current = moreState.current;
-    if (sort === 'picks' || current.loading || current.done) return;
-    moreState.current = {...current, loading: true};
-    setMore(prev => ({...prev, loading: true}));
-    let page = await discoveryPage(current.next, sort);
-    // The list changed since the last page: start over; listed questions are skipped below.
-    if (page?.expired) page = await discoveryPage(null, sort);
-    if (viewState.current !== sort) return;
-    if (!page) { setMore(prev => ({...prev, loading: false})); return; }
-    setKnown(prev => [...prev, ...page.items.filter(item => !prev.some(other => other.public_id === item.public_id))]);
-    const fresh = [];
-    for (const item of page.items) {
-      if (listed.current.ids.has(item.public_id)) continue;
-      listed.current.ids.add(item.public_id);
-      if (listed.current.questions.some(question => sameQuestion(question, item.question))) continue;
-      listed.current.questions.push(item.question);
-      fresh.push(item);
-    }
-    setMore(prev => ({items: [...prev.items, ...fresh], next: page.next, started: true, done: !page.next, loading: false, pages: prev.pages + 1}));
-    markUsage('d_more');
-    track('Ask Discovery More', {surface: SURFACE, page: current.pages + 1});
-  }
   function showView(target) {
-    if (viewState.current === target) return;
-    viewState.current = target;
-    listed.current = {ids: new Set(), questions: []};
-    moreState.current = EMPTY_LIST;
+    if (view === target) return;
     setView(target);
-    setMore(EMPTY_LIST);
     setOpenCard('');
     const top = document.getElementById('questions');
     if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({block: 'start', behavior: scrollBehavior()});
-    if (target === 'picks') return;
     track('Ask Discovery Sort', {surface: SURFACE, sort: target});
-    void loadMore();
   }
+  function showMore() {
+    setExpanded(true);
+    markUsage('d_more');
+    track('Ask Discovery More', {surface: SURFACE, view});
+  }
+  // A question others asked already has its public page: sharing copies its link at once, and a
+  // phone can also send it on.
+  const setCardShare = (id, next) => setCardShares(prev => ({...prev, [id]: {...prev[id], ...next}}));
+  async function shareCard(card) {
+    if (cardShares[card.public_id]?.open) { setCardShare(card.public_id, {open: false}); return; }
+    const url = discoveryPage(card.public_id);
+    setCardShare(card.public_id, {open: true, phase: 'ready', url});
+    markUsage('d_share');
+    track('Ask Discovery Share', {surface: SURFACE, view});
+    setCardShare(card.public_id, {copied: await copyWhenReady(url)});
+  }
+  const copyCard = async card => setCardShare(card.public_id, {copied: await copyWhenReady(discoveryPage(card.public_id))});
+  const sendCard = async card => {
+    try { await navigator.share({title: card.question, url: discoveryPage(card.public_id)}); } catch { /* Closed, or not allowed here. */ }
+  };
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
     requestAnimationFrame(() => {
@@ -1035,24 +1014,26 @@ function App() {
         {composer}
         </div></div>
         <div className="home-body">
-        {discoveryState !== 'none' || view !== 'picks' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
+        {discoveryState !== 'none' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
-            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= 20 ? '20+' : askedRecently} 个新问题</p>}
+            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
             <div className="discovery-views" role="group" aria-label="怎样看这些问题">
               {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
             </div></div>
-          <div className="discovery-list" aria-busy={more.loading || (view === 'picks' ? !discovery.length : !more.started)}>
+          <div className="discovery-list" aria-busy={!questionLists}>
             {/* While the questions load, the rows they will fill; never the examples first. */}
-            {(view === 'picks' ? !discovery.length : !more.started) ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
-              : (view === 'picks' ? discovery : more.items.map(card => ({...card, role: view === 'frequent' ? 'common' : 'fresh'}))).map(card => <QuestionCard key={card.public_id} card={card} similar={similar.get(card.public_id)}
-              open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]}
+            {!questionLists ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
+              : discovery.map(card => <QuestionCard key={card.public_id} card={card}
+              open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]} share={cardShares[card.public_id]}
               signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
-              onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onSelect={selectCardSource}/>)}
+              onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
+              onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource}/>)}
           </div>
-          {view === 'picks'
-            ? poolSize > discovery.length && <button type="button" className="pill-button discovery-more" onClick={() => showView('recent')}>看更多问题<Chev/></button>
-            : (!more.started || !more.done) && <button type="button" className="pill-button discovery-more"
-              disabled={more.loading || !more.started} onClick={() => void loadMore()}>{more.loading || !more.started ? '正在读取…' : '继续看'}<Chev/></button>}
+          {/* The rest of the list here; past it, every question on lizheng.ai's public pages. */}
+          {questionLists && (shownList.length > discovery.length
+            ? <button type="button" className="pill-button discovery-more" onClick={showMore}>看更多问题<Chev/></button>
+            : <a className="pill-button discovery-more" href="https://www.lizheng.ai/ask" target="_blank" rel="noopener"
+              onClick={() => track('Ask Discovery All', {surface: SURFACE})}>看全部问题<Ext/></a>)}
         </section> : <section className="starters" aria-labelledby="starters-title">
           <div className="starters-head"><h2 id="starters-title">不知道从哪问起？</h2><p>选一个，改成你自己的问题。</p></div>
           <div className="starter-grid">
