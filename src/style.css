@@ -461,16 +461,29 @@ main {
   display: none;
 }
 
+/* 别人正在问 beside the title: its heading on the title's top line, its last question about where
+   the question box begins, so it never stretches the stage. The question box stays under the title. */
 @media (min-width: 1100px) {
   .stage-inner.with-live {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    column-gap: clamp(48px, 5vw, 88px);
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-areas: "hero live" "composer live";
+    column-gap: clamp(48px, 5vw, 80px);
+  }
+
+  .with-live .hero {
+    grid-area: hero;
+  }
+
+  .with-live .composer-area {
+    grid-area: composer;
   }
 
   .with-live .live {
     display: block;
-    align-self: end;
+    grid-area: live;
+    align-self: start;
+    padding-top: 0.4em;
   }
 
   .with-live .hero-live {
@@ -512,7 +525,7 @@ main {
   display: grid;
   gap: 4px;
   width: 100%;
-  padding: 14px 0;
+  padding: 12px 0;
   text-align: left;
   color: var(--on-forest-2);
 }
@@ -1185,10 +1198,9 @@ main {
   color: var(--muted);
 }
 
+/* The list itself in ink, a size up; the serif here only has its bold weights, too heavy for prose. */
 .materials .materials-list {
-  font-family: var(--serif);
-  font-size: clamp(18px, 1.6vw, 20px);
-  font-weight: 400;
+  font-size: clamp(16.5px, 1.4vw, 18px);
   line-height: 1.85;
   color: var(--ink);
 }

@@ -81,25 +81,32 @@ const DISCOVERY = {
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
 };
-// 回答从哪里来: what the answers are made from, counted from what the service answers from
-// (/api/meta counts), so the numbers follow Open Context; before they arrive, the same without them.
+// 回答从哪里来: what the answers are made from, and that it is distilled, not just raw text (the
+// user, 2026-10-04: the Statsig posts are articles like the rest; end the list with 等). Counted from
+// what the service answers from (/api/meta counts), so the numbers follow Open Context; before they
+// arrive, the same sentences without them.
+const count = (counts, key) => (Number.isInteger(counts?.[key]) ? counts[key] : null);
 function materialsText(counts) {
-  const n = key => (Number.isInteger(counts?.[key]) ? counts[key] : null);
-  const videos = n('video_transcripts'), member = n('member_video_transcripts');
-  const posts = n('community_posts_full_text'), bank = n('knowledge_bank_full_text');
-  const lessons = n('member_course_lessons'), book = n('book_chapters_zh'), blogs = n('blog_posts_zh');
+  const n = key => count(counts, key);
+  const videos = n('video_transcripts'), member = n('member_video_transcripts'), lessons = n('member_course_lessons');
+  const articles = ['community_posts_full_text', 'knowledge_bank_full_text', 'blog_posts_zh'].map(n);
   const parts = [
     videos ? `${videos}期视频的字幕${member ? `（其中${member}期是会员视频）` : ''}` : '四百多期视频的字幕（一半是会员视频）',
-    posts !== null && bank !== null ? `${posts + bank}篇文章` : '两百多篇文章',
+    articles.every(value => value !== null) ? `${articles.reduce((a, b) => a + b, 0)}篇文章` : '三百来篇文章',
     lessons ? `《真本事》整门课的${lessons}讲文字稿` : '《真本事》整门课的文字稿',
-    ...(book === 0 ? [] : ['《Growth Data Analytics Playbook》中文版']),
-    ...(blogs === 0 ? [] : [blogs ? `他在Statsig写的${blogs}篇博客` : '他在Statsig写的博客']),
+    // Word joiners keep 中文版等 on one line after the long English title.
+    ...(n('book_chapters_zh') === 0 ? [] : ['《Growth Data Analytics Playbook》中\u2060文\u2060版']),
   ];
-  return `立正六年里讲过、写过的东西：${parts.slice(0, -1).join('、')}，和${parts.at(-1)}。`;
+  return `立正六年里讲过、写过的东西：${parts.join('、')}\u2060等。`;
+}
+function refinedText(counts) {
+  const cards = count(counts, 'reasoning_cards'), talks = count(counts, 'conversation_excerpt_files'), excerpts = count(counts, 'conversation_excerpts');
+  return `这些原文还经过提炼：他反复讲的判断，整理成了${cards ? `${cards}张` : ''}判断卡，每张都连着说这些话的原文；`
+    + (talks && excerpts ? `${talks}场重要对话里他本人说的${excerpts}段话，也逐段核对了出来。` : '重要对话里他本人说的话，也逐段核对了出来。');
 }
 const MATERIALS = {
   title: '回答从哪里来',
-  how: '回答先找出和你的问题有关的原文，再整理成段落。每一段都标明出处：文章附日期，视频跳到他讲这段的地方。',
+  how: '回答时先找到相关的判断，再回到原文，整理成段落。每一段都标明出处：文章附日期，视频跳到他讲这段的地方。',
   open: '这些材料都开源在GitHub',
 };
 const MESSAGES = {
@@ -542,8 +549,9 @@ function App() {
   const [expanded, setExpanded] = useState(false);
   const shownList = useMemo(() => (questionLists ? discoveryView(questionLists, view) : []), [questionLists, view]);
   const discovery = expanded ? shownList : shownList.slice(0, 4);
-  // 别人正在问: the four newest questions people really asked (not the common ones written fresh).
-  const liveCards = useMemo(() => (questionLists ? discoveryView(questionLists, 'recent').filter(card => card.asked_at).slice(0, 4) : []), [questionLists]);
+  // 别人正在问: the three newest questions people really asked (not the common ones written fresh),
+  // as many as sit beside the question box.
+  const liveCards = useMemo(() => (questionLists ? discoveryView(questionLists, 'recent').filter(card => card.asked_at).slice(0, 3) : []), [questionLists]);
   const hasDiscovery = discovery.length > 0;
   useEffect(() => {
     if (!hasDiscovery) return;
@@ -1094,7 +1102,6 @@ function App() {
     <main id="main-content" tabIndex={-1}>
       {!conversation ? <div className="home">
         <div className="stage"><div className={`stage-inner ${discoveryState !== 'none' ? 'with-live' : ''}`}>
-        <div className="stage-main">
         <section className="hero">
           <h1>{START.title[0]}<br/>{START.title[1]}</h1>
           <p className="intro">{START.lines.map(line => <span key={line} className="intro-line"><Phrases text={line}/></span>)}</p>
@@ -1104,11 +1111,10 @@ function App() {
           <p className="identity"><Phrases text={START.identity}/></p>
         </section>
         {composer}
-        </div>
         {discoveryState !== 'none' && <aside className="live" aria-labelledby="live-title" aria-busy={!questionLists}>
           <h2 id="live-title">{DISCOVERY.live}</h2>
           {askedRecently >= 3 && <p className="live-count">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
-          <ol>{!questionLists ? [0, 1, 2, 3].map(i => <li key={i} className="live-placeholder" aria-hidden="true"><i/><b/></li>)
+          <ol>{!questionLists ? [0, 1, 2].map(i => <li key={i} className="live-placeholder" aria-hidden="true"><i/><b/></li>)
             : liveCards.map(card => <li key={card.public_id}><button type="button" onClick={() => openFromLive(card)}>
               <time dateTime={card.asked_at} className={Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}>{askedAgo(card.asked_at)}</time>
               <span>{card.question}</span>
@@ -1149,6 +1155,7 @@ function App() {
           <h2 id="materials-title">{MATERIALS.title}</h2>
           <div>
             <p className="materials-list"><Phrases text={materialsText(meta?.counts)}/></p>
+            <p><Phrases text={refinedText(meta?.counts)}/></p>
             <p><Phrases text={MATERIALS.how}/></p>
             <p><a className="inline-link" href={LINKS.context} target="_blank" rel="noreferrer">{MATERIALS.open}<Ext/></a></p>
           </div>
