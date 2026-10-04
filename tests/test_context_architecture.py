@@ -166,6 +166,14 @@ def test_actual_course_topics_route_to_lesson_texts(actual_architecture, questio
     assert lessons and max(row["weight"] for row in lessons) == 1.0  # a lesson is the basis
 
 
+def test_actual_member_solo_talks_back_their_card(actual_architecture):
+    selected = actual_architecture.route("实验结果很差，怎么跟老板说这个坏消息")
+    assert selected and selected[0] == "hard-truths-with-people"
+    docs = [actual_architecture.documents[row["docindex"]] for row in actual_architecture.linked_candidates(selected[:1])]
+    # Reviewed member talks where Yuzheng speaks alone; conversations never back this card.
+    assert docs and all(doc.speaker_classification == "solo-yuzheng" for doc in docs)
+
+
 @pytest.mark.parametrize("question", ["AI是什么？", "我有几个项目。", "今年世界杯谁获胜？", "哪里有好吃的火锅？"])
 def test_actual_generic_and_unsupported_topics_do_not_select_cards(actual_architecture, question):
     assert actual_architecture.route(question) == []
