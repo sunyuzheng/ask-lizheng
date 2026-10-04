@@ -48,6 +48,8 @@ data: {"status":"answered","summary":"…","sections":[],"sources":[],"followups
 
 上述事件只示意字段；实际 sources 附有日期、作者、归属等来源元数据，answered 至少有一个带来源编号的 section。初选材料可能在语义匹配后重新排序，编号以最后的 result 为准；provisional 的条目不能当成已经采用的引用。没有词法命中时可以省略 initial sources，语义失败则保留词法结果；缺少说话人身份的请求可能直接返回 clarify。checking 校验编号、输出格式和禁止生成的链接等，不是对事实正确性的保证。格式或引用失败后，repairing 状态表示正在进行唯一一次修复。
 
+v4 提示下 status 为 answered 的 result 另带 `share`（record_id、word、proof），提问者的页面用它在 lizheng.ai 生成分享页，见[记录协议](QUERY_RECORDS.md)「分享这条回答」。模型输出里的 `slug`（1到3个英文词）只用来组成分享地址，不出现在 result 中。
+
 sections 含 heading、body、source_ids，以及 source / synthesis / application 的 kind；分别表示材料转述、AI 综合与联系处境的应用。sources 含 id、title、url、date、excerpt、author、attribution_note、evidence_role、推荐理由及可用的 timecode / public_copy_url。链接和原文片段由服务器提供。
 
 partial 每次是当前完整段落的快照，调用者应替换前一个快照、按 ID 合并来源。服务器只显示已读到 answered 状态之后的完整段落，并逐段执行与最终回答相同的来源编号、目录条目、链接和引文检查；这不是对论断事实正确性的保证，也不代表整份回答已经通过校验。若模型不按提示先输出 status，可能没有提前段落，但最终回答仍会校验。repairing 时撤回暂存段落，result 时以最终回答与最终来源替换；停止、断流或超时时不把 partial 当成功，保留问题和可阅读的材料。不会转发或保存 provider 的原始 reasoning_content。

@@ -250,9 +250,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
                 "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
-                # v4: answers may be published with personal details removed; the situation is kept for the owner only.
+                # v4: answers may be published with personal details removed. The situation is not kept
+                # (since 2026-10-04); pages say so when context_archive is false.
                 "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v4", "answer_archive": True,
-                                "context_archive": True, "public_display": "deidentified"}}
+                                "context_archive": False, "public_display": "deidentified"}}
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
@@ -374,6 +375,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         record_error_code = "request_cancelled"
         record_duration_ms = None
         archive_confirmed = False
+        # The topic words the model gave the answer, for its share address only.
+        answer_slug = ""
 
         def release_slot():
             nonlocal slot_released
@@ -464,7 +467,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 raise
 
         async def events():
-            nonlocal generation_task, record_status, record_answer, record_error_code
+            nonlocal generation_task, record_status, record_answer, record_error_code, answer_slug
             async def settled_result(result):
                 nonlocal quota_finished, record_status, record_answer, record_error_code
                 if ops_record_id is not None:
@@ -482,7 +485,11 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 quota = await application.state.quota.finish(reservation, result["status"] == "answered")
                 quota_finished = True
                 record_status = result["status"]
-                return {**result, "quota": quota} if quota is not None else result
+                final = {**result, "quota": quota} if quota is not None else result
+                # An answer kept under the v4 notice may be shared by the person who asked.
+                if ops_record_id is not None and payload.query_log_notice == "v4" and result["status"] == "answered":
+                    final = {**final, "share": application.state.ops_records.share(ops_record_id, answer_slug)}
+                return final
             try:
                 if initial_quota is not None:
                     yield sse("quota", initial_quota) + STREAM_HEARTBEAT
@@ -554,6 +561,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         event = update.pop("_event", "progress")
                         yield sse(event, update) + (STREAM_HEARTBEAT if event == "partial" else "")
                     answer = await generation_task
+                    answer_slug = answer.slug
                     result = assemble_answer(answer, passages)
                 except ProviderFailure as exc:
                     result = sources_only(passages, FAILURES[exc.code], payload.intent)

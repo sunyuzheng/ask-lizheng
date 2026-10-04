@@ -577,3 +577,15 @@ def test_idle_work_sends_heartbeat_and_still_finishes_once(context_pack, monkeyp
             assert len(calls) == 1
             assert app.state.slots._value == 3
     asyncio.run(run())
+
+
+def test_the_address_word_is_asked_for_but_never_part_of_the_answer(index):
+    from server.answers import SYSTEM_PROMPT, strict_schema
+    schema = strict_schema()
+    assert "slug" in schema["required"] and schema["properties"]["slug"]["type"] == "string"
+    assert "slug" in SYSTEM_PROMPT and "不写人名、公司名、地名" in SYSTEM_PROMPT
+    passages = index.retrieve("怎样证明自己的能力")
+    answer = ModelAnswer.model_validate({**answer_for().model_dump(), "slug": "career-choice"})
+    assert "slug" not in assemble_answer(answer, passages)
+    # An answer without the word still parses; the share address then falls back to a plain word.
+    assert ModelAnswer.model_validate_json(answer_for().model_dump_json(exclude={"slug"})).slug == ""

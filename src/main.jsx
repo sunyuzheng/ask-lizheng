@@ -6,6 +6,7 @@ import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, pickDiscovery, readSeen, rememberSeen, sameQuestion, similarCount, voteDiscovery} from './discovery.js';
 import {IN_APP} from './in-app.js';
+import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
@@ -41,10 +42,12 @@ const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
 // v4: answers may be published with personal details removed; the situation is kept for analysis only.
 const V4_NOTICE = '问答会保存，去掉个人信息后可能公开，帮到有同样问题的人。请别写私密信息。';
-const V4_PARTS = [
+// The situation is not kept since 2026-10-04 (/api/meta says context_archive: false); before that it was kept for analysis.
+const SITUATION_NOTE = kept => (kept ? '这部分只用于分析，不会公开。' : '这里填的内容只用来生成这次回答，我们不保存。');
+const v4Parts = kept => [
   ['为什么保存', '很多问题是共性的，你问的往往也是别人想问的。我们会把常见的问题和回答整理出来，去掉个人信息后公开，比如「今天大家在问什么」；立正也会从中找选题写文章、做视频，并用它们改进回答。'],
   ['保存什么', '提问、完整回答和所用出处，以及匿名的使用统计。'],
-  ['你的隐私', '提问是匿名的：记录不关联邮箱、账号或IP，我们不知道是谁问的。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。公开前，我们会先用模型自动去掉可能认出你的信息；模型也可能漏，所以请别填写私密信息。「结合我的处境」里填的内容只用于分析，不会公开，用到这些内容的回答也不会公开。'],
+  ['你的隐私', `提问是匿名的：记录不关联邮箱、账号或IP，我们不知道是谁问的。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。公开前，我们会先用模型自动去掉可能认出你的信息；模型也可能漏，所以请别填写私密信息。${kept ? '「结合我的处境」里填的内容只用于分析，不会公开，用到这些内容的回答也不会公开。' : '「结合我的处境」里填的内容只用来生成这次回答，我们不保存。'}`],
   ['另外', '回答由AI根据立正公开的文章和视频整理，不是立正本人回复。提问和必要背景会发给Builder Space的模型服务处理。当前对话只在这个页面里，刷新就会清除。'],
 ];
 // v3, today's notice: answers are kept to improve them and only 立正 sees the records. Purpose first, in the same four parts.
@@ -85,6 +88,26 @@ const MESSAGES = {
   stopped: '已停止。问题还在，可以改一改再发。',
   copy: '浏览器没有允许复制，可以直接选中文字复制。',
   export: '这次没能生成文件，可以稍后再试。',
+};
+
+// 分享这条回答: an answered question gets its own public page (share-link.js); the long image and
+// the PDF are saved from the same place. Sharing may give back one of today's questions; that offer
+// never shows inside WeChat or the iPhone app.
+const SHARE = {
+  label: '分享这条回答',
+  bonusLabel: '分享这条回答，今天多问一次',
+  quota: '分享上面的回答，今天多问一次',
+  what: '分享页只显示这个问题和回答，不显示你的处境和其他提问。',
+  create: '复制分享链接',
+  creating: '正在生成链接…',
+  copied: '链接已复制。',
+  select: '没能自动复制，长按或选中链接就能复制。',
+  bonus: '今天多了一次提问机会。',
+  send: '发给朋友…',
+  copy: '复制链接',
+  copiedAgain: '已复制',
+  failed: '这次没能生成链接，可以稍后再试。',
+  wechat: '打开链接后，点右上角「···」就能发给朋友。',
 };
 
 // Visits and a few clicks are counted by Vercel Web Analytics, which lizheng.ai's hosts serve;
@@ -267,6 +290,28 @@ function AccountLine({account, waking, busy, step, foundingOpen, onToggleFoundin
   </p>;
 }
 
+// Sharing one answer: its own page (what that page shows, then its link and how to send it), a long
+// image or a PDF. `link` is false for an answer that cannot have a page; the image and PDF remain.
+function SharePanel({state, link, exporting, onCreate, onCopy, onSend, onExport}) {
+  const ready = link && state.phase === 'ready';
+  return <div className="share-panel">
+    {ready ? <>
+      <a className="share-url" href={state.url} target="_blank" rel="noopener">{shareDisplay(state.url)}<Ext/></a>
+      <p className="share-status" role="status">{state.copied ? SHARE.copied : SHARE.select}{state.bonus === 'granted' && <b>{SHARE.bonus}</b>}</p>
+    </> : link && <p>{SHARE.what}</p>}
+    {state.error && <p className="share-error" role="alert">{state.error}</p>}
+    <div className="share-actions">
+      {ready ? <>
+        {typeof navigator.share === 'function' && <button type="button" className="pill-button" onClick={onSend}>{SHARE.send}</button>}
+        <button type="button" className="pill-button" onClick={onCopy}>{state.copied ? SHARE.copiedAgain : SHARE.copy}</button>
+      </> : link && <button type="button" className="pill-button" disabled={state.phase === 'working'} onClick={onCreate}>{state.phase === 'working' ? SHARE.creating : SHARE.create}</button>}
+      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('png')}>{exporting === 'png' ? '正在生成…' : '保存图片'}</button>
+      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
+    </div>
+    {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
+  </div>;
+}
+
 // What a Founding Member is and how to become one, opened from the count line.
 function FoundingInfo({account, busy, step, onLogin}) {
   return <div className="founding-info" id="founding-info">
@@ -351,7 +396,7 @@ function AppConsent({onAgree, onCancel}) {
   </div>;
 }
 
-function About({close, meta, account, focusInput, publicArchive}) {
+function About({close, meta, account, focusInput, publicArchive, contextKept}) {
   const ref = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -379,7 +424,7 @@ function About({close, meta, account, focusInput, publicArchive}) {
       <div className="about-row"><h3>把答案带回现实</h3><p>AI可以整理材料、提出假设，但你的具体情况未必在材料里。建议是否适用，要靠你的行动和反馈来判断。也可以直接追问：这个判断成立的条件是什么？</p></div>
       <div className="about-row"><h3>随时回到出处</h3><p>文章保留日期，视频尽量链接到具体时间点。嘉宾的观点归嘉宾，AI的整理和推断也会标出来。AI可能读错或漏掉条件，重要的判断请打开原文核对；材料里没有的内容，它会说明材料不足。</p></div>
       {meta?.ops_logging?.enabled ? <div className="about-row" id="about-input"><h3>你的提问会怎么用</h3>
-        {(publicArchive ? V4_PARTS : V3_PARTS).map(([title, text]) => <p key={title}><b>{title}</b>　{text}</p>)}
+        {(publicArchive ? v4Parts(contextKept) : V3_PARTS).map(([title, text]) => <p key={title}><b>{title}</b>　{text}</p>)}
       </div> : <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
         <li>提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。</li>
         <li>不保存补充背景和对话历史原文、模型内部推理；提问记录不关联邮箱、账号或IP。完整回答可能概括你提供的处境。</li>
@@ -415,6 +460,8 @@ function App() {
   const [selected, setSelected] = useState('');
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
+  // Each answer's share, by turn: whether its panel is open, and how far it got.
+  const [shares, setShares] = useState({});
   const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
@@ -465,11 +512,12 @@ function App() {
   const metaTimers = useRef([]);
   // The page shows v4's notice only once the service says it keeps to v4.
   const knownNotice = ops => ops.answer_archive === true && (ops.notice === 'v3'
-    || (ops.notice === 'v4' && ops.retention === 'until_deleted' && ops.context_archive === true && ops.public_display === 'deidentified'));
+    || (ops.notice === 'v4' && ops.retention === 'until_deleted' && typeof ops.context_archive === 'boolean' && ops.public_display === 'deidentified'));
   const storageConfirmed = value => value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean'
     && (!value.ops_logging.enabled || knownNotice(value.ops_logging));
   const storageReady = storageConfirmed(meta) && !meta?.settings_error;
   const publicArchive = storageReady && meta.ops_logging.enabled && meta.ops_logging.notice === 'v4';
+  const contextKept = publicArchive && meta.ops_logging.context_archive === true;
   // Asks for up to a minute, 20 seconds a try, then offers 重试.
   const refreshMeta = () => {
     metadataAbort.current?.abort();
@@ -843,6 +891,44 @@ function App() {
     finally { setExporting(''); }
   }
 
+  // 分享这条回答. Sharing may give back one of today's questions, once a day, after one was used.
+  const bonusOffer = !IN_APP && !IN_WECHAT && !!account?.enabled && !account.unavailable && !account.founding
+    && account.share_bonus === true && (account.remaining ?? 3) < 3;
+  const setShare = (id, patch) => setShares(prev => ({...prev, [id]: {...prev[id], ...patch}}));
+  const toggleShare = m => {
+    const open = !shares[m.id]?.open;
+    setShare(m.id, {open, ...(!shares[m.id] ? {phase: 'confirm', error: ''} : {})});
+    if (open) track('Ask Share', {surface: SURFACE, action: 'open'});
+  };
+  const openShare = m => {
+    setShare(m.id, {open: true, ...(shares[m.id]?.phase === 'ready' ? {} : {phase: 'confirm', error: ''})});
+    requestAnimationFrame(() => document.getElementById(`share-${m.id}`)?.scrollIntoView({behavior: scrollBehavior(), block: 'center'}));
+  };
+  async function createShare(m) {
+    setShare(m.id, {phase: 'working', error: ''});
+    const link = createShareLink(m.result.share, {surface: SURFACE, bonus: bonusOffer});
+    const copiedLink = copyWhenReady(link.then(value => value.url));
+    try {
+      const value = await link;
+      if (value.bonus === 'granted' || value.bonus === 'claimed')
+        setAccount(prev => (prev ? {...prev, share_bonus: false, ...(Number.isFinite(value.remaining) ? {remaining: value.remaining} : {})} : prev));
+      setShare(m.id, {phase: 'ready', url: value.url, bonus: value.bonus, copied: await copiedLink});
+      track('Ask Share', {surface: SURFACE, action: value.bonus === 'granted' ? 'bonus' : 'link'});
+    } catch {
+      setShare(m.id, {phase: 'confirm', error: SHARE.failed});
+    }
+  }
+  async function copyShare(m) {
+    const done = await copyWhenReady(shares[m.id].url);
+    setShare(m.id, {copied: done});
+  }
+  async function sendShare(m) {
+    track('Ask Share', {surface: SURFACE, action: 'send'});
+    try { await navigator.share({title: m.question, url: shares[m.id].url}); } catch { /* Closed, or not allowed here. */ }
+  }
+  // The answer above that the count line offers to share once the day's questions are used.
+  const shareable = bonusOffer ? messages.filter(m => m.result?.share).at(-1) : undefined;
+
   async function copy(result) {
     const text = [
       result.summary,
@@ -882,7 +968,8 @@ function App() {
         <button type="button" className="text-button" onClick={() => setEditingSituation(true)}>{filled.length ? '修改' : '填写'}</button>
       </p>}
       {showFields && <div className="background">
-        <p>说清处境，比把问题包装好更有用。三项都可以空着，只写你愿意分享的部分。{publicArchive && '这部分只用于分析，不会公开。'}</p>
+        <p>说清处境，比把问题包装好更有用。三项都可以空着，只写你愿意分享的部分。</p>
+        {publicArchive && <p className="situation-note">{SITUATION_NOTE(contextKept)}</p>}
         {BACKGROUND.map(field => <label key={field.key}>
           {field.label}
           {field.multiline
@@ -915,6 +1002,7 @@ function App() {
       <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : metaWaking ? '问答服务正在唤醒，通常十几秒，可以先写问题。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
       <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: SURFACE}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
+    {outOfQuota && shareable && <p className="share-nudge"><button type="button" className="text-button" onClick={() => openShare(shareable)}>{SHARE.quota}</button></p>}
     {!IN_APP && foundingOpen && account?.enabled && !account.unavailable && !account.founding && <FoundingInfo account={account} busy={busy} step={loginStep} onLogin={login}/>}
     {error && messages.at(-1)?.error !== error && <p className="form-error" role="alert">{error}</p>}
     {meta?.settings_error && <p className="form-error">保存设置还未确认，暂时不能发送。<button type="button" className="text-button" onClick={refreshMeta}>重试</button></p>}
@@ -1016,13 +1104,13 @@ function App() {
                     <summary>回到{sources.length}份原文<Chev/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
-                  <div className="answer-actions">
+                  <div className="answer-actions" id={`share-${m.id}`}>
+                    {m.result.status === 'answered' && <button type="button" className="ghost-button share-button" aria-expanded={!!shares[m.id]?.open} onClick={() => toggleShare(m)}>{bonusOffer && m.result.share ? SHARE.bonusLabel : SHARE.label}</button>}
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
-                    {m.result.status === 'answered' && <>
-                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('png', m)}>{exporting === `${m.id}-png` ? '正在生成…' : '保存图片'}</button>
-                    <button type="button" className="ghost-button" disabled={!!exporting} onClick={() => exportTurn('pdf', m)}>{exporting === `${m.id}-pdf` ? '正在生成…' : '下载PDF'}</button>
-                    </>}
                   </div>
+                  {m.result.status === 'answered' && shares[m.id]?.open && <SharePanel state={shares[m.id]} link={!!m.result.share}
+                    exporting={exporting === `${m.id}-png` ? 'png' : exporting === `${m.id}-pdf` ? 'pdf' : exporting ? 'other' : ''}
+                    onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onExport={kind => exportTurn(kind, m)}/>}
                   {last && m.result.followups?.length > 0 && <div className="followups">
                     <p>可以接着问<span>点一下放进输入框，改好再发</span></p>
                     {m.result.followups.map(item => <button type="button" key={item} onClick={() => prefill(item)}>{item}</button>)}
@@ -1039,7 +1127,7 @@ function App() {
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
-                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
+                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding || account?.remaining > 0) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
               </article>;
             })}
           </section>
@@ -1055,7 +1143,7 @@ function App() {
         </aside>}
       </div>}
     </main>
-    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive}/>}
+    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept}/>}
     {asking && <AppConsent onCancel={() => { setAsking(false); focusInput(); }} onAgree={() => { consented.current = true; saveConsent(); setAsking(false); void submit(); }}/>}
   </div>;
 }

@@ -174,26 +174,6 @@ def test_actual_member_solo_talks_back_their_card(actual_architecture):
     assert docs and all(doc.speaker_classification == "solo-yuzheng" for doc in docs)
 
 
-@pytest.mark.parametrize("question,expected", [
-    ("我们日活一直不涨，应该拉新还是做留存？", "growth-accounting-first"),
-    ("怎么判断产品有没有找到PMF？", "retention-definition-matters"),
-    ("公司要不要建A/B实验平台？", "experiments-value-from-surprises"),
-    ("我的课转化率很低，漏斗应该怎么优化？", "bigger-funnel-first"),
-])
-def test_actual_growth_topics_route_to_his_own_talks(actual_architecture, question, expected):
-    selected = actual_architecture.route(question)
-    assert selected and selected[0] == expected
-    docs = [actual_architecture.documents[row["docindex"]] for row in actual_architecture.linked_candidates(selected[:1])]
-    # The book's and blog's Chinese editions are AI rewrites; only his own transcripts back these cards.
-    assert docs and all(doc.source_type == "video-transcript" for doc in docs)
-
-
-def test_actual_chinese_editions_are_retrievable_reading_aids(actual_architecture):
-    editions = [doc for doc in actual_architecture.documents if doc.source_type in {"book-chapter", "blog-post"}]
-    assert {doc.source_type for doc in editions} == {"book-chapter", "blog-post"}
-    assert all(doc.evidence_role == "translation" and doc.yuzheng_stance_weight == "verify-original" for doc in editions)
-
-
 @pytest.mark.parametrize("question", ["AI是什么？", "我有几个项目。", "今年世界杯谁获胜？", "哪里有好吃的火锅？"])
 def test_actual_generic_and_unsupported_topics_do_not_select_cards(actual_architecture, question):
     assert actual_architecture.route(question) == []

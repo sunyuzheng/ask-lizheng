@@ -52,6 +52,8 @@ class ModelAnswer(BaseModel):
     clarifying_questions: list[str] = Field(max_length=2)
     limitations: str = Field(default="", max_length=900)
     source_reasons: list[SourceReason] = Field(default_factory=list, max_length=8)
+    # The word a shared answer's address carries (ask.lizheng.ai/s/<date>/<slug>); never shown as text.
+    slug: str = ""
 
 
 SYSTEM_PROMPT = """你是基于公开 lizheng-open-context 材料的 AI 阅读与应用助手。用户不是在和立正本人实时对话。
@@ -86,7 +88,7 @@ intent=find：先给具体阅读起点，选择最有用的 3 至 5 份来源，
 - 观点直接说，出处用 [S1] 标在句末。不用“材料里”“资料里”“材料把”“材料建议”“材料给的”带出观点，全篇提到“材料”最多一次，用于说明材料的缺口或条件。写“立正认为”“立正主张”“他提到”只限 content_origin 为 yuzheng-published-text 或 yuzheng-spoken-source 的来源；多人节目（speaker_classification 为 mixed-speakers 或 mixed-or-unresolved）只在片段里明确是谁说的时才写那个人，否则直接陈述观点并标出处，不归到任何人名下；嘉宾、社区成员的观点写明是谁；AI 翻译或 AI 综合不能写成立正的观点。
 - 用读者问题里的词和日常说法；必要的术语第一次出现时用一句话解释。材料里的例子只取能说明问题的部分，一两句带过。
 - limitations 只在材料缺少关键内容、或结论有明确的适用条件时写，一到两句、不超过80字，否则为空字符串；提到具体来源时说是哪篇文章或哪期视频，不写 S 编号。不写“材料只提供框架，不能替你判断”这类通用免责：页面已说明回答由 AI 整理。
-其他：普通概念或个人困惑不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；“做过几个项目”不等于要求生产系统分层，不引入 L1-L6、部署或工程验收，除非用户明确问这些。需要行动建议时，给一个用来检验当前判断的小尝试，解释观察什么反馈；不要自行拼成多步骤压力测试、规定 5/10/60 分钟或精确间隔。资料中的实验时间也不能自动变成给读者的日程要求。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。只返回符合 JSON schema 的对象。"""
+其他：普通概念或个人困惑不为了多用材料添加工程分层、评测系统或大规模技术流程。用户问学习，先解释学习；“做过几个项目”不等于要求生产系统分层，不引入 L1-L6、部署或工程验收，除非用户明确问这些。需要行动建议时，给一个用来检验当前判断的小尝试，解释观察什么反馈；不要自行拼成多步骤压力测试、规定 5/10/60 分钟或精确间隔。资料中的实验时间也不能自动变成给读者的日程要求。选择 2 至 4 个实质帮助用户的来源，在 source_reasons 中用 source_id 和 reason 说明每篇具体适合核对哪部分理解，不能重复检索关键词；没有合适理由时返回空列表。followups 最多 3 个与当前问题有实际联系的进一步问题；不能包含虚构前提。unsupported 的 clarifying_questions 为空。slug 用 1 至 3 个小写英文单词概括问题的话题，用连字符连接，如 career-choice、fake-work、ai-learning；只写话题，不写人名、公司名、地名或其他能认出提问者的信息。只返回符合 JSON schema 的对象。"""
 
 
 class ProviderFailure(Exception):
@@ -257,7 +259,7 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
     }
     payload.update(model_options(model))
     if payload["stream"]:
-        payload["messages"][0]["content"] += "\n为逐段展示，JSON 顶层字段按 status、summary、sections、followups、clarifying_questions、limitations、source_reasons 的顺序输出；先确定 status，再写 sections。"
+        payload["messages"][0]["content"] += "\n为逐段展示，JSON 顶层字段按 status、summary、sections、followups、clarifying_questions、limitations、source_reasons、slug 的顺序输出；先确定 status，再写 sections。"
     if model in {"deepseek-v4-pro", "deepseek-v4-flash"}:
         # Builder's live endpoint rejects json_schema for this model. Supply
         # the same contract in the prompt and retain all server-side checks.
@@ -399,7 +401,7 @@ def assemble_answer(answer: ModelAnswer, passages: list[Passage]) -> dict:
     selected = [source_with_reason(passage) for passage in passages if passage.source["id"] in used]
     if not selected and answer.status != "unsupported":
         selected = [source_with_reason(passage) for passage in passages[:5]]
-    return {**answer.model_dump(exclude={"source_reasons"}), "sources": selected}
+    return {**answer.model_dump(exclude={"source_reasons", "slug"}), "sources": selected}
 
 
 def sources_only(passages: list[Passage], reason: str = "", intent: str = "understand") -> dict:

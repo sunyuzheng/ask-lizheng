@@ -137,7 +137,7 @@ def test_durable_ack_before_model_and_exact_finish_no_legacy_record(context_pack
     app = create_app(context_pack, quota_store=store, query_record_transport=httpx.MockTransport(transport))
     with TestClient(app) as client:
         assert client.get("/api/meta").json()["ops_logging"] == {"enabled": True, "retention": "until_deleted", "notice": "v4", "answer_archive": True,
-            "context_archive": True, "public_display": "deidentified"}
+            "context_archive": False, "public_display": "deidentified"}
         response = post(client, payload(context="synthetic private background", history=[{"question": "synthetic history", "summary": "old summary"}]), **identity())
         assert events(response)[-1][1]["status"] == "answered" and app.state.slots._value == 3
         assert [r["event"] for r in stored] == ["start", "finish"] and stored[1]["status"] == "answered"
@@ -429,10 +429,11 @@ def test_persistent_anyio_cancel_refunds_and_finishes(context_pack, enabled, ops
 
 @pytest.mark.parametrize("request_updates,background,context", [
     ({}, "0", ""),
-    ({"context": "  目前的情况与限制：synthetic处境  "}, "1", "目前的情况与限制：synthetic处境"),
+    # The situation reaches the model for this answer only; since 2026-10-04 it is not kept.
+    ({"context": "  目前的情况与限制：synthetic处境  "}, "1", ""),
     ({"history": [{"question": "synthetic earlier", "summary": "synthetic summary"}]}, "1", ""),
 ])
-def test_v4_start_marks_notice_background_and_keeps_situation_for_owner(context_pack, enabled, ops, monkeypatch, request_updates, background, context):
+def test_v4_start_marks_notice_and_background_but_keeps_no_situation(context_pack, enabled, ops, monkeypatch, request_updates, background, context):
     stored = []
     async def generate(*args, **kwargs): return answer_for()
     monkeypatch.setattr("server.app.generate_answer", generate)
@@ -444,8 +445,9 @@ def test_v4_start_marks_notice_background_and_keeps_situation_for_owner(context_
     start, finish = stored
     assert (start["notice_version"], start["has_background"], start["context"]) == ("v4", background, context)
     assert set(finish) == {"v", "event", "record_id", "status", "duration_ms", "answer", "error_code"}
-    # History is never stored, only counted as background.
+    # Neither history nor the situation is stored, only counted as background.
     assert "synthetic earlier" not in json.dumps(stored, ensure_ascii=False)
+    assert "synthetic处境" not in json.dumps(stored, ensure_ascii=False)
 
 
 def test_v3_start_keeps_its_original_shape(context_pack, enabled, ops, monkeypatch):
@@ -462,3 +464,45 @@ def test_v3_start_keeps_its_original_shape(context_pack, enabled, ops, monkeypat
 
 def test_v4_requires_a_conversation():
     with pytest.raises(ValueError): AskRequest(**payload(query_log_notice="v4", conversation_id=None))
+
+
+@pytest.mark.parametrize("notice,status,shared", [
+    ("v4", "answered", True), ("v4", "clarify", False), ("v4", "sources-only", False), ("v3", "answered", False),
+])
+def test_only_answered_v4_results_carry_a_share_proof(context_pack, enabled, ops, monkeypatch, notice, status, shared):
+    from server.answers import ProviderFailure
+    stored = []
+    async def generate(*args, **kwargs):
+        if status == "sources-only": raise ProviderFailure("provider_timeout")
+        answer = answer_for()
+        answer.slug = "Career Choice"
+        if status != "answered":
+            answer.status = status; answer.sections = []
+        return answer
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    def transport(request): stored.append(json.loads(request.content)); return httpx.Response(200, json={"ok": True})
+    app = create_app(context_pack, quota_store=MemoryQuotaStore(), query_record_transport=httpx.MockTransport(transport))
+    with TestClient(app) as client:
+        final = events(post(client, payload(query_log_notice=notice, intent="understand"), **identity()))[-1][1]
+    assert final["status"] == status and "slug" not in final
+    # The archive keeps the answer only; the share proof goes to the page that asked.
+    assert "share" not in stored[-1]["answer"] and stored[-1]["answer"] == {k: v for k, v in final.items() if k not in {"quota", "share"}}
+    if not shared:
+        assert "share" not in final
+        return
+    record_id = stored[0]["record_id"]
+    key = derived_secret(TOKEN, QUOTA_STORE_PURPOSE).encode()
+    assert final["share"] == {"record_id": record_id, "word": "career-choice",
+        "proof": hmac.new(key, f"ask-share:v1:{record_id}:career-choice".encode(), hashlib.sha256).hexdigest()}
+    # Bound to this record, its word and its own purpose: not the archive writer's signature.
+    assert final["share"]["proof"] != hmac.new(key, f"ask-share:v1:{record_id}:question".encode(), hashlib.sha256).hexdigest()
+
+
+@pytest.mark.parametrize("slug,word", [
+    ("career-choice", "career-choice"), ("Career Choice!", "career-choice"), ("  fake_work  ", "fake-work"),
+    ("ai-learning-for-new-grads", "ai-learning-for-new"), ("职业选择", "question"), ("", "question"),
+    ("a" * 50, "question"), ("transfer-" + "x" * 35, "transfer"),
+])
+def test_share_word_is_a_short_lowercase_english_address_word(slug, word):
+    from server.ops_records import share_word
+    assert share_word(slug) == word

@@ -167,8 +167,6 @@ def load_documents() -> list[Document]:
         "corpus/english-community/*.md",
         "corpus/english-translations/*.md",
         "corpus/course-lessons/*.md",
-        "corpus/book-chapters/*.md",
-        "corpus/blog-posts/*.md",
     ):
         for path in sorted(ROOT.glob(pattern)):
             parsed = parse_markdown(path)
@@ -284,10 +282,6 @@ def type_matches(doc: Document, requested: str) -> bool:
         return doc.source_type in {"context", "book-framework"}
     if requested == "course":
         return doc.source_type == "course-lesson"
-    if requested == "book":
-        return doc.source_type == "book-chapter"
-    if requested == "blog":
-        return doc.source_type == "blog-post"
     return doc.source_type == requested
 
 
@@ -304,7 +298,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top", type=int, default=8)
     parser.add_argument(
         "--type",
-        choices=["all", "context", "knowledge-bank", "community", "comment", "video", "english", "course", "book", "blog"],
+        choices=["all", "context", "knowledge-bank", "community", "comment", "video", "english", "course"],
         default="all",
     )
     parser.add_argument(

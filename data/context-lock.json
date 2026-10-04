@@ -1,15 +1,13 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
-  "snapshot_at": "2026-10-04",
-  "release_manifest_sha256": "0a547f64dc80f5abfa7a25b2b516e9dcedcbc96f5a4a34288e1ff3a6f90a16cb",
-  "files": 940,
+  "snapshot_at": "2026-10-03",
+  "release_manifest_sha256": "23f8a5d515b32de0546681096091f5305afbdcaac9869ae59f6db6a2ef0474cc",
+  "files": 901,
   "counts": {
     "community_posts_catalog": 252,
     "community_posts_full_text": 252,
     "community_comments_included": 10,
     "member_course_lessons": 23,
-    "book_chapters_zh": 12,
-    "blog_posts_zh": 19,
     "community_comments_reviewed": 2519,
     "knowledge_bank_catalog": 169,
     "knowledge_bank_full_text": 36,
@@ -26,11 +24,11 @@
     "english_video_translations": 77
   },
   "licenses": {
-    "CC-BY-4.0": 564,
-    "CC0-1.0": 29,
-    "LicenseRef-Lizheng-Reference-Use-1.0": 269,
+    "CC-BY-4.0": 563,
+    "CC0-1.0": 24,
+    "LicenseRef-Lizheng-Reference-Use-1.0": 238,
     "LicenseRef-Original-Rights-Retained": 39,
-    "MIT": 32
+    "MIT": 30
   },
-  "source_commit": "3d3ac32a1f548e99e624cc8358a087e1681837ba"
+  "source_commit": "7420ce73cb0c90b84741004647e640d2402ea5a6"
 }

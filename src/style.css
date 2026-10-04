@@ -654,6 +654,12 @@ main {
   color: var(--muted);
 }
 
+/* What happens to the situation, said where it is written: in ink, not small print. */
+.background .situation-note {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .background label {
   display: grid;
   gap: 6px;
@@ -1714,6 +1720,81 @@ main {
   flex-wrap: wrap;
   gap: 4px;
   margin: 24px 0 0 -10px;
+  scroll-margin-top: calc(var(--header-h) + 24px);
+}
+
+/* 分享这条回答: the one action in green, since it is the one to take; its panel sits on a hairline. */
+.share-button {
+  color: var(--green-text);
+  font-weight: 600;
+}
+
+.share-button[aria-expanded="true"] {
+  background: var(--paper-2);
+}
+
+.share-panel {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.share-url {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: var(--green-text);
+  font-variant-numeric: tabular-nums;
+  text-underline-offset: 3px;
+}
+
+.share-url:hover {
+  text-decoration: underline;
+}
+
+.share-status {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.share-status b {
+  margin-left: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+
+.share-error {
+  margin-top: 6px;
+  color: var(--red);
+}
+
+.share-hint {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.share-nudge {
+  margin-top: 4px;
+  padding: 0 4px;
+  font-size: 13.5px;
+}
+
+.share-nudge .text-button {
+  margin-left: 0;
+  font-weight: 600;
 }
 
 .followups {

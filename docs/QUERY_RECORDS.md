@@ -10,7 +10,7 @@
 - 「结合我的处境」原文随问答存档，只供所有者分析，永不公开；带处境的问答（intent为apply或带背景）一律不公开。
 - Ops后台拆到独立仓库（另一会话负责），两边按下面的约定各自上线。
 - 展示（2026-10-02）：主页和本页面首页的「别人在问什么」读Ops的公开发现接口，有已发布问答时替代示例问题。
-- 写入（2026-10-02实现）：`/api/meta`宣布v4；v4请求的开始记录多带`notice_version: "v4"`、`has_background`（填了处境或有之前的对话轮次即为"1"）和处境原文（只给所有者，永不公开）。v3请求的记录形状不变。个人站writer接受两种形状并写入记录HASH。
+- 写入（2026-10-02实现）：`/api/meta`宣布v4；v4请求的开始记录多带`notice_version: "v4"`、`has_background`（填了处境或有之前的对话轮次即为"1"）和处境原文（只给所有者，永不公开）。v3请求的记录形状不变。个人站writer接受两种形状并写入记录HASH。（2026-10-04起处境不再保存，见上面「分享这条回答，处境不再保存」。）
 - 自动发布（2026-10-02用户决定）：Ops每15分钟一轮（10-03用户改回；10-02曾改成每天一次）把新的、可公开的v4提问（无处境、首轮、非apply、已回答）发到本服务`/api/curate`，模型去掉个人信息、判断是否值得展示、归到主题；通过的直接发布，立正在Ops后台可撤下。签名密钥由Builder令牌按用途`ask-lizheng:curate:v1`派生，Ops只持有派生值。v1/v3记录永不公开，即使去掉个人信息。
 - 主题首批（2026-10-02用户同意）：之前的提问不公开，但可以用共性主题起步。Ops把首轮、非apply的问题文本发到`/api/themes`一次，模型只返回不超过30个、各被问到至少两次的主题，每个用自己的话写成通用问题（服务端丢掉与原问题有12字以上相同片段的），`/api/seed-answer`照常回答后作为主题种子发布，之后的v4提问可以并入这些主题。
 
@@ -18,6 +18,14 @@
 - 前端（个人站主页与本仓库页面）已支持v4，但只在`/api/meta`宣布`ops_logging: {enabled: true, retention: "until_deleted", answer_archive: true, notice: "v4", context_archive: true, public_display: "deidentified"}`时显示v4提示，并在请求里带`query_log_notice: "v4"`、`conversation_id`和照常的`context`。字段不全或notice是未知版本时：主页退回v1提示与v1标记，本页面暂停发送并提示保存设置尚未确认。
 - 个人站转发层对v4与v3一样签入匿名visitor和entrypoint。
 - 后端（Builder与Ops存储）须先能接受`v4`（Builder请求模型目前只收v1/v3）、逐条保存提示版本和处境原文，再让meta宣布v4；宣布之前页面一直显示v3。
+
+## 分享这条回答，处境不再保存（2026-10-04）
+
+- v4提示下、status为answered的result多带 `share: {record_id, word, proof}`：record_id 是这条存档记录的UUID；word 是模型给的地址词（回答JSON的 `slug`，服务端整理成1到4个小写英文词，拿不到时为 question）；proof 是 `HMAC-SHA256(quota-store派生密钥, "ask-share:v1:<record_id>:<word>")` 的hex。存档的回答里没有 share 和 slug。
+- 只有收到这个result的页面拿得到proof。lizheng.ai 的 `/api/ask-lizheng/share` 验证后在记录HASH里写 `share_slug` 和 `shared_at`；分享页 `ask.lizheng.ai/s/<记录的day>/<share_slug>` 每次实时读记录，显示问题和回答，不显示处境。v1/v3和不完整的回答不能分享。
+- 用户定的原则：能分享的就给搜索引擎；分享只是功能，不是同意（提问时已同意保存和使用）。所以分享页都公开、都可收录，链接不能由提问者撤回；记录被删除时页面才失效。
+- 「结合我的处境」不再保存：v4开始记录照旧带 `has_background`，`context` 一律为空字符串（个人站writer本来就接受空处境）；`/api/meta` 的 `ops_logging.context_archive` 为 false。页面（主页和本仓库）对v4同时接受 true 和 false，false 时在处境输入处写明「这里填的内容只用来生成这次回答，我们不保存。」。之前已存的处境照旧只给所有者看。
+- 接口、存储和奖励见个人站仓库 docs/ask-lizheng.md「分享这条回答」。
 
 ## v3私人问答归档候选
 
