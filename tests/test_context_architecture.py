@@ -147,6 +147,25 @@ def test_actual_eight_topics_and_paraphrase_route(actual_architecture, question,
     assert actual_architecture.linked_candidates(selected)
 
 
+@pytest.mark.parametrize("question,expected", [
+    ("我在纠结要不要跳槽，两个offer一个大厂一个创业公司", "zbs-career-layers"),
+    ("怎么才能升职加薪？感觉自己被低估了", "zbs-personal-value"),
+    ("如何找到适合写在简历里的项目", "zbs-personal-value"),
+    ("每天工作很多，但成长很慢，都是杂事", "zbs-high-value-work"),
+    ("老板不公平，我不是嫡系所以没机会", "zbs-thinking-traps"),
+    ("想开始理财投资，怕当韭菜", "zbs-money-and-investing"),
+    ("不知道选什么方向，感觉很迷茫", "zbs-craft-persistence"),
+    ("想做副业但不好意思开口要钱", "zbs-make-money-skill"),
+    ("怎么和老板沟通才能让他看到我的价值", "zbs-communication"),
+])
+def test_actual_course_topics_route_to_lesson_texts(actual_architecture, question, expected):
+    selected = actual_architecture.route(question)
+    assert selected and selected[0] == expected
+    lessons = [row for row in actual_architecture.linked_candidates(selected[:1])
+               if actual_architecture.documents[row["docindex"]].source_type == "course-lesson"]
+    assert lessons and max(row["weight"] for row in lessons) == 1.0  # a lesson is the basis
+
+
 @pytest.mark.parametrize("question", ["AI是什么？", "我有几个项目。", "今年世界杯谁获胜？", "哪里有好吃的火锅？"])
 def test_actual_generic_and_unsupported_topics_do_not_select_cards(actual_architecture, question):
     assert actual_architecture.route(question) == []
