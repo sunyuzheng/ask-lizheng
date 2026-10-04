@@ -50,7 +50,7 @@ event: result
 data: {"status":"answered","summary":"…","sections":[],"sources":[],"followups":[],"clarifying_questions":[],"limitations":"…"}
 ```
 
-上述事件只示意字段；实际 sources 附有日期、作者、归属等来源元数据，answered 至少有一个带来源编号的 section。初选材料可能在语义匹配后重新排序，编号以最后的 result 为准；provisional 的条目不能当成已经采用的引用。没有词法命中时可以省略 initial sources，语义失败则保留词法结果；缺少说话人身份的请求可能直接返回 clarify。checking 校验编号、输出格式和禁止生成的链接等，不是对事实正确性的保证。格式或引用失败后，repairing 状态表示正在进行唯一一次修复。
+上述事件只示意字段；实际 sources 附有日期、作者、归属等来源元数据，answered 至少有一个带来源编号的 section。初选材料可能在语义匹配后重新排序，编号以最后的 result 为准；provisional 的条目不能当成已经采用的引用。result 的出处按读者读到的先后编为1到n，正文角标随之改写，和保存图片、PDF的编号一致；partial 仍用候选材料的编号，好与已显示的候选对上。没有词法命中时可以省略 initial sources，语义失败则保留词法结果；缺少说话人身份的请求可能直接返回 clarify。checking 校验编号、输出格式和禁止生成的链接等，不是对事实正确性的保证。格式或引用失败后，repairing 状态表示正在进行唯一一次修复。读者只看得到角标数字，看不到 S 编号：编号只能以 `[S1]` 出现在 summary、正文和 limitations 里；把编号当名字写进句子（「S1 说得更直接」）或写进标题、追问、推荐理由的，也请模型改写这一次，改写后仍有或来不及改写的，服务器换成出处标题（能显示角标的地方另加角标）。只为措辞请求的改写（这条和点名立正那条）失败时，返回第一份回答，不当作失败。
 
 v4 提示下 status 为 answered 的 result 另带 `share`（record_id、word、proof），提问者的页面用它在 lizheng.ai 生成分享页，见[记录协议](QUERY_RECORDS.md)「分享这条回答」。模型输出里的 `slug`（1到3个英文词）只用来组成分享地址，不出现在 result 中。
 

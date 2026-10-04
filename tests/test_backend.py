@@ -10,7 +10,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from server.answers import DEFAULT_MODEL, ModelAnswer, assemble_answer, misattributed, validate_answer
+from server.answers import (DEFAULT_MODEL, ModelAnswer, answer_fields, assemble_answer, misattributed, numbers_as_names, short_title,
+                            unlabel, validate_answer)
 from server.app import create_app
 from server.retrieval import ContextIndex
 
@@ -440,6 +441,124 @@ def test_citations_stay_with_their_sentence(index):
     sid = passages[0].source["id"]
     answer = answer_for(sid, f"先比较能力与作品。[{sid}] 再找一个差距。[{sid}][{sid}]")
     assert assemble_answer(answer, passages)["sections"][0]["body"] == f"先比较能力与作品[{sid}]。再找一个差距[{sid}][{sid}]。"
+    # At a paragraph's end the stop stays in that paragraph.
+    answer = answer_for(sid, f"先比较能力与作品。[{sid}]\n\n再找一个差距。")
+    assert assemble_answer(answer, passages)["sections"][0]["body"] == f"先比较能力与作品[{sid}]。\n\n再找一个差距。"
+
+
+def test_source_numbers_touching_chinese_are_checked(index):
+    passages = index.retrieve("职业选择如何积累能力与作品")
+    # \b sees no edge between 与 and S, so these once passed: an unknown number, and one the section does not cite.
+    with pytest.raises(ValueError):
+        validate_answer(answer_for(body="这一点可与S9相互印证。"), passages)
+    with pytest.raises(ValueError):
+        validate_answer(answer_for(body="这一点和S2说的一致。"), passages)
+
+
+def test_numbers_written_as_names_are_found(index):
+    passages = index.retrieve("职业选择如何积累能力与作品")
+    answer = ModelAnswer.model_validate({**answer_for(body="先比较能力与作品[S1]。S1 说得更直接——作品是证据。").model_dump(),
+                                         "followups": ["S2 讲的方法怎么用？"], "source_reasons": [{"source_id": "S1", "reason": "可与S2相互印证。"}]})
+    validate_answer(answer, passages)
+    assert numbers_as_names(answer_fields(answer)) == ["S1 说得更直接——作品是证据。", "S2 讲的方法怎么用？", "可与S2相互印证。"]
+    # A mark is how readers see a source, except where marks do not show, such as a heading.
+    assert numbers_as_names([("先比较能力与作品[S1]。", True)]) == []
+    assert numbers_as_names([("先看能力证据[S1]", False)]) == ["先看能力证据[S1]"]
+
+
+def test_a_number_written_as_a_name_gets_one_rewrite(context_pack, monkeypatch):
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    attempts = []
+    def provider(request):
+        body = json.loads(request.content)
+        attempts.append(body)
+        if len(attempts) == 1:
+            answer = ModelAnswer.model_validate({**answer_for(body="S1 说得更直接：作品是能力的证据。").model_dump(),
+                                                 "source_reasons": [{"source_id": "S1", "reason": "可与S2相互印证。"}]})
+        else:
+            assert "当成名字" in body["messages"][-1]["content"] and "「S1 说得更直接：作品是能力的证据。」" in body["messages"][-1]["content"]
+            answer = answer_for(body="作品是能力的证据[S1]。")
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
+    assert result["status"] == "answered" and result["sections"][0]["body"] == "作品是能力的证据[S1]。"
+    assert len(attempts) == 2
+
+
+@pytest.mark.parametrize("failure", ["invalid-json", "unknown-source", "timeout", "busy"])
+def test_a_failed_rewrite_keeps_the_first_answer(context_pack, monkeypatch, failure):
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    attempts = []
+    def provider(request):
+        attempts.append(True)
+        if len(attempts) == 1:
+            content = answer_for(body="S1 说得更直接：作品是能力的证据。").model_dump_json()
+        elif failure == "timeout":
+            raise httpx.ReadTimeout("Synthetic timeout")
+        elif failure == "busy":
+            return httpx.Response(429)
+        else:
+            content = "{" if failure == "invalid-json" else answer_for("S900").model_dump_json()
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}]})
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
+    title = next(source["title"] for source in result["sources"] if source["id"] == "S1")
+    assert result["status"] == "answered" and result["sections"][0]["body"] == f"《{title}》[S1]说得更直接：作品是能力的证据。"
+    assert len(attempts) == 2
+
+
+def test_a_second_slip_reads_as_titles(index):
+    # A rewrite that slips again, or no time for one: each number becomes its source's title, marked where marks show.
+    passages = index.retrieve("职业选择如何积累能力与作品")
+    answer = ModelAnswer.model_validate({
+        "status": "answered", "summary": "作品能证明能力[S1]。", "limitations": "", "clarifying_questions": [],
+        "sections": [{"heading": "先看能力证据[S1]", "body": "S1 说得更直接：作品是能力的证据。这和 S2 的看法一致（S1、S2）。",
+                      "source_ids": ["S1", "S2"], "kind": "synthesis"}],
+        "followups": ["S2 讲的方法怎么用？"], "source_reasons": [{"source_id": "S2", "reason": "可与S1相互印证。"}]})
+    validate_answer(answer, passages)
+    result = assemble_answer(answer, passages)
+    section = result["sections"][0]
+    assert section["heading"] == "先看能力证据"
+    assert section["body"] == "《职业选择要看能力与作品》[S1]说得更直接：作品是能力的证据。这和《如何积累能力》[S2]的看法一致[S1][S2]。"
+    assert result["followups"] == ["《如何积累能力》讲的方法怎么用？"]
+    assert result["sources"][1]["reason"] == "可与《职业选择要看能力与作品》相互印证。"
+    # A title is longer than its number; past the field's limit, only the mark stays.
+    long = answer.model_copy(update={"summary": "能" * 340 + "，S1 也这样看。"})
+    assert assemble_answer(long, passages)["summary"] == "能" * 340 + "，[S1]也这样看。"
+
+
+def test_sources_are_numbered_in_reading_order(index):
+    passages = index.retrieve("职业选择如何积累能力与作品")
+    answer = ModelAnswer.model_validate({**answer_for("S3", "作品是证据[S3]。再找一个差距[S1]。").model_dump(), "summary": "先看作品[S3]。"})
+    answer.sections[0].source_ids = ["S3", "S1"]
+    validate_answer(answer, passages)
+    result = assemble_answer(answer, passages)
+    assert result["summary"] == "先看作品[S1]。"
+    assert result["sections"][0]["body"] == "作品是证据[S1]。再找一个差距[S2]。" and result["sections"][0]["source_ids"] == ["S1", "S2"]
+    assert [(source["id"], source["url"]) for source in result["sources"]] == [("S1", passages[2].source["url"]), ("S2", passages[0].source["url"])]
+    # A partial answer keeps the model's numbers: pages match its sources to the candidates by number.
+    partial = assemble_answer(answer, passages, final=False)
+    assert [source["id"] for source in partial["sources"]] == ["S1", "S3"] and partial["sections"][0]["source_ids"] == ["S3", "S1"]
+
+
+def test_titles_sit_in_the_sentence_without_stray_spaces():
+    titles = {"S1": "《甲》", "S2": "《乙》"}
+    # Bracketed numbers become marks first; the named number after them still reads its own neighbours.
+    assert unlabel("（S1、S2）都这样看。S2 更直接。", titles, {"S1", "S2"}) == "[S1][S2]都这样看。《乙》[S2]更直接。"
+    assert unlabel("见（S1、S2）。可与 S9 对照。", titles, None) == "见（《甲》、《乙》）。可与对照。"
+    assert unlabel("As S1 shows", titles, None) == "As 《甲》 shows"
+
+
+@pytest.mark.parametrize("title, short", [
+    ("战术勤劳与战略懒惰：大厂为什么越忙，产品质量越差？", "《战术勤劳与战略懒惰》"),
+    ("立正本人的话 · 打工人如何获得财富自由？｜什么才是真正的财富和真正的自由？（中文字幕）｜Multiple-Fire系列", "《打工人如何获得财富自由？》"),
+    ("《Growth Data Analytics Playbook》中文版 · 第3章　用growth accounting打地基", "《Growth Data Analytics Playbook》"),
+    ("【限时公开】个体创业后，才发现打工最让我难受的，是“沟通税”", "《个体创业后，才发现打工最让我难受的，是“沟通税”》"),
+    ("一二三四五六七八九十，一二三四五六七八九十一二三四五六七八", "《一二三四五六七八九十》"),
+    ("How to be strategic?", "《How to be strategic?》"),
+])
+def test_a_title_short_enough_for_a_sentence(title, short):
+    assert short_title(title) == short
 
 
 @pytest.mark.parametrize("failure", ["invalid-json", "unknown-source", "timeout", "busy", "bad-auth"])

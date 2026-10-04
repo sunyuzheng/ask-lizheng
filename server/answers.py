@@ -65,7 +65,7 @@ SYSTEM_PROMPT = """你是基于公开 lizheng-open-context 材料的 AI 阅读�
 1. 只能依据 sources 内的 excerpt 作材料性判断。title 不是正文；discovery_only=true 的条目仅可用于发现资料，绝不能支撑 sections。
 2. source_ids 必须选择提供的 S 编号。每个 section 要有对应来源；source 表示对该段材料的忠实转述，synthesis 表示综合理解，application 表示将想法应用到用户处境的 AI 推演。把你的推演写成可能的选择与理由，不冒充源作者的具体建议。
 3. 作者、主讲者、转述对象与发布者分别看待。source_context、evidence_role、content_origin、generation_method、attribution_note、yuzheng_stance_weight 决定归属。AI 写的综合、翻译、第三方或嘉宾观点不能独立证明立正的立场；同一视频的原文与翻译只是同一证据。保留日期变化和材料间张力。
-4. 输出转述，不输出直接引语、引文、原话或名言，不生成 URL、Markdown 超链接、时间码或来源摘要。服务器将独立补上原始链接与摘录。可以在正文使用 [S1] 这样的编号，但必须也放在该 section.source_ids 中。
+4. 输出转述，不输出直接引语、引文、原话或名言，不生成 URL、Markdown 超链接、时间码或来源摘要。服务器将独立补上原始链接与摘录。可以在正文使用 [S1] 这样的编号，但必须也放在该 section.source_ids 中。读者看不到 S 编号，只看得到 [S1] 变成的角标数字，所以编号只以 [S1] 的形式标在句末，不当作名字写进句子（不写“S1 指出”“S5 和 S8 认为”“可与S1相互印证”）；要说明是哪份材料时，写它是哪篇文章或哪期视频。heading、followups、clarifying_questions 和 source_reasons 的 reason 里不写编号。
 5. 已知部分可以先答。只有会实质改变资料内建议的关键缺口才提问，clarifying_questions 最多 2 个；无需完整背景问卷。资料不支持的题目使用 unsupported，解释缺口，可提出相邻且有材料支持的问题。不能因为几条关键词偶合，就用无关材料硬答。尤其赛事结果、新闻或其他材料外的查询，澄清年份/项目也不会让资料突然支持答案，因此不要追问这些条件、不要承诺下一轮查外部网页、也不要提你的通用知识或知识截止日期；本产品只依据给出的公开材料。
 6. 不能把来源里的案例情境直接写成用户事实。用户没有提供的薪酬制度、岗位、能力、心理动机、客户行为或流程瓶颈，应作为可能原因/待检验解释，不能用“你的……就是……”直接确诊。没有个人条件时也可以解释机制，但明确它在什么情况下成立。
 7. 针对特定人的建议，先点明对象及条件再解释可迁移的关系。例如周洁案例的高变现、稳定本职与投资业务不能直接变成读者应选高变现或拆开本职的指令；没有这些条件，就比较不同目标下的选择，或问一个关键条件。不能只在 limitations 里加免责而让正文给无条件建议。
@@ -235,7 +235,7 @@ async def streamed_completion(client, payload, token, remaining, passages, on_pr
                     if on_partial:
                         sections = completed_sections(content, passages)
                         if len(sections) > sent_sections:
-                            partial = assemble_answer(ModelAnswer(status="answered", summary="回答仍在生成。", sections=sections, followups=[], clarifying_questions=[]), passages)
+                            partial = assemble_answer(ModelAnswer(status="answered", summary="回答仍在生成。", sections=sections, followups=[], clarifying_questions=[]), passages, final=False)
                             await on_partial({"sections": partial["sections"], "sources": partial["sources"]})
                             sent_sections = len(sections)
                 finish = choice.get("finish_reason") or finish
@@ -270,6 +270,7 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
     deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
+    worded = None  # a valid answer sent back only for its wording
     for attempt in range(2):
         content = ""
         try:
@@ -307,28 +308,48 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
                     raise
                 raise InvalidAnswer("输出不是完整、有效且符合 schema 的 JSON；请检查所有字段及数量和长度限制。") from None
             validate_answer(answer, passages)
-            # Naming 立正 for another speaker's words gets one rewrite when time allows; it is
-            # a wording fix, so a second slip keeps the answer rather than failing it.
-            if not attempt and deadline - time.monotonic() > ATTRIBUTION_REPAIR_SECONDS:
+            # Naming 立正 for another speaker's words, or a source number written as a name, gets
+            # one rewrite when time allows. These are wording fixes, so a second slip keeps the
+            # answer rather than failing it: assemble_answer then puts titles where numbers were.
+            if not attempt and deadline - time.monotonic() > REWRITE_SECONDS:
+                problems = []
                 if sentences := misattributed(answer, passages):
-                    raise InvalidAnswer("有句子把不是立正本人的材料写成了立正的观点：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
-                                        + "。只有 content_origin 为 yuzheng-published-text 或 yuzheng-spoken-source 的来源可以写“立正认为”“立正提到”；其他来源直接陈述观点并标出处，或写明实际说话人。其余内容保持不变。")
+                    problems.append("有句子把不是立正本人的材料写成了立正的观点：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
+                                    + "。只有 content_origin 为 yuzheng-published-text 或 yuzheng-spoken-source 的来源可以写“立正认为”“立正提到”；其他来源直接陈述观点并标出处，或写明实际说话人。")
+                if sentences := numbers_as_names(answer_fields(answer)):
+                    problems.append(number_rewrite(sentences, "heading、followups、clarifying_questions 和 source_reasons 的 reason "))
+                if problems:
+                    worded = answer
+                    raise InvalidAnswer("".join(problems) + "其余内容保持不变。")
             return answer
         except InvalidAnswer as exc:
-            if attempt:
-                raise ProviderFailure("invalid_answer") from None
-            if on_progress:
-                await on_progress({"stage": "repairing", "message": "回答中的来源标注或格式需要修正，正在重新整理…"})
-            if content:
-                payload["messages"].append({"role": "assistant", "content": content})
-            payload["messages"].append({"role": "user", "content": "上一份输出未通过服务器核对：" + str(exc) + " 请依据同一批证据修复完整 JSON，不生成链接、不编造来源编号、不把发现用元数据当正文依据。不解释修复过程，只返回符合 schema 的对象。"})
-        except ProviderFailure:
-            raise
+            if not attempt:
+                if on_progress:
+                    await on_progress({"stage": "repairing", "message": "回答中的来源标注或格式需要修正，正在重新整理…"})
+                if content:
+                    payload["messages"].append({"role": "assistant", "content": content})
+                payload["messages"].append({"role": "user", "content": "上一份输出未通过服务器核对：" + str(exc) + " 请依据同一批证据修复完整 JSON，不生成链接、不编造来源编号、不把发现用元数据当正文依据。不解释修复过程，只返回符合 schema 的对象。"})
+                continue
+            failure = ProviderFailure("invalid_answer")
+        except ProviderFailure as exc:
+            failure = exc
         except (httpx.TimeoutException, TimeoutError):
-            raise ProviderFailure("provider_timeout") from None
+            failure = ProviderFailure("provider_timeout")
         except httpx.HTTPError:
-            raise ProviderFailure("provider_unavailable") from None
+            failure = ProviderFailure("provider_unavailable")
+        # A rewrite asked only for wording never costs readers the valid answer it was asked of.
+        if worded is not None:
+            return worded
+        raise failure from None
     raise ProviderFailure("invalid_answer")
+
+
+# A source number as the model writes it. Python's \b sees no edge between a Chinese character and
+# a Latin letter, so "可与S1、S2相互印证" once passed every check here and reached readers.
+SOURCE_NUMBER = re.compile(r"(?<![A-Za-z0-9])S\d+(?![A-Za-z0-9])")
+# Readers never see an S number: a mark [S3] becomes the citation 3 in the texts that show marks
+# (summary, section bodies, limitations). Anywhere else a number reaches them as a bare label.
+MARK = re.compile(r"\[(S\d+)\]")
 
 
 def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
@@ -345,7 +366,7 @@ def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
             prefix = text[max(0, quoted.start() - 22):quoted.start()]
             if quoted.group(1).strip() not in titles and re.search(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|提到|指出|表示|认为|一句话", prefix):
                 raise InvalidAnswer("不能把模型生成的句子标为作者原话；改为有来源的转述。")
-        if any(source_id not in by_id for source_id in re.findall(r"\bS\d+\b", text)):
+        if any(source_id not in by_id for source_id in SOURCE_NUMBER.findall(text)):
             raise InvalidAnswer("文字引用了不存在的来源编号；只能使用提供的 S 编号。")
     if any(item.source_id not in by_id for item in answer.source_reasons):
         raise InvalidAnswer("来源推荐理由引用了不存在的编号；只能使用提供的 S 编号。")
@@ -354,7 +375,7 @@ def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
             raise InvalidAnswer("每个 section 必须引用提供的有效 source_ids；无证据的部分应使用 clarify 或 unsupported。")
         if any(by_id[source_id].discovery for source_id in section.source_ids):
             raise InvalidAnswer("发现用元数据不包含正文，不能支撑 section；请选择有正文证据的来源。")
-        if not set(re.findall(r"\bS\d+\b", section.body + section.heading)).issubset(section.source_ids):
+        if not set(SOURCE_NUMBER.findall(section.heading + "\n" + section.body)).issubset(section.source_ids):
             raise InvalidAnswer("正文中的来源编号也必须放在该 section.source_ids 中。")
     if answer.status == "answered" and not answer.sections:
         raise InvalidAnswer("answered 必须有至少一个有依据的 section；资料不足应使用 clarify 或 unsupported。")
@@ -367,7 +388,7 @@ def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
 # Sources that carry 立正's own view: his published writing and his solo talks.
 OWN_VIEW_ORIGINS = frozenset({"yuzheng-published-text", "yuzheng-spoken-source"})
 # A repair takes about as long as an answer; with less time left, keep the answer as it is.
-ATTRIBUTION_REPAIR_SECONDS = 40
+REWRITE_SECONDS = 40
 
 
 def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
@@ -377,31 +398,144 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
     found = []
     for text in [answer.summary, *(section.body for section in answer.sections)]:
         for sentence in re.findall(r"[^。！？]+[。！？]?(?:\s*\[S\d+\])*", text):
-            cited = re.findall(r"\bS\d+\b", sentence)
+            cited = SOURCE_NUMBER.findall(sentence)
             if cited and "立正" in sentence.replace("问问立正", "") and not any(origins.get(c) in OWN_VIEW_ORIGINS for c in cited):
                 found.append(sentence.strip())
     return found
 
 
+def number_rewrite(sentences: list[str], unmarked: str) -> str:
+    """The rewrite request for sentences that name sources by number; unmarked names the fields that show no marks."""
+    return ("有句子把来源编号当成名字写给了读者：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
+            + "。读者看不到 S 编号，只看得到 [S1] 变成的角标数字。要指出处时，把观点直接说出来、在句末标 [S1]，"
+            + f"或写明是哪篇文章、哪期视频；{unmarked}里不写编号。")
+
+
+def answer_fields(answer: ModelAnswer) -> list[tuple[str, bool]]:
+    """Every text of an answer a reader sees, and whether it shows [S3] as a citation mark."""
+    return [(answer.summary, True), (answer.limitations, True), *((section.body, True) for section in answer.sections),
+            *((section.heading, False) for section in answer.sections), *((item, False) for item in answer.followups),
+            *((item, False) for item in answer.clarifying_questions), *((item.reason, False) for item in answer.source_reasons)]
+
+
+def numbers_as_names(fields: list[tuple[str, bool]]) -> list[str]:
+    """Sentences where a reader would meet a source number as a label: named in a sentence
+    ("S1 说得更直接", "可与S1、S2相互印证"), or anywhere in a text that shows no marks."""
+    return [sentence.strip() for text, marks in fields for sentence in re.findall(r"[^。！？\n]+[。！？]?", text)
+            if SOURCE_NUMBER.search(MARK.sub("", sentence) if marks else sentence)]
+
+
+def short_title(title: str) -> str:
+    """A source's title as a sentence can carry it, in 《》: a book's own 《》 title, otherwise the
+    title without a leading label, series name or subtitle."""
+    title = " ".join(title.split())
+    if book := re.search(r"《[^》]+》", title):
+        return book.group(0)
+    title = re.sub(r"^【[^】]*】|^[^·｜|]{1,12} · ", "", title).strip() or title
+    main = re.split(r"\s*[｜|]\s*", title)[0] or title
+    if len(main) > 24:
+        main = re.split(r"[：:]", main)[0] or main
+    if len(main) > 24:
+        cut = max(main.rfind(mark, 0, 24) for mark in "，、；")
+        main = main[:cut] if cut >= 8 else main[:24] + "…"
+    return f"《{main}》"
+
+
+# Numbers the model put in brackets instead of marks: [S1, S2], （S1、S2）, 【S1】. A mark [S1] is one too.
+NUMBER_GROUP = re.compile(r"([\[［【（(])\s*(S\d+(?:\s*[,，、;；/和与及]\s*S\d+)*)\s*[\]］】）)]")
+# A mark, which stays, or a number written as a name, with the spaces around it.
+NAMED_NUMBER = re.compile(r"\[S\d+\]|[ \t]*(?<![A-Za-z0-9])(S\d+)(?![A-Za-z0-9])[ \t]*")
+
+
+def unlabel(text: str, titles: dict[str, str], cite: set[str] | None) -> str:
+    """The words a reader can follow where a text names sources by number. titles holds what to
+    write for each known number; cite holds the numbers this text may mark, or is None where marks
+    do not show. A named source becomes its title, marked where it may be; numbers in brackets
+    become marks, or go where marks do not show (a parenthesis keeps the titles); an unknown
+    number goes. Text without such numbers is returned as it is."""
+    if not numbers_as_names([(text, cite is not None)]):
+        return text
+    def group(match):
+        ids = SOURCE_NUMBER.findall(match.group(2))
+        if cite is not None:
+            return "".join(f"[{source_id}]" for source_id in ids if source_id in cite)
+        named = [titles[source_id] for source_id in ids if titles.get(source_id)]
+        return f"（{'、'.join(named)}）" if match.group(1) in "（(" and named else ""
+    def name(match):
+        if match.group(1) is None:
+            return match.group(0)
+        source_id = match.group(1)
+        mark = f"[{source_id}]" if cite is not None and source_id in cite else ""
+        word = titles[source_id] + mark if source_id in titles else ""
+        # Chinese needs no space beside a title; Latin text keeps one.
+        around = match.string[match.start() - 1:match.start()], match.string[match.end():match.end() + 1]
+        latin = [char.isascii() and char.isalnum() for char in around]
+        if not word:
+            return " " if all(latin) else ""
+        return (" " if latin[0] else "") + word + (" " if latin[1] else "")
+    text = NAMED_NUMBER.sub(name, NUMBER_GROUP.sub(group, text))
+    return re.sub(r"[ \t]+(?=[，。；：！？、）])", "", text).strip()
+
+
+def unlabeled(text: str, titles: dict[str, str], limit: int, cite: set[str] | None = None) -> str:
+    """unlabel within the length the archive accepts for this field: a title is longer than the
+    number it replaces, so past the limit the number goes and only its mark stays."""
+    for names in (titles, dict.fromkeys(titles, "")):
+        if len(value := unlabel(text, names, cite)) <= limit:
+            return value or text
+    return text
+
+
 def cite_before_stop(text: str) -> str:
     """Keep citations with the sentence they support: in “…上。[S3] 立正…” the number reads as
-    the next sentence's, so it moves before the full stop."""
-    return re.sub(r"([。！？；])\s*((?:\[S\d+\]\s*)+)", lambda match: match.group(2).replace(" ", "") + match.group(1), text)
+    the next sentence's, so it moves before the full stop. A paragraph break after the marks stays
+    after the stop, which would otherwise open the next paragraph."""
+    return re.sub(r"([。！？；])\s*((?:\[S\d+\][ \t]*)+)", lambda match: match.group(2).replace(" ", "").replace("\t", "") + match.group(1), text)
 
 
-def assemble_answer(answer: ModelAnswer, passages: list[Passage]) -> dict:
+def renumbered(result: dict) -> dict:
+    """Sources numbered 1 to n in the order a reader meets them, as the saved image and PDF number
+    them. The model's numbers follow retrieval, so the ones an answer uses leave gaps (1, 2, 3, 8)."""
+    met = [*MARK.findall(result["summary"]),
+           *(source_id for section in result["sections"] for source_id in [*MARK.findall(section["body"]), *section["source_ids"]]),
+           *MARK.findall(result["limitations"])]
+    first = {source_id: index for index, source_id in enumerate(dict.fromkeys(met))}
+    sources = sorted(result["sources"], key=lambda source: first.get(source["id"], len(first)))
+    number = {source["id"]: f"S{index + 1}" for index, source in enumerate(sources)}
+    def marks(text):
+        return MARK.sub(lambda match: f"[{number[match.group(1)]}]" if match.group(1) in number else "", text)
+    return {**result, "summary": marks(result["summary"]), "limitations": marks(result["limitations"]),
+            "sections": [{**section, "body": marks(section["body"]),
+                          "source_ids": [number[source_id] for source_id in section["source_ids"] if source_id in number]}
+                         for section in result["sections"]],
+            "sources": [{**source, "id": number[source["id"]]} for source in sources]}
+
+
+def assemble_answer(answer: ModelAnswer, passages: list[Passage], final: bool = True) -> dict:
+    """The answer as readers get it: server-owned sources, and no source number except as a mark.
+    A partial answer keeps the model's numbers, since pages match its sources by number to the
+    candidates already shown; the final one is numbered 1 to n."""
+    titles = {passage.source["id"]: short_title(passage.source["title"]) for passage in passages}
+    known = set(titles)
+    # The limits are the model's own (ModelAnswer, AnswerSection, validate_answer), which the archive checks again.
     answer = answer.model_copy(update={
-        "summary": cite_before_stop(answer.summary), "limitations": cite_before_stop(answer.limitations),
-        "sections": [section.model_copy(update={"body": cite_before_stop(section.body)}) for section in answer.sections]})
+        "summary": cite_before_stop(unlabeled(answer.summary, titles, 350, known)),
+        "limitations": cite_before_stop(unlabeled(answer.limitations, titles, 900, known)),
+        "sections": [section.model_copy(update={"heading": unlabeled(section.heading, titles, 90),
+                                                "body": cite_before_stop(unlabeled(section.body, titles, 2600, set(section.source_ids)))})
+                     for section in answer.sections],
+        "followups": [unlabeled(item, titles, 250) for item in answer.followups],
+        "clarifying_questions": [unlabeled(item, titles, 250) for item in answer.clarifying_questions]})
     used = set(source_id for section in answer.sections for source_id in section.source_ids)
-    used.update(re.findall(r"\bS\d+\b", answer.summary + " " + answer.limitations))
-    reasons = {item.source_id: item.reason for item in answer.source_reasons}
+    used.update(MARK.findall(answer.summary + " " + answer.limitations))
+    reasons = {item.source_id: unlabeled(item.reason, titles, 150) for item in answer.source_reasons}
     def source_with_reason(passage):
         return {**passage.source, "reason": reasons.get(passage.source["id"], "可回到原文核对这部分判断")}
     selected = [source_with_reason(passage) for passage in passages if passage.source["id"] in used]
     if not selected and answer.status != "unsupported":
         selected = [source_with_reason(passage) for passage in passages[:5]]
-    return {**answer.model_dump(exclude={"source_reasons", "slug"}), "sources": selected}
+    result = {**answer.model_dump(exclude={"source_reasons", "slug"}), "sources": selected}
+    return renumbered(result) if final else result
 
 
 def sources_only(passages: list[Passage], reason: str = "", intent: str = "understand") -> dict:

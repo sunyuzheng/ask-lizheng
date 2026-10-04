@@ -89,6 +89,22 @@ def test_stream_invalid_source_is_hidden_then_targetedly_repaired(index):
     assert len(partials)==1 and partials[0]['sections'][0]['source_ids']==['S1']
 
 
+def test_stream_section_never_shows_a_number_as_a_name(index):
+    passages=index.retrieve('职业选择'); calls=[]; partials=[]
+    def provider(request):
+        calls.append(json.loads(request.content))
+        value=answer()
+        if len(calls)==1: value.sections[0].body='S1 说得更直接：需要比较目标与实际结果。'
+        return httpx.Response(200,headers={'content-type':'text/event-stream'},content=delta(prefix(value)+suffix(value))+END)
+    async def callback(item): partials.append(item)
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            return await generate_answer(client,'synthetic-token','deepseek-v4-flash',{'question':'职业选择'},passages,on_partial=callback)
+    assert asyncio.run(run()).sections[0].body=='依据材料，需要比较目标与实际结果。'
+    title=passages[0].source['title']
+    assert len(calls)==2 and partials[0]['sections'][0]['body']==f'《{title}》[S1]说得更直接：需要比较目标与实际结果。'
+
+
 @pytest.mark.parametrize('failure',['disconnect','deadline','empty'])
 def test_stream_transport_failure_ends_without_automatic_model_retry(index,monkeypatch,failure):
     passages=index.retrieve('职业选择'); calls=[]; closed=[]

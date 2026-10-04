@@ -19,7 +19,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .admission import CURATE_PURPOSE, AdmissionError, derived_secret
-from .answers import ProviderFailure, model_options, provider_status
+from .answers import ProviderFailure, model_options, number_rewrite, numbers_as_names, provider_status, short_title, unlabeled
 
 CURATE_HEADER = "x-ask-curate-proof"
 CURATE_BODY_LIMIT = 262144
@@ -106,6 +106,7 @@ PROMPT = """你在为「问问立正」整理公开问答。提问的人在提�
    - weak_answer：回答没有实质内容，或没有回答这个问题；
    - unsafe：违法、有害或不适合公开的内容。
 2. 要公开时，去掉一切可能认出提问者或其他人的信息：人名、公司、学校、机构、具体城市、职位与团队细节、收入年龄日期金额等精确数字、独特的经历。把问题改写成别人也会问的说法，保留原意和语气，不要加入原文没有的内容，不超过100字。回答同样处理：保留结构、判断和出处编号，只删改涉及个人的细节；不要新增观点。立正的名字、立正公开的作品和公开人物不算个人信息。
+   读者看不到 S 编号，只看得到 [S1] 变成的角标数字：出处编号只以 [S1] 的形式标在 summary、正文和 limitations 的句末，不当作名字写进句子（不写“S1 指出”“可与S1相互印证”）；要提到某份出处时，写它是哪篇文章或哪期视频。标题、追问和 reason 里不写编号。原回答里有这样的写法，一并改掉。
 3. 归到主题。已有主题如果和这个问题问的是同一件事，topic_key 填那个 key、topic_label 填它的名称；否则 topic_key 填 null，起一个新的主题名，不超过10个字，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」。
 
 只输出一个 JSON 对象，字段都必须有：
@@ -133,7 +134,8 @@ def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float |
 
 
 def checked(decision: CurateDecision, request: CurateRequest) -> dict:
-    """What Ops receives: a decline with its reason, or a complete public version."""
+    """What Ops receives: a decline with its reason, or a complete public version in which a source
+    number written as a name has become the source's title."""
     if not decision.publish:
         if decision.skip_reason is None:
             raise ValueError("A declined question needs skip_reason.")
@@ -152,17 +154,28 @@ def checked(decision: CurateDecision, request: CurateRequest) -> dict:
         raise ValueError("Only the answer's own source ids may be cited.")
     if any(len(item.strip()) == 0 or len(item) > 200 for item in decision.followups):
         raise ValueError("Each followup must be a short question.")
+    titles = {source.id: short_title(source.title) for source in request.answer.sources}
+    # Within the limits above, which Ops checks again.
     return {
         "publish": True,
         "topic_key": decision.topic_key,
         "topic_label": keys[decision.topic_key] if decision.topic_key else decision.topic_label.strip(),
         "question": decision.question.strip(),
-        "summary": decision.summary.strip(),
-        "sections": [section.model_dump() for section in decision.sections],
-        "limitations": decision.limitations.strip(),
-        "followups": [item.strip() for item in decision.followups],
-        "source_reasons": [item.model_dump() for item in decision.source_reasons if item.id in used],
+        "summary": unlabeled(decision.summary.strip(), titles, 350, set(titles)),
+        "sections": [{**section.model_dump(), "heading": unlabeled(section.heading, titles, 90),
+                      "body": unlabeled(section.body, titles, 2600, set(section.source_ids))} for section in decision.sections],
+        "limitations": unlabeled(decision.limitations.strip(), titles, 900, set(titles)),
+        "followups": [unlabeled(item.strip(), titles, 200) for item in decision.followups],
+        "source_reasons": [{**item.model_dump(), "reason": unlabeled(item.reason, titles, 300)}
+                           for item in decision.source_reasons if item.id in used],
     }
+
+
+def numbers_named(decision: CurateDecision) -> list[str]:
+    """Sentences of a public version that name sources by number, as in answers.numbers_as_names."""
+    return numbers_as_names([(decision.summary, True), (decision.limitations, True), *((section.body, True) for section in decision.sections),
+                             *((section.heading, False) for section in decision.sections), *((item, False) for item in decision.followups),
+                             *((item.reason, False) for item in decision.source_reasons)])
 
 
 async def curate_question(client: httpx.AsyncClient, token: str, model: str, request: CurateRequest) -> dict:
@@ -171,26 +184,41 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
         {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
     ]
     deadline = time.monotonic() + CURATE_SECONDS
+    worded = None  # a public version sent back only for its wording
     for attempt in range(2):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise ProviderFailure("provider_timeout")
-        payload = {"model": model, "temperature": .2, "max_tokens": 3500, "messages": messages,
-                   "response_format": {"type": "json_object"}, **model_options(model)}
-        async with asyncio.timeout(remaining):
-            response = await client.post("https://space.ai-builders.com/backend/v1/chat/completions", json=payload,
-                headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
-                timeout=httpx.Timeout(remaining, connect=min(10, remaining), pool=min(5, remaining)), follow_redirects=False)
-        provider_status(response)
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProviderFailure("provider_timeout")
+            payload = {"model": model, "temperature": .2, "max_tokens": 3500, "messages": messages,
+                       "response_format": {"type": "json_object"}, **model_options(model)}
+            async with asyncio.timeout(remaining):
+                response = await client.post("https://space.ai-builders.com/backend/v1/chat/completions", json=payload,
+                    headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+                    timeout=httpx.Timeout(remaining, connect=min(10, remaining), pool=min(5, remaining)), follow_redirects=False)
+            provider_status(response)
+        except (ProviderFailure, TimeoutError, httpx.HTTPError):
+            # A rewrite asked only for wording never costs the question its public version.
+            if worded is not None:
+                return worded
+            raise
         content = ""
         try:
             choice = (response.json().get("choices") or [{}])[0]
             content = choice.get("message", {}).get("content")
             if choice.get("finish_reason") == "length" or not isinstance(content, str) or len(content) > 40000:
                 raise ValueError("The reply was cut off; return the complete JSON object.")
-            return checked(CurateDecision.model_validate_json(content), request)
+            decision = CurateDecision.model_validate_json(content)
+            result = checked(decision, request)
+            # A source number written as a name is sent back once; the titles stand in if it comes back again.
+            if not attempt and (sentences := numbers_named(decision)):
+                worded = result
+                raise ValueError(number_rewrite(sentences, "标题、追问和 reason "))
+            return result
         except (ValueError, ValidationError, TypeError, AttributeError) as exc:
             if attempt:
+                if worded is not None:
+                    return worded
                 raise ProviderFailure("invalid_answer") from None
             # One targeted repair, as for answers.
             messages = [*messages, {"role": "assistant", "content": content if isinstance(content, str) else ""},

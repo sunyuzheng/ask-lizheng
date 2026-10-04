@@ -114,6 +114,22 @@ def test_one_repair_then_give_up(context_pack, token):
     assert response.status_code == 503 and response.json() == {"code": "invalid_answer"} and len(seen) == 2
 
 
+def test_a_number_written_as_a_name_is_sent_back_once_then_titled(context_pack, token):
+    named = decision(sections=[{"heading": "先看能不能用出来", "body": "S1 说得更直接：能用出来才算学会。", "source_ids": ["S1"], "kind": "source"}],
+                     source_reasons=[{"id": "S1", "reason": "可对照S1的例子。"}])
+    seen, transport = provider(named, decision())
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        assert call(client, request()).json()["sections"][0]["body"] == "合成正文[S1]"
+    assert len(seen) == 2 and "「S1 说得更直接：能用出来才算学会。」" in seen[1]["messages"][-1]["content"]
+    # The same again, or a rewrite that fails: published, with the source's title where its number was.
+    for second in (named, "not json"):
+        _, transport = provider(named, second)
+        with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+            body = call(client, request()).json()
+        assert body["publish"] is True and body["sections"][0]["body"] == "《合成文章》[S1]说得更直接：能用出来才算学会。"
+        assert body["source_reasons"] == [{"id": "S1", "reason": "可对照《合成文章》的例子。"}]
+
+
 @pytest.mark.parametrize("bad", [
     decision(topic_label="一个非常非常长的新主题名称超过十个字"),
     decision(question=""),
