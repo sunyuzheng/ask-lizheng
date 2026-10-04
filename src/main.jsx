@@ -47,14 +47,14 @@ const SITUATION_NOTE = kept => (kept ? '这部分只用于分析，不会公开�
 const v4Parts = kept => [
   ['为什么保存', '很多问题是共性的，你问的往往也是别人想问的。我们会把常见的问题和回答整理出来，去掉个人信息后公开，比如「今天大家在问什么」；立正也会从中找选题写文章、做视频，并用它们改进回答。'],
   ['保存什么', '提问、完整回答和所用出处，以及匿名的使用统计。'],
-  ['你的隐私', `提问是匿名的：记录不关联邮箱、账号或IP，我们不知道是谁问的。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。公开前，我们会先用模型自动去掉可能认出你的信息；模型也可能漏，所以请别填写私密信息。${kept ? '「结合我的处境」里填的内容只用于分析，不会公开，用到这些内容的回答也不会公开。' : '「结合我的处境」里填的内容只用来生成这次回答，我们不保存。'}`],
+  ['你的隐私', `提问记录不关联邮箱、账号或IP；但输入文字仍可能识别个人，发给AI前不会自动去掉。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。公开前，我们会先用模型自动去掉可能认出你的信息；模型也可能漏，所以请别填写私密信息。${kept ? '「结合我的处境」的原文只用于分析、不公开；完整回答可能引用其中细节。' : '「结合我的处境」的原文只用来生成这次回答，我们不保存、不公开；完整回答可能引用其中细节。'}`],
   ['另外', '回答由AI根据立正公开的文章和视频整理，不是立正本人回复。提问和必要背景会发给Builder Space的模型服务处理。当前对话只在这个页面里，刷新就会清除。'],
 ];
 // v3, today's notice: answers are kept to improve them and only 立正 sees the records. Purpose first, in the same four parts.
 const V3_PARTS = [
   ['为什么保存', '看哪些问题答得不好、缺哪些材料，把回答做得更好；也让立正知道大家关心什么。'],
   ['保存什么', '提问、完整回答和所用出处，以及匿名的使用统计。记录只有立正能看到。'],
-  ['你的隐私', '提问是匿名的：记录不关联邮箱、账号或IP，我们不知道是谁问的。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。「结合我的处境」里填的内容不单独保存，但回答可能会提到它，所以请别填写私密信息。'],
+  ['你的隐私', '提问记录不关联邮箱、账号或IP；但输入文字仍可能识别个人，发给AI前不会自动去掉。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。「结合我的处境」里填的内容不单独保存，但回答可能会提到它，所以请别填写私密信息。'],
   ['另外', '回答由AI根据立正公开的文章和视频整理，不是立正本人回复。提问和必要背景会发给Builder Space的模型服务处理。当前对话只在这个页面里，刷新就会清除。'],
 ];
 const OPS_NOTICE = '提问是匿名的。问答会保存下来，用来改进回答；请勿填写私密信息。';
@@ -378,31 +378,46 @@ function QuestionCard({card, open, detail, vote, share, signedIn, selected, onTo
 // The iPhone app asks once before the first question goes to the AI service, as App Store rules
 // require explicit permission before sharing personal data with a third-party AI.
 const CONSENT_KEY = 'ask-app-ai-consent';
-const readConsent = () => { try { return localStorage.getItem(CONSENT_KEY) === 'v1'; } catch { return false; } };
-const saveConsent = () => { try { localStorage.setItem(CONSENT_KEY, 'v1'); } catch { /* asked again next visit */ } };
+// A revised disclosure or a different answer model needs fresh permission; v1 is not reused.
+const consentScope = meta => `v2:${meta?.model || 'AI'}`;
+const readConsent = scope => { try { return localStorage.getItem(CONSENT_KEY) === scope; } catch { return false; } };
+const saveConsent = scope => { try { localStorage.setItem(CONSENT_KEY, scope); } catch { /* asked again next visit */ } };
+const clearConsent = () => {
+  try { localStorage.setItem(CONSENT_KEY, 'revoked'); return true; } catch {}
+  try { localStorage.removeItem(CONSENT_KEY); return true; } catch { return false; }
+};
 
-function AppConsent({onAgree, onCancel}) {
+function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
   const ref = useRef(null);
   useEffect(() => {
     ref.current?.focus();
-    const handler = event => { if (event.key === 'Escape') onCancel(); };
+    const handler = event => {
+      if (event.key === 'Escape') onCancel();
+      if (event.key !== 'Tab') return;
+      const items = ref.current?.querySelectorAll('button,a');
+      const first = items?.[0], last = items?.[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
   return <div className="backdrop" onClick={onCancel}>
     <section className="dialog consent" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
-      <h2 id="consent-title">提问会交给AI处理</h2>
-      <p>你的提问会发给Builder Space的AI模型服务，用来生成回答。打开「结合我的处境」时，处境也会一起发过去。</p>
-      <p>问答会保存下来，去掉个人信息后可能整理公开。提问是匿名的，请别填写私密信息。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
+      <h2 id="consent-title">允许第三方AI处理你的输入吗？</h2>
+      <p><b>发送什么</b><br/>你的提问、开启「结合我的处境」后填写的内容，以及本次对话最近最多6轮的提问和回答摘要。输入中可能含有个人信息；发送前不会自动去掉，请别填写私密信息。</p>
+      <p><b>发给谁、做什么</b><br/>Builder Space（space.ai-builders.com）的第三方AI服务，用来匹配资料、生成回答。当前回答模型：{meta?.model || 'AI'}。核验身份的邮箱和登录信息不交给模型。</p>
+      <p><b>保存与公开</b><br/>{publicArchive ? `我们会保存问答，用于改进回答和分析选题；不含处境的常见问答还可能交给同一AI服务去掉个人信息后公开。${contextKept ? '处境原文只用于分析、不公开。' : '处境原文只用于生成本次回答，我们不保存、不公开。'}完整回答可能引用其中细节。主动分享时，问题和回答会公开、可被搜索找到，请先检查内容。` : '我们会按隐私政策保存提问及问答，用于改进回答和分析选题。'}<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
+      <p className="consent-choice">不同意也可以浏览已有问答和出处。可在「说明」里撤回同意，停止之后的AI提问。</p>
       <div className="consent-actions">
-        <button type="button" className="ghost-button" onClick={onCancel}>取消</button>
-        <button type="button" className="consent-agree" onClick={onAgree}>同意并提问</button>
+        <button type="button" className="ghost-button" onClick={onCancel}>不同意</button>
+        <button type="button" className="consent-agree" onClick={onAgree}>同意发送并提问</button>
       </div>
     </section>
   </div>;
 }
 
-function About({close, meta, account, focusInput, publicArchive, contextKept}) {
+function About({close, meta, account, focusInput, publicArchive, contextKept, onRevokeConsent}) {
   const ref = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -439,6 +454,7 @@ function About({close, meta, account, focusInput, publicArchive, contextKept}) {
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>}
       {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p>{!IN_APP && <p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'about'})}>了解会员<Ext/></a></p>}</div>}
+      {IN_APP && <div className="about-row"><h3>第三方AI与同意</h3><p>提问、开启后填写的处境，以及本次对话最近最多6轮的提问和回答摘要，会交给Builder Space（space.ai-builders.com）的AI服务匹配资料和生成回答。当前回答模型：{meta?.model || 'AI'}。发送前不会自动去掉输入里的个人信息。</p><p>撤回后，新的提问和重新生成都要再次征得同意。已经发出的内容不会因此收回；删除已有记录请按隐私政策联系我们。</p><button type="button" className="pill-button" onClick={onRevokeConsent}>撤回AI数据发送同意</button></div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<Ext/></a>
@@ -461,8 +477,9 @@ function App() {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [about, setAbout] = useState(null);
-  const [asking, setAsking] = useState(false);
-  const consented = useRef(false);
+  const [asking, setAsking] = useState(null);
+  const consented = useRef('');
+  const revokedConsent = useRef(false);
   const [selected, setSelected] = useState('');
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
@@ -752,17 +769,28 @@ function App() {
     window.scrollTo({top: 0, behavior: scrollBehavior()});
     focusInput();
   };
+  const revokeConsent = () => {
+    const saved = clearConsent();
+    consented.current = '';
+    revokedConsent.current = true;
+    setAbout(null);
+    setError(saved ? '已撤回AI数据发送同意。再次提问前会重新征得你的同意；仍可浏览已有问答。'
+      : '本次已撤回AI数据发送同意，但本机没能保存撤回状态。下次打开时请再次撤回；仍可浏览已有问答。');
+    focusInput();
+  };
 
   async function submit(event, retry) {
     event?.preventDefault();
     if (abort.current || !storageReady || (!retry && !question.trim())) return;
-    if (IN_APP && !retry && !consented.current && !readConsent()) { setAsking(true); return; }
+    const scope = consentScope(meta);
+    if (IN_APP && consented.current !== scope && (revokedConsent.current || !readConsent(scope))) { setAsking({retry}); return; }
     if (loginStep !== 'pending') setLoginStep('');
     const history = messages.filter(m => m.result).slice(-6).map(m => ({question: m.question, summary: m.result.summary}));
     const ops = meta?.ops_logging?.enabled === true;
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
-    const payload = retry?.request || {question: question.trim(), context: situation, intent, history,
-      query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})};
+    const payload = {...(retry?.request || {question: question.trim(), context: situation, intent, history,
+      query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})}),
+      ...(IN_APP ? {ai_consent_model: meta?.model || 'AI'} : {})};
     if (!retry) { markUsage('ask'); track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
@@ -782,6 +810,12 @@ function App() {
       if (!response.ok) {
         let body;
         try { body = await response.json(); } catch {}
+        if (body?.code === 'ai_consent_changed') {
+          consented.current = '';
+          if (typeof body.model === 'string' && body.model.length <= 200) setMeta(prev => ({...prev, model: body.model}));
+          else refreshMeta();
+          throw failure(body.code, 'AI模型已更新，这次没有交给AI处理，也不扣次数。重新生成前会请你再次同意。');
+        }
         // `scope: network`: a shared network's daily guest limit ran out, not this person's own 3.
         if (body?.code === 'quota_exhausted' && body.scope === 'network') throw failure('quota_exhausted', MESSAGES.networkQuota);
         if (body?.code === 'quota_exhausted') { seeQuota({remaining: 0}); throw failure('quota_exhausted', MESSAGES.quota); }
@@ -1124,8 +1158,8 @@ function App() {
         </aside>}
       </div>}
     </main>
-    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept}/>}
-    {asking && <AppConsent onCancel={() => { setAsking(false); focusInput(); }} onAgree={() => { consented.current = true; saveConsent(); setAsking(false); void submit(); }}/>}
+    {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept} onRevokeConsent={revokeConsent}/>}
+    {asking && <AppConsent meta={meta} publicArchive={publicArchive} contextKept={contextKept} onCancel={() => { setAsking(null); focusInput(); }} onAgree={() => { const retry = asking.retry; consented.current = consentScope(meta); revokedConsent.current = false; saveConsent(consented.current); setAsking(null); void submit(undefined, retry); }}/>}
   </div>;
 }
 

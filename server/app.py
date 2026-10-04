@@ -65,6 +65,7 @@ class AskRequest(BaseModel):
     context: str = Field(default="", max_length=2500)
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
+    ai_consent_model: str | None = Field(default=None, min_length=1, max_length=128)
     query_log_notice: Literal["v1", "v3", "v4"] | None = None
     conversation_id: str | None = Field(default=None, max_length=36)
 
@@ -345,6 +346,9 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
 
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
+        current_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
+        if payload.ai_consent_model is not None and payload.ai_consent_model != current_model:
+            return JSONResponse(status_code=409, content={"code": "ai_consent_changed", "model": current_model})
         principal = request.state.principal if application.state.quota.enabled else None
         archived = payload.query_log_notice in {"v3", "v4"}
         if (application.state.ops_records.enabled or archived) and not ops_ready():
@@ -368,7 +372,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         slot_released = False
         record_created_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         record_started = time.monotonic()
-        record_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
+        record_model = current_model
         record_status = "cancelled"
         ops_record_id = None
         record_answer = None
@@ -546,7 +550,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         await updates.put({"_event": "partial", **value})
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL), {**payload.model_dump(exclude={"query_log_notice", "conversation_id"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
+                            return await generate_answer(application.state.provider, token, current_model, {**payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())

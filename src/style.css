@@ -2173,17 +2173,22 @@ main {
 }
 
 .consent {
-  width: min(460px, 100%);
+  width: min(520px, 100%);
 }
 
-.consent h2 {
+.dialog.consent h2 {
   margin: 0 0 12px;
+  font-size: 24px;
 }
 
 .consent p {
   margin: 10px 0 0;
   color: var(--ink-2);
   line-height: 1.8;
+}
+
+.consent .consent-choice {
+  font-size: 14px;
 }
 
 .consent .inline-link {
@@ -2195,6 +2200,11 @@ main {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 26px;
+  flex-wrap: wrap;
+  position: sticky;
+  bottom: -18px;
+  padding: 12px 0;
+  background: var(--paper);
 }
 
 .consent-agree {
