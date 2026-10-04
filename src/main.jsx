@@ -63,11 +63,44 @@ const LINKS = {
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
 // Visits in the iPhone app count as their own surface.
 const SURFACE = IN_APP ? 'app' : 'ask';
+// The first screen (2026-10-04, the user: the subtitle is where the product says what is different
+// about it, not an inventory of the material): answers only from his own work, each paragraph back
+// to its source, and the questions are public, the newest beside the question box. The material
+// itself is further down, in 回答从哪里来. No punctuation in the title: at this size a comma and a
+// full stop read as shapes, not pauses.
+const START = {
+  title: ['卡住的时候', '问问立正'],
+  lines: ['回答只从立正讲过、写过的东西里来，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
+  identity: '这是AI回答，不是立正本人实时回复。',
+};
 // Questions others asked, published with personal details removed.
 const DISCOVERY = {
   title: '别人在问什么',
-  note: '真实的提问，去掉个人信息后由AI挑选整理。',
+  note: '真实的提问和回答，去掉了个人信息。你想问的，可能已经有人问过。',
   attribution: 'AI整理，不是立正本人回复。',
+  live: '别人正在问',
+  liveMore: '看看他们得到的回答',
+};
+// 回答从哪里来: what the answers are made from, counted from what the service answers from
+// (/api/meta counts), so the numbers follow Open Context; before they arrive, the same without them.
+function materialsText(counts) {
+  const n = key => (Number.isInteger(counts?.[key]) ? counts[key] : null);
+  const videos = n('video_transcripts'), member = n('member_video_transcripts');
+  const posts = n('community_posts_full_text'), bank = n('knowledge_bank_full_text');
+  const lessons = n('member_course_lessons'), book = n('book_chapters_zh'), blogs = n('blog_posts_zh');
+  const parts = [
+    videos ? `${videos}期视频的字幕${member ? `（其中${member}期是会员视频）` : ''}` : '四百多期视频的字幕（一半是会员视频）',
+    posts !== null && bank !== null ? `${posts + bank}篇文章` : '两百多篇文章',
+    lessons ? `《真本事》整门课的${lessons}讲文字稿` : '《真本事》整门课的文字稿',
+    ...(book === 0 ? [] : ['《Growth Data Analytics Playbook》中文版']),
+    ...(blogs === 0 ? [] : [blogs ? `他在Statsig写的${blogs}篇博客` : '他在Statsig写的博客']),
+  ];
+  return `立正六年里讲过、写过的东西：${parts.slice(0, -1).join('、')}，和${parts.at(-1)}。`;
+}
+const MATERIALS = {
+  title: '回答从哪里来',
+  how: '回答先找出和你的问题有关的原文，再整理成段落。每一段都标明出处：文章附日期，视频跳到他讲这段的地方。',
+  open: '这些材料都开源在GitHub',
 };
 const MESSAGES = {
   quota: '今天的3次已经用完。北京时间每天0点恢复；Founding Member验证后不限次。',
@@ -327,6 +360,8 @@ function FoundingInfo({account, busy, step, onLogin}) {
 // In 最常问 a card leads with how many similar askings it stands for; in 最近问 with when it was
 // asked, showing that count below when it says more than one.
 const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问']];
+// Wide enough for 别人正在问 beside the question box (style.css uses the same width).
+const WIDE = window.matchMedia('(min-width: 1100px)');
 
 function QuestionCard({card, open, detail, vote, share, signedIn, selected, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect}) {
   const prefix = `q-${card.public_id}`;
@@ -337,7 +372,7 @@ function QuestionCard({card, open, detail, vote, share, signedIn, selected, onTo
     .filter(Boolean).join(' · ');
   const select = id => onSelect(prefix, id);
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
-  return <article className={`qcard ${open ? 'open' : ''}`}>
+  return <article className={`qcard ${open ? 'open' : ''}`} id={`qcard-${card.public_id}`}>
     <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
       {often ? <span className="qcard-time often">{similar}次类似提问</span>
         : card.asked_at
@@ -507,6 +542,8 @@ function App() {
   const [expanded, setExpanded] = useState(false);
   const shownList = useMemo(() => (questionLists ? discoveryView(questionLists, view) : []), [questionLists, view]);
   const discovery = expanded ? shownList : shownList.slice(0, 4);
+  // 别人正在问: the four newest questions people really asked (not the common ones written fresh).
+  const liveCards = useMemo(() => (questionLists ? discoveryView(questionLists, 'recent').filter(card => card.asked_at).slice(0, 4) : []), [questionLists]);
   const hasDiscovery = discovery.length > 0;
   useEffect(() => {
     if (!hasDiscovery) return;
@@ -625,6 +662,9 @@ function App() {
       if (!lists || (!lists.recent.length && !lists.frequent.length)) { setDiscoveryState('none'); return; }
       // Until someone has asked, the common questions written fresh are all there is.
       if (!openList.current && !discoveryView(lists, 'recent').length) setView('frequent');
+      // On a wide screen the newest are already beside the question box (别人正在问), so the list
+      // below starts with the most asked rather than showing the same questions twice.
+      else if (!openList.current && WIDE.matches) setView('frequent');
       setAskedRecently(askedLastDay(lists.recent));
       setQuestionLists(lists);
       setDiscoveryState('ready');
@@ -706,11 +746,11 @@ function App() {
     questionFrom.current = from;
     setQuestion(value); setError(''); focusInput();
   };
-  const toggleCard = card => {
+  const toggleCard = (card, from = view) => {
     if (openCard === card.public_id) { setOpenCard(''); return; }
     setOpenCard(card.public_id);
     markUsage('d_open');
-    track('Ask Discovery Open', {surface: SURFACE, view});
+    track('Ask Discovery Open', {surface: SURFACE, view: from});
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
     setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
@@ -728,6 +768,16 @@ function App() {
     setCardVotes(prev => ({...prev, [card.public_id]: result}));
     track('Ask Discovery Vote', {surface: SURFACE, vote});
   };
+  // 别人正在问, beside the question box: a question there opens in the list below, among the newest.
+  function openFromLive(card) {
+    setView('recent');
+    if (openCard !== card.public_id) toggleCard(card, 'live');
+    requestAnimationFrame(() => document.getElementById(`qcard-${card.public_id}`)?.scrollIntoView({block: 'start', behavior: scrollBehavior()}));
+  }
+  function toQuestions(event) {
+    event.preventDefault();
+    document.getElementById('questions')?.scrollIntoView({block: 'start', behavior: scrollBehavior()});
+  }
   function showView(target) {
     if (view === target) return;
     setView(target);
@@ -1043,13 +1093,28 @@ function App() {
 
     <main id="main-content" tabIndex={-1}>
       {!conversation ? <div className="home">
-        <div className="stage"><div className="stage-inner">
+        <div className="stage"><div className={`stage-inner ${discoveryState !== 'none' ? 'with-live' : ''}`}>
+        <div className="stage-main">
         <section className="hero">
-          <h1>卡住的时候，<br/>问问立正。</h1>
-          <p className="intro"><Phrases text="六年、四百多期视频（一半是会员视频）、两百多篇文章，还有《真本事》整门课。AI从里面找出和你的问题相关的部分，整理成回答，每段都标明出处。"/></p>
-          <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
+          <h1>{START.title[0]}<br/>{START.title[1]}</h1>
+          <p className="intro">{START.lines.map(line => <span key={line} className="intro-line"><Phrases text={line}/></span>)}</p>
+          {hasDiscovery && <a className="hero-live" href="#questions" onClick={toQuestions}>
+            {askedRecently >= 3 ? `最近24小时 ${askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题` : DISCOVERY.title}<span aria-hidden="true">↓</span>
+          </a>}
+          <p className="identity"><Phrases text={START.identity}/></p>
         </section>
         {composer}
+        </div>
+        {discoveryState !== 'none' && <aside className="live" aria-labelledby="live-title" aria-busy={!questionLists}>
+          <h2 id="live-title">{DISCOVERY.live}</h2>
+          {askedRecently >= 3 && <p className="live-count">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
+          <ol>{!questionLists ? [0, 1, 2, 3].map(i => <li key={i} className="live-placeholder" aria-hidden="true"><i/><b/></li>)
+            : liveCards.map(card => <li key={card.public_id}><button type="button" onClick={() => openFromLive(card)}>
+              <time dateTime={card.asked_at} className={Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}>{askedAgo(card.asked_at)}</time>
+              <span>{card.question}</span>
+            </button></li>)}</ol>
+          {questionLists && <a className="live-more" href="#questions" onClick={toQuestions}>{DISCOVERY.liveMore}<span aria-hidden="true">↓</span></a>}
+        </aside>}
         </div></div>
         <div className="home-body">
         {discoveryState !== 'none' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
@@ -1080,6 +1145,14 @@ function App() {
             </button>)}
           </div>
         </section>}
+        <section className="materials" aria-labelledby="materials-title">
+          <h2 id="materials-title">{MATERIALS.title}</h2>
+          <div>
+            <p className="materials-list"><Phrases text={materialsText(meta?.counts)}/></p>
+            <p><Phrases text={MATERIALS.how}/></p>
+            <p><a className="inline-link" href={LINKS.context} target="_blank" rel="noreferrer">{MATERIALS.open}<Ext/></a></p>
+          </div>
+        </section>
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
           <p><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
