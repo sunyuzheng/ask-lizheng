@@ -400,6 +400,8 @@ function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
   const ref = useRef(null);
   const recipient = answerService(meta?.model);
   useEffect(() => {
+    const previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
     ref.current?.focus();
     const handler = event => {
       if (event.key === 'Escape') onCancel();
@@ -410,17 +412,20 @@ function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      document.documentElement.style.overflow = previousOverflow;
+    };
   }, []);
   return <div className="backdrop" onClick={onCancel}>
     <section className="dialog consent" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
       <h2 id="consent-title">{publicArchive ? '参与公开问答' : '同意AI处理你的输入'}</h2>
-      <p>{publicArchive ? '提问时，你同意保存和公开使用问题、完整回答与出处，帮助有同样问题的人，并用于改进回答和内容选题。公开页面能被搜索找到，请只写愿意公开的内容。' : '提问会按输入旁的说明和隐私政策保存，用于改进回答和内容选题。'}</p>
-      <p><b>AI会接收什么</b><br/>你的问题、开启后填写的处境，以及本次对话最近最多6轮的问题和回答摘要；生成回答还会使用检索到的公开资料。发送前不会自动去掉输入里的个人信息。</p>
-      <p><b>谁处理、做什么</b><br/>经Builder Space（space.ai-builders.com）转发：{recipient || '当前回答服务商尚未确认'}用{meta?.model || 'AI'}生成回答；OpenAI用text-embedding-3-small匹配资料，接收问题、处境及上一轮问题的文本。邮箱和登录信息不交给AI。Builder Space的AI网关只记用量元数据，不保存问答正文。</p>
-      <p><b>公开范围</b><br/>{publicArchive ? `常见问答经同一回答AI去掉个人信息后精选展示；主动分享的页面显示问题、回答与出处。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}完整回答可能引用其中细节，这些细节也在你同意公开使用的范围内。` : '当前问答保存说明不包含公开使用；请查看隐私政策。'}<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
+      <p>{publicArchive ? '提问表示同意保存和公开使用问题、完整回答与出处，帮助别人、改进回答及内容选题。请只写愿意公开的内容。' : '提问按输入旁的说明和隐私政策保存，用于改进回答及内容选题。'}</p>
+      <p><b>AI处理</b><br/>Builder Space转交输入给{recipient || '待确认的服务商'}生成回答、OpenAI匹配资料。回答AI接收问题、选填处境、最多6轮问题与回答摘要及公开资料；OpenAI接收用于匹配的问题、处境及必要时的上一轮问题。</p>
+      <p><b>公开范围</b><br/>{publicArchive ? `常见问答由同一AI去掉个人信息后精选展示；分享页显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
+      <p>发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
       {!recipient && <p role="alert">回答服务商尚未确认，暂时不能发送。你仍可浏览公开问答。</p>}
-      <p className="consent-choice">不同意也可以浏览已有问答和出处。可在「说明」里撤回同意，停止之后的AI提问。</p>
+      <p className="consent-choice">不同意也能浏览问答；可在「说明」里撤回AI同意。</p>
       <div className="consent-actions">
         <button type="button" className="ghost-button" onClick={onCancel}>不同意</button>
         <button type="button" className="consent-agree" disabled={!recipient} onClick={onAgree}>{publicArchive ? '同意AI处理与公开使用' : '同意AI处理并提问'}</button>

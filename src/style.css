@@ -2174,6 +2174,8 @@ main {
 
 .consent {
   width: min(520px, 100%);
+  max-height: min(88dvh, 900px);
+  overscroll-behavior: contain;
 }
 
 .dialog.consent h2 {
@@ -2207,6 +2209,11 @@ main {
   background: var(--paper);
 }
 
+.consent-actions .ghost-button {
+  min-height: 44px;
+  color: var(--ink-2);
+}
+
 .consent-agree {
   min-height: 44px;
   padding: 0 22px;
@@ -2219,6 +2226,14 @@ main {
 
 .consent-agree:hover {
   background: var(--green-deep);
+}
+
+.consent-agree:active {
+  background: var(--green-deep);
+}
+
+.consent-agree:disabled {
+  opacity: 0.5;
 }
 
 .dialog-close {
