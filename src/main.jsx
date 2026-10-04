@@ -939,8 +939,8 @@ function App() {
       {!conversation ? <div className="home">
         <div className="stage"><div className="stage-inner">
         <section className="hero">
-          <h1>把一个问题，<br/>问得更明白。</h1>
-          <p className="intro"><Phrases text="想理解一个观点，或者用到自己的处境里？AI会从立正公开的文章和视频里找相关内容，整理成回答，并标明出处。"/></p>
+          <h1>卡住的时候，<br/>问问立正。</h1>
+          <p className="intro"><Phrases text="六年、四百多期视频（一半是会员视频）、两百多篇文章。AI从里面找出和你的问题相关的部分，整理成回答，每段都标明出处。"/></p>
           <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
         </section>
         {composer}
