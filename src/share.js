@@ -4,7 +4,7 @@
 // ask.lizheng.ai. Loaded only when someone saves an answer.
 import qrcode from 'qrcode-generator';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
-import {isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
+import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
 
 const SITE = 'https://ask.lizheng.ai/';
 const W = 1080;                                   // layout width; drawn at up to 2x
@@ -339,7 +339,7 @@ function layout(ctx, {question, result, date, personal}) {
     }}, gap(10));
     result.sources.forEach((source, i) => {
       rows.push(sourceRow(ctx, source, String(i + 1)));
-      if (isMemberVideo(source) && source.text_access === 'public' && source.public_copy_url) {
+      if ((isMemberVideo(source) || isMemberCourse(source)) && source.text_access === 'public' && source.public_copy_url) {
         const copyRows = textRows(ctx, [{text: `公开文字稿：${plainUrl(source.public_copy_url)}`}], {size: 19, lh: 1.5, weight: 400, color: C.greenText}, {indent: 70});
         rows.push(...copyRows.map(row => ({...row, link: source.public_copy_url})), gap(14));
       }

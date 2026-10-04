@@ -8,7 +8,7 @@ import {askedAgo, askedLastDay, discoveryDetail, discoveryPage, discoveryPool, p
 import {IN_APP} from './in-app.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
-import {isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
+import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -137,15 +137,16 @@ const sourceLabel = sourceTypeLabel;
 const sourceDate = source => source.date?.slice(0, 10) || '日期未标明';
 
 function SourceCard({source, selected, onOpen, prefix}) {
-  return <article id={`${prefix}-source-${source.id}`} className={`source ${isMemberVideo(source) ? 'source-member' : ''} ${selected ? 'selected' : ''}`}>
+  const member = isMemberVideo(source) || isMemberCourse(source);
+  return <article id={`${prefix}-source-${source.id}`} className={`source ${member ? 'source-member' : ''} ${selected ? 'selected' : ''}`}>
     <div className="source-meta">
       <span className="source-num">{source.id.slice(1)}</span>
-      <span className={isMemberVideo(source) ? 'member-video-badge' : undefined}>{sourceLabel(source)}</span>
+      <span className={member ? 'member-video-badge' : undefined}>{sourceLabel(source)}</span>
       <time>{sourceDate(source)}</time>
     </div>
     <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
-    {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
-    {isMemberVideo(source) && <div className="source-access-links">
+    {member && <p className="source-access-note">{sourceAccessNote(source)}</p>}
+    {member && <div className="source-access-links">
       {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<Ext/></a>}
       {memberVideoUrl(source) && <a className="source-video-cta" href={memberVideoUrl(source)} target="_blank" rel="noopener noreferrer" onClick={() => trackSource(source.url)}>观看会员完整视频<Ext/></a>}
     </div>}
@@ -160,7 +161,7 @@ function SourceCard({source, selected, onOpen, prefix}) {
       <p className="excerpt">{source.excerpt}</p>
       <p className="attribution">{source.author && `${source.author} · `}{source.attribution_note}</p>
       {transcriptQualityNote(source) && <p className="source-quality-note">{transcriptQualityNote(source)}</p>}
-      {source.public_copy_url && !(isMemberVideo(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
+      {source.public_copy_url && !((isMemberVideo(source) || isMemberCourse(source)) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
     </details>
   </article>;
 }
@@ -235,10 +236,10 @@ function Candidates({sources, turnId, onSelect}) {
   return <div className="candidates">
     <div className="candidates-head"><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
     {sources.slice(0, 2).map(source => <article className="candidate" key={`${source.id}-${source.url}`}>
-      {isMemberVideo(source) && <span className="member-video-badge">会员视频</span>}
+      {(isMemberVideo(source) || isMemberCourse(source)) && <span className="member-video-badge">{sourceLabel(source)}</span>}
       <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
       <time>{sourceDate(source)}</time>
-      {isMemberVideo(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
+      {(isMemberVideo(source) || isMemberCourse(source)) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
       <p>{source.excerpt?.slice(0, 150)}{source.excerpt?.length > 150 ? '…' : ''}</p>
     </article>)}
     {sources.length > 2 && <details className="candidates-all">
@@ -940,7 +941,7 @@ function App() {
         <div className="stage"><div className="stage-inner">
         <section className="hero">
           <h1>卡住的时候，<br/>问问立正。</h1>
-          <p className="intro"><Phrases text="六年、四百多期视频（一半是会员视频）、两百多篇文章。AI从里面找出和你的问题相关的部分，整理成回答，每段都标明出处。"/></p>
+          <p className="intro"><Phrases text="六年、四百多期视频（一半是会员视频）、两百多篇文章，还有《真本事》整门课。AI从里面找出和你的问题相关的部分，整理成回答，每段都标明出处。"/></p>
           <p className="identity"><Phrases text="这是AI回答，不是立正本人实时回复；重要的判断，请回到原文核对。"/></p>
         </section>
         {composer}

@@ -3,9 +3,12 @@ import {IN_APP} from './in-app.js';
 // Access belongs to verified source metadata, never a title or an Ask account tier.
 export const YOUTUBE_MEMBERSHIP_URL = 'https://www.youtube.com/channel/UC_5lJHgnMP_lb_VpIiXV0hQ/join';
 export const isMemberVideo = source => source?.source_visibility === 'members-only' && source.source_type?.includes('video');
-export const sourceTypeLabel = source => isMemberVideo(source) ? '会员视频'
+// A members-only course's lesson text, opened by the author for answers (Open Context course-lesson).
+export const isMemberCourse = source => source?.source_type === 'course-lesson' && source?.source_visibility === 'members-only';
+export const sourceTypeLabel = source => isMemberVideo(source) ? '会员视频' : isMemberCourse(source) ? '会员课程'
   : source?.source_type?.includes('video') ? '视频' : source?.source_type === 'context' ? 'AI整理' : '文章';
 export function sourceAccessNote(source) {
+  if (isMemberCourse(source)) return source.text_access === 'public' ? '文字稿已公开；课程视频需超线性学院会员。' : '课程需超线性学院会员。';
   if (!isMemberVideo(source)) return '';
   const original = source.membership_platform === 'youtube' ? '原视频需 YouTube 频道会员。' : '原视频需会员观看。';
   return source.text_access === 'public' ? `文字稿已公开；${original}` : original;
