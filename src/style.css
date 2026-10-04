@@ -2173,17 +2173,24 @@ main {
 }
 
 .consent {
-  width: min(460px, 100%);
+  width: min(520px, 100%);
+  max-height: min(88dvh, 900px);
+  overscroll-behavior: contain;
 }
 
-.consent h2 {
+.dialog.consent h2 {
   margin: 0 0 12px;
+  font-size: 24px;
 }
 
 .consent p {
   margin: 10px 0 0;
   color: var(--ink-2);
   line-height: 1.8;
+}
+
+.consent .consent-choice {
+  font-size: 14px;
 }
 
 .consent .inline-link {
@@ -2195,6 +2202,16 @@ main {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 26px;
+  flex-wrap: wrap;
+  position: sticky;
+  bottom: -18px;
+  padding: 12px 0;
+  background: var(--paper);
+}
+
+.consent-actions .ghost-button {
+  min-height: 44px;
+  color: var(--ink-2);
 }
 
 .consent-agree {
@@ -2209,6 +2226,14 @@ main {
 
 .consent-agree:hover {
   background: var(--green-deep);
+}
+
+.consent-agree:active {
+  background: var(--green-deep);
+}
+
+.consent-agree:disabled {
+  opacity: 0.5;
 }
 
 .dialog-close {

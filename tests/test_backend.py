@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from server.answers import ModelAnswer, assemble_answer, misattributed, validate_answer
+from server.answers import DEFAULT_MODEL, ModelAnswer, assemble_answer, misattributed, validate_answer
 from server.app import create_app
 from server.retrieval import ContextIndex
 
@@ -232,6 +232,88 @@ def test_no_token_returns_honest_search_results(context_pack, monkeypatch):
         assert not result["sections"]
         search = client.get("/api/search", params={"q": "职业选择"})
         assert search.json()["sources"]
+
+
+@pytest.mark.parametrize("configured_model", [None, "gpt-5"])
+def test_consent_model_mismatch_stops_before_admission_resources(context_pack, monkeypatch, configured_model):
+    from server.quota import MemoryQuotaStore
+    from test_quota import SECRET, post
+
+    monkeypatch.setenv("ASK_QUOTA_ENABLED", "true")
+    monkeypatch.setenv("ASK_ADMISSION_SECRET", SECRET)
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    if configured_model is None:
+        monkeypatch.delenv("AI_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("AI_MODEL", configured_model)
+    current_model = configured_model or DEFAULT_MODEL
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("A consent mismatch must not consume resources or transmit input")
+
+    app = create_app(context_pack, httpx.MockTransport(unexpected), quota_store=MemoryQuotaStore(),
+                     query_record_transport=httpx.MockTransport(unexpected))
+    with TestClient(app) as client:
+        for target, name in [(app.state.limiter, "allow"), (app.state.slots, "acquire"),
+                             (app.state.quota, "reserve"), (app.state.semantic, "candidates"),
+                             (app.state.index, "retrieve"), (app.state.query_records, "enqueue"),
+                             (app.state.ops_records, "prepare"), (app.state.ops_records, "start")]:
+            monkeypatch.setattr(target, name, unexpected)
+        response = post(client, {"question": "职业选择怎么做", "query_log_notice": "v1",
+                                 "ai_consent_model": "previous-model"})
+        assert response.status_code == 409
+        assert response.json() == {"code": "ai_consent_changed", "model": current_model}
+        assert response.headers["x-ask-error-code"] == "ai_consent_changed"
+        assert response.headers["cache-control"] == "no-store"
+        assert app.state.slots._value == 3 and not app.state.query_records.tasks
+
+
+@pytest.mark.parametrize("with_consent_model", [True, False])
+def test_matching_or_legacy_consent_binds_model_without_forwarding_field(context_pack, monkeypatch, with_consent_model):
+    from server.quota import MemoryQuotaStore
+    from test_quota import SECRET, post
+
+    monkeypatch.setenv("ASK_QUOTA_ENABLED", "true")
+    monkeypatch.setenv("ASK_ADMISSION_SECRET", SECRET)
+    monkeypatch.setenv("ASK_QUERY_LOG_ENABLED", "true")
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.setenv("AI_MODEL", "gpt-5")
+    monkeypatch.setenv("ASK_OPS_ENABLED", "false")
+    generated, recorded = [], []
+
+    def provider(request):
+        body = json.loads(request.content)
+        generated.append(body)
+        prompt = json.loads(body["messages"][1]["content"])
+        assert "ai_consent_model" not in prompt and "query_log_notice" not in prompt
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
+
+    app = create_app(context_pack, httpx.MockTransport(provider), quota_store=MemoryQuotaStore())
+    with TestClient(app) as client:
+        reserve = app.state.quota.reserve
+
+        async def reserve_then_change_model(principal):
+            # A deployment/config change after the guard cannot redirect this request.
+            monkeypatch.setenv("AI_MODEL", "changed-model")
+            return await reserve(principal)
+
+        monkeypatch.setattr(app.state.quota, "reserve", reserve_then_change_model)
+        monkeypatch.setattr(app.state.query_records, "enqueue", lambda **record: recorded.append(record))
+        payload = {"question": "职业选择怎么做", "query_log_notice": "v1"}
+        if with_consent_model:
+            payload["ai_consent_model"] = "gpt-5"
+        response = post(client, payload)
+        assert response.status_code == 200 and events(response)[-1][1]["status"] == "answered"
+        assert len(generated) == len(recorded) == 1
+        assert generated[0]["model"] == recorded[0]["model"] == "gpt-5"
+        assert "ai_consent_model" not in recorded[0]
+
+
+def test_consent_model_field_is_bounded(context_pack):
+    with TestClient(create_app(context_pack)) as client:
+        for model in ["", "x" * 129]:
+            response = client.post("/api/ask", json={"question": "职业选择", "ai_consent_model": model})
+            assert response.status_code == 422 and response.json()["code"] == "invalid_input"
 
 
 def test_provider_answer_is_source_validated(context_pack, monkeypatch):
