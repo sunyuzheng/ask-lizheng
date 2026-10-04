@@ -9,6 +9,7 @@ import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
+import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
@@ -40,16 +41,9 @@ const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3
 const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
   : kind === 'application' ? (personal ? '结合你的处境' : 'AI推演') : '';
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
-// v4: public-use permission for questions and answers; selected questions are redacted before display.
-const V4_NOTICE = '这里是公开问答。提问表示同意保存、公开使用问题和回答，帮助有同样问题的人。只写愿意公开的内容。';
-// The situation is not kept since 2026-10-04 (/api/meta says context_archive: false); before that it was kept for analysis.
-const SITUATION_NOTE = kept => (kept ? '处境原文只用于分析；回答可能引用其中细节，并随问答公开使用。' : '不保存处境原文；回答可能引用其中细节，并随问答公开使用。');
-const v4Parts = kept => [
-  ['公开问答', '你问的往往也是别人想问的。提问时，你同意保存和公开使用问题、完整回答与出处，帮助有同样问题的人；立正也会从中找选题写文章、做视频，并改进回答。常见问答会去掉个人信息后精选展示；你也可以分享问答，公开页面能被搜索找到。'],
-  ['保存什么', '提问、完整回答和所用出处，以及匿名的使用统计。'],
-  ['你的隐私', `提问记录不关联邮箱、账号或IP；但输入文字仍可能识别个人，发给AI前不会自动去掉。登录只用来核验Founding身份，不会和提问记在一起，也不交给模型。精选展示前，模型会去掉可能认出你的信息；主动分享的页面直接显示问题与完整回答。${kept ? '「结合我的处境」原文只用于分析、不单独公开；回答可能引用其中细节，并随问答公开使用。' : '「结合我的处境」原文只用于生成回答，不保存、不单独公开；回答可能引用其中细节，并随问答公开使用。'}`],
-  ['另外', '回答由AI根据立正公开的文章和视频整理，不是立正本人回复。提问和必要背景会发给Builder Space的模型服务处理。当前对话只在这个页面里，刷新就会清除。'],
-];
+// v4, public Q&A: the notice, 说明 and the situation note come from public-qa.js, shared with
+// lizheng.ai. The situation is not kept since 2026-10-04 (/api/meta says context_archive: false).
+const publicQa = (meta, contextKept) => publicQaCopy('zh', {owner: '立正', self: '他', answerer: answerService(meta?.model), contextKept});
 // v3, today's notice: answers are kept to improve them and only 立正 sees the records. Purpose first, in the same four parts.
 const V3_PARTS = [
   ['为什么保存', '看哪些问题答得不好、缺哪些材料，把回答做得更好；也让立正知道大家关心什么。'],
@@ -97,7 +91,7 @@ const SHARE = {
   label: '分享这条回答',
   bonusLabel: '分享这条回答，今天多问一次',
   quota: '分享上面的回答，今天多问一次',
-  what: '分享页只显示这个问题和回答，不显示你的处境和其他提问。',
+  what: PUBLIC_QA.zh.share,
   create: '复制分享链接',
   creating: '正在生成链接…',
   copied: '链接已复制。',
@@ -378,15 +372,6 @@ function QuestionCard({card, open, detail, vote, share, signedIn, selected, onTo
 // The iPhone app asks once before the first question goes to the AI service, as App Store rules
 // require explicit permission before sharing personal data with a third-party AI.
 const CONSENT_KEY = 'ask-app-ai-consent';
-// Confirmed Builder routes (2026-10-04); don't label an unknown model's processor by guesswork.
-const answerService = model => {
-  if (model === 'deepseek-v4-flash' || model === 'deepseek-v4-pro') return 'DeepSeek';
-  if (model === 'gpt-5') return 'OpenAI';
-  if (model === 'grok-4.5') return 'xAI';
-  if (/^gemini(?:-|$)/.test(model || '')) return 'Google';
-  if (/^kimi(?:-|$)/.test(model || '')) return 'Moonshot';
-  return null;
-};
 // Retire earlier permission when recipients, public-use disclosure or archive mode change.
 const consentScope = meta => `v3:${meta?.model || 'AI'}:${answerService(meta?.model) || 'unknown'}:OpenAI:${meta?.ops_logging?.enabled === true}:${meta?.ops_logging?.notice || 'v1'}:${meta?.ops_logging?.answer_archive === true}:${meta?.ops_logging?.public_display || 'none'}:${meta?.ops_logging?.context_archive === true}`;
 const readConsent = scope => { try { return localStorage.getItem(CONSENT_KEY) === scope; } catch { return false; } };
@@ -461,8 +446,10 @@ function About({close, meta, account, focusInput, publicArchive, contextKept, on
       <div className="about-row"><h3>问得具体一点</h3><p>与其问「我该怎么办」，不如打开「结合我的处境」，说清想达到什么、发生了什么、试过什么，以及你觉得卡在哪里。不用先把问题想得很完美。</p></div>
       <div className="about-row"><h3>把答案带回现实</h3><p>AI可以整理材料、提出假设，但你的具体情况未必在材料里。建议是否适用，要靠你的行动和反馈来判断。也可以直接追问：这个判断成立的条件是什么？</p></div>
       <div className="about-row"><h3>随时回到出处</h3><p>文章保留日期，视频尽量链接到具体时间点。嘉宾的观点归嘉宾，AI的整理和推断也会标出来。AI可能读错或漏掉条件，重要的判断请打开原文核对；材料里没有的内容，它会说明材料不足。</p></div>
-      {meta?.ops_logging?.enabled ? <div className="about-row" id="about-input"><h3>你的提问会怎么用</h3>
-        {(publicArchive ? v4Parts(contextKept) : V3_PARTS).map(([title, text]) => <p key={title}><b>{title}</b>　{text}</p>)}
+      {publicArchive ? <div className="about-row" id="about-input"><h3>{PUBLIC_QA.zh.title}</h3>
+        {publicQa(meta, contextKept).about.map(text => <p key={text}>{text}</p>)}
+      </div> : meta?.ops_logging?.enabled ? <div className="about-row" id="about-input"><h3>你的提问会怎么用</h3>
+        {V3_PARTS.map(([title, text]) => <p key={title}><b>{title}</b>　{text}</p>)}
       </div> : <div className="about-row" id="about-input"><h3>关于你的输入</h3><ul>
         <li>提问文本会保存30天，用于改进回答，同时记录提问时间、模型、回答状态和耗时，30天后自动删除。</li>
         <li>不保存补充背景和对话历史原文、模型内部推理；提问记录不关联邮箱、账号或IP。完整回答可能概括你提供的处境。</li>
@@ -999,7 +986,7 @@ function App() {
       </p>}
       {showFields && <div className="background">
         <p>说清处境，比把问题包装好更有用。三项都可以空着，只写你愿意分享的部分。</p>
-        {publicArchive && <p className="situation-note">{SITUATION_NOTE(contextKept)}</p>}
+        {publicArchive && <p className="situation-note">{publicQa(meta, contextKept).situation}</p>}
         {BACKGROUND.map(field => <label key={field.key}>
           {field.label}
           {field.multiline
@@ -1029,7 +1016,7 @@ function App() {
       </div>
     </form>
     <div className="composer-meta">
-      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? V4_NOTICE : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : metaWaking ? '问答服务正在唤醒，通常十几秒，可以先写问题。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
+      <p className="notice">{storageReady ? (meta.ops_logging.enabled ? (publicArchive ? PUBLIC_QA.zh.notice : OPS_NOTICE) : NOTICE) : (meta?.settings_error ? '保存设置尚未确认。' : metaWaking ? '问答服务正在唤醒，通常十几秒，可以先写问题。' : '正在确认保存设置…')}<button type="button" className="text-button" onClick={() => openAbout(true)}>说明</button></p>
       <AccountLine account={account} waking={accountWaking} busy={busy} step={loginStep} foundingOpen={foundingOpen} onToggleFounding={() => { if (!foundingOpen) track('Ask Founding Info', {surface: SURFACE}); setFoundingOpen(open => !open); }} onLogin={login} onLoginHere={loginHere} onLogout={logout} onRetry={refreshAccount}/>
     </div>
     {outOfQuota && shareable && <p className="share-nudge"><button type="button" className="text-button" onClick={() => openShare(shareable)}>{SHARE.quota}</button></p>}
