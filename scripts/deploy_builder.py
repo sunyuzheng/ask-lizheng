@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import quote, urlparse
 
 DEPLOYMENTS_URL = "https://space.ai-builders.com/backend/v1/deployments"
@@ -26,6 +27,11 @@ PUBLIC_URL = "https://ask-lizheng.ai-builders.space/"
 QUOTA_STORE_URL = "https://www.lizheng.ai/api/ask-lizheng/quota-storage"
 DEFAULT_MODEL = "deepseek-v4-flash"
 MODELS = (DEFAULT_MODEL, "grok-4.5")
+# The live service's settings. Every deploy should use them, and the automatic context update
+# (scripts/update_context.py) deploys with nothing else: change them here, in a reviewed commit.
+SETTINGS = Path(__file__).resolve().parents[1] / "config" / "builder-deploy.json"
+# lizheng.ai holds keys derived from the deploying token (server/admission.py, server/quota.py).
+QUOTA_STORE_PURPOSE = "ask-lizheng:quota-store:v1"
 WORKFLOW_STATES = {"queued", "deploying"}
 TERMINAL_STATES = {"HEALTHY", "SLEEPING", "UNHEALTHY", "DEGRADED", "ERROR"}
 
@@ -105,6 +111,17 @@ def build_review(repo_url: str = DEFAULT_REPO, expected_commit: str = "", *, ena
     }
 
 
+def settings_review(expected_commit: str = "", path: Path = SETTINGS) -> dict:
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise DeploymentError("config/builder-deploy.json could not be read.") from None
+    flags = ("enable_quota", "enable_query_log", "enable_ops")
+    if not isinstance(settings, dict) or set(settings) != {"model", *flags} or not all(type(settings[flag]) is bool for flag in flags):
+        raise DeploymentError("config/builder-deploy.json has unsupported settings.")
+    return build_review(DEFAULT_REPO, expected_commit, model=settings["model"], **{flag: settings[flag] for flag in flags})
+
+
 def approval_digest(review: dict) -> str:
     return hashlib.sha256(json.dumps(review, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -157,6 +174,32 @@ def verify_repository(review: dict) -> str:
     if review["expected_commit"] and commit != review["expected_commit"]:
         raise DeploymentError("Remote branch differs from the approved commit; no deployment was sent.")
     return commit
+
+
+def quota_store_status(body: bytes, proof: str) -> int:
+    request = urllib.request.Request(QUOTA_STORE_URL, data=body, method="POST", headers={
+        "Content-Type": "application/octet-stream", "X-Ask-Quota-Proof": proof, "User-Agent": "ask-lizheng-deployment-review"})
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=20) as response:
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise RemoteError() from None
+
+
+def check_same_source(token: str) -> None:
+    """A service deployed with a token lizheng.ai does not derive its keys from fails every signed
+    call (2026-10-01). A signed but deliberately invalid body is turned away with 400 before it
+    reaches any store; a key from another token gets 403. Nothing is written either way."""
+    secret = hmac.new(token.encode("utf-8"), QUOTA_STORE_PURPOSE.encode("utf-8"), hashlib.sha256).hexdigest()
+    body = b"[]"
+    expiry = int(time.time()) + 30
+    message = f"ask-quota-store:v1:{expiry}:{hashlib.sha256(body).hexdigest()}"
+    signature = hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+    status = quota_store_status(body, f"v1.{expiry}.{signature}")
+    if status != 400:
+        raise DeploymentError(f"lizheng.ai does not hold keys derived from this token (HTTP {status}); no deployment was sent.")
 
 
 def check_service_binding(payload: dict, token: str) -> None:
@@ -246,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
     parser.add_argument("--enable-query-log", action="store_true", help="Save disclosed questions for 30 days through the fixed signed storage endpoint.")
     parser.add_argument("--enable-ops", action="store_true", help="Require disclosed v3 question/answer archives until owner deletion; requires quota and query logging.")
+    parser.add_argument("--from-settings", action="store_true", help="Use the live settings in config/builder-deploy.json instead of the flags above.")
     approval = parser.add_mutually_exclusive_group()
     approval.add_argument("--dry-run", action="store_true", help="Print the exact review; never read credentials or make network calls.")
     approval.add_argument("--approved-sha", help="Digest of the exact payload explicitly approved by the user.")
@@ -256,8 +300,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not 1 <= args.poll_seconds <= 10 or not 30 <= args.max_wait_seconds <= 1200:
             raise DeploymentError("Polling must be 1–10 seconds, with a bounded wait of 30–1200 seconds.")
-        review = build_review(args.repo_url, args.expected_commit, enable_quota=args.enable_quota,
-                              model=args.model, enable_query_log=args.enable_query_log, enable_ops=args.enable_ops)
+        if args.from_settings:
+            if args.enable_quota or args.enable_query_log or args.enable_ops or args.model != DEFAULT_MODEL or args.repo_url != DEFAULT_REPO:
+                raise DeploymentError("Use either --from-settings or explicit settings, not both.")
+            review = settings_review(args.expected_commit)
+        else:
+            review = build_review(args.repo_url, args.expected_commit, enable_quota=args.enable_quota,
+                                  model=args.model, enable_query_log=args.enable_query_log, enable_ops=args.enable_ops)
         digest = approval_digest(review)
         print(json.dumps({"mode": "approved-deploy" if args.approved_sha else "dry-run", "execution_ready": bool(review["expected_commit"]), "review": review, "approval_sha256": digest}, ensure_ascii=False, indent=2))
         if not args.approved_sha:
@@ -271,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         token = os.environ.get("AI_BUILDER_TOKEN", "")
         if not token:
             raise DeploymentError("AI_BUILDER_TOKEN is required in the process environment; no deployment was sent.")
+        check_same_source(token)
         public_url = deploy(review, token, args.poll_seconds, args.max_wait_seconds, args.show_build_logs, verified_commit=verified_commit)
         print(public_url)
         return 0

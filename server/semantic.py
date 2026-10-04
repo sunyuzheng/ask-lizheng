@@ -27,6 +27,8 @@ DIMENSIONS = 256
 MAX_INPUT_BYTES = 7000
 MAX_INDEX_VECTORS = 20_000
 MAX_BATCH = 32
+# One name, so each rebuild stores only the vectors that changed in Git; index.json pins the bytes.
+VECTOR_FILE = "vectors.f32"
 MIN_SIMILARITY = .40
 PUBLIC_REPOSITORY = "sunyuzheng/lizheng-open-context"
 
@@ -245,7 +247,9 @@ class SemanticIndex:
                 seen.add(segment_identity)
                 indexes.append(index)
             filename = metadata["vector_file"]
-            if not re.fullmatch(r"vectors-[0-9a-f]{64}\.f32", filename) or filename != "vectors-" + metadata["vector_sha256"] + ".f32":
+            # Indexes built before 2026-10-04 carried the checksum in the file name instead.
+            if filename != VECTOR_FILE and not (re.fullmatch(r"vectors-[0-9a-f]{64}\.f32", filename)
+                                                and filename == "vectors-" + metadata["vector_sha256"] + ".f32"):
                 raise SemanticIndexError("Invalid public semantic vector path")
             vector_path = _safe_path(self.index_root, filename)
             size = len(entries) * DIMENSIONS * 4

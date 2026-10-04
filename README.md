@@ -25,11 +25,15 @@ python3 -m venv .venv
 
 ## 公开资料
 
-`data/context` 是 [lizheng-open-context](https://github.com/sunyuzheng/lizheng-open-context) 的哈希校验副本；它的 release manifest 和许可一起保留，版本绑定在 `data/context-lock.json`。本产品不读取个人私有资料。更新时先在上游完成内容审阅和 release validation，再运行：
+`data/context` 是 [lizheng-open-context](https://github.com/sunyuzheng/lizheng-open-context) 的哈希校验副本；它的 release manifest 和许可一起保留，版本绑定在 `data/context-lock.json`。本产品不读取个人私有资料。
+
+Open Context 推到 main 就会自动上线（2026-10-04 起，立正的决定：推 main 就是批准它的内容进入问问立正）。`.github/workflows/update-context.yml` 每半小时比较一次，有新版本就运行 `scripts/update_context.py`：先跑 Open Context 自己的 release validation 和测试，再同步副本、重建语义索引、跑本仓库测试，只把 `data/` 提交到 main，用 `config/builder-deploy.json` 的线上设置部署 Builder，等线上 `/api/meta` 的 `context_release` 变成新版本、语义索引就绪，再把 `context-live` 标签移到这个提交。任何一步失败就停下，这次运行失败，GitHub 发邮件给立正；部署没完成的，下一轮会再部署。想马上更新就运行 `gh workflow run update-context.yml -R sunyuzheng/ask-lizheng`。部署令牌存在仓库的 `builder` 环境里（只有 main 上的运行能读），换令牌时要一起换。
+
+重建索引只为新的或改过的文字窗口调用 embedding，其余向量按文字哈希原样保留；向量文件固定叫 `vectors.f32`，所以 Git 只多存变化的部分。手动做同样的事（例如排查）：
 
 ```sh
 python3 scripts/sync_context.py --source /path/to/lizheng-open-context
-# 先查看新的公开索引范围；确认后通过进程环境提供 token 再构建。
+# 先看有多少窗口要重新计算；--build 需要进程环境里的 AI_BUILDER_TOKEN，--full 全部重算。
 .venv/bin/python scripts/build_semantic_index.py
 .venv/bin/python scripts/build_semantic_index.py --build
 ```
@@ -42,7 +46,7 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 
 Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `deepseek-v4-flash`，附带 thinking enabled、`reasoning_effort: low`、JSON object 与同一 schema 提示；流式段落和最终回答继续经过格式与来源验证，并至多修复一次。可通过 `AI_MODEL` 更换：`grok-4.5` 使用 medium，`gpt-5` 使用 low，`deepseek-v4-pro` 使用 high。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。服务闲置5分钟后会深度休眠，下一个请求把它唤醒，通常要几秒到半分钟。ask.lizheng.ai根路径因此先经个人站的页面函数：服务1.5秒内回应就原样给页面，否则先显示「正在唤醒」并在醒来后自动刷新；页面里读次数和提问等得久时，也会说明服务在唤醒。
 
-部署脚本默认dry-run，列出目的地、完整非秘密payload与审批摘要。审阅时传入`--expected-commit`的完整Git SHA；正式部署再传对应`--approved-sha`。启用额度时加`--enable-quota`，只向Builder传公开开关与固定额度代理URL，数据库、Circle及邮件凭证都留在个人站Vercel。脚本会先验证公开仓库main正是该版本，再读取模型token并执行部署。发布仍需取得对准确差异与目的地的批准。完整调用契约见[API.md](docs/API.md)。
+部署脚本默认dry-run，列出目的地、完整非秘密payload与审批摘要。审阅时传入`--expected-commit`的完整Git SHA；正式部署再传对应`--approved-sha`。启用额度时加`--enable-quota`，只向Builder传公开开关与固定额度代理URL，数据库、Circle及邮件凭证都留在个人站Vercel。`--from-settings` 改用 `config/builder-deploy.json` 里的线上设置（目前等于 `--enable-quota --enable-query-log --enable-ops --model deepseek-v4-flash`）；改线上设置时要同时改这个文件，自动更新只按它部署。脚本会先验证公开仓库main正是该版本，再读取模型token，确认 lizheng.ai 持有由这个 token 派生的密钥（否则所有签名调用都会失败，脚本不部署），然后执行部署。发布仍需取得对准确差异与目的地的批准；Open Context 资料的自动更新是唯一例外，见上文。完整调用契约见[API.md](docs/API.md)。
 
 ## 验证
 

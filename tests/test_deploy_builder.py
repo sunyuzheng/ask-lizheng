@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -231,6 +232,8 @@ def test_approved_deploy_uses_exact_payload_no_token_output(monkeypatch, capsys)
             raise deploy.RemoteError(404)
         return {"service_name": deploy.SERVICE, "status": "HEALTHY", "git_commit_id": COMMIT, "public_url": deploy.PUBLIC_URL}
     monkeypatch.setattr(deploy, "request_json", remote)
+    probes = []
+    monkeypatch.setattr(deploy, "quota_store_status", lambda body, proof: probes.append(len(calls)) or 400)
     monkeypatch.setenv("AI_BUILDER_TOKEN", token)
     assert deploy.main(["--expected-commit", COMMIT, "--approved-sha", deploy.approval_digest(review)]) == 0
     output = capsys.readouterr()
@@ -238,6 +241,8 @@ def test_approved_deploy_uses_exact_payload_no_token_output(monkeypatch, capsys)
     assert output.out.strip().endswith(deploy.PUBLIC_URL)
     assert [call[0] for call in calls] == ["GET", "GET", "GET", "POST"]
     assert calls[-1][2] == review["payload"]
+    # The token was checked against lizheng.ai once, after the public checks and before the service was touched.
+    assert probes == [2]
 
 
 def test_optional_logs_are_build_only_and_redacted(monkeypatch, capsys):
@@ -250,3 +255,55 @@ def test_optional_logs_are_build_only_and_redacted(monkeypatch, capsys):
     output = capsys.readouterr().err
     assert token not in output and "another-sensitive-value" not in output
     assert "Build started" in output and "Build finished" in output
+
+
+def test_a_token_lizheng_ai_does_not_accept_is_never_deployed(monkeypatch, capsys):
+    calls = []
+    review = deploy.build_review(expected_commit=COMMIT)
+    def remote(method, url, payload=None, token="", timeout=20):
+        calls.append(method)
+        return {"name": "main", "commit": {"sha": COMMIT}} if "/branches/" in url else {"private": False, "html_url": deploy.DEFAULT_REPO}
+    monkeypatch.setattr(deploy, "request_json", remote)
+    monkeypatch.setattr(deploy, "quota_store_status", lambda body, proof: 403)
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "SYNTHETIC_PRIVATE_SENTINEL")
+    assert deploy.main(["--expected-commit", COMMIT, "--approved-sha", deploy.approval_digest(review)]) == 2
+    assert "POST" not in calls and "HTTP 403" in capsys.readouterr().err
+
+
+def test_same_source_check_signs_an_invalid_body_with_the_derived_key(monkeypatch):
+    import hashlib, hmac
+    from server.admission import QUOTA_STORE_PURPOSE, derived_secret
+    from server.quota import QUOTA_STORE_HEADER
+    seen = []
+    monkeypatch.setattr(deploy, "quota_store_status", lambda body, proof: seen.append((body, proof)) or 400)
+    deploy.check_same_source("synthetic-token")
+    body, proof = seen[0]
+    version, expiry, signature = proof.split(".")
+    secret = derived_secret("synthetic-token", QUOTA_STORE_PURPOSE)
+    expected = hmac.new(secret.encode(), f"ask-quota-store:v1:{expiry}:{hashlib.sha256(body).hexdigest()}".encode(), hashlib.sha256).hexdigest()
+    assert deploy.QUOTA_STORE_PURPOSE == QUOTA_STORE_PURPOSE and QUOTA_STORE_HEADER.lower() == "x-ask-quota-proof"
+    assert body == b"[]" and version == "v1" and signature == expected
+    for status in (403, 503, 200):
+        monkeypatch.setattr(deploy, "quota_store_status", lambda body, proof, status=status: status)
+        with pytest.raises(deploy.DeploymentError):
+            deploy.check_same_source("synthetic-token")
+
+
+def test_repository_settings_are_the_live_configuration(tmp_path):
+    review = deploy.settings_review(COMMIT)
+    assert review == deploy.build_review(expected_commit=COMMIT, enable_quota=True, enable_query_log=True, enable_ops=True,
+                                         model="deepseek-v4-flash")
+    for bad in ({"model": "deepseek-v4-flash"}, {"model": "other", "enable_quota": True, "enable_query_log": True, "enable_ops": True},
+                {"model": "deepseek-v4-flash", "enable_quota": "true", "enable_query_log": True, "enable_ops": True}):
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps(bad))
+        with pytest.raises(deploy.DeploymentError):
+            deploy.settings_review(COMMIT, path)
+
+
+def test_settings_flag_reviews_without_credentials_and_excludes_other_flags(monkeypatch, capsys):
+    monkeypatch.setattr(deploy, "request_json", prohibit_network)
+    assert deploy.main(["--from-settings", "--expected-commit", COMMIT]) == 0
+    output = capsys.readouterr().out
+    assert '"ASK_OPS_ENABLED": "true"' in output and '"AI_MODEL": "deepseek-v4-flash"' in output
+    assert deploy.main(["--from-settings", "--enable-quota"]) == 2

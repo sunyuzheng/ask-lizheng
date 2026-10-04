@@ -1,0 +1,6 @@
+{
+  "model": "deepseek-v4-flash",
+  "enable_quota": true,
+  "enable_query_log": true,
+  "enable_ops": true
+}

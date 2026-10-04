@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -314,6 +315,14 @@ def test_consent_model_field_is_bounded(context_pack):
         for model in ["", "x" * 129]:
             response = client.post("/api/ask", json={"question": "职业选择", "ai_consent_model": model})
             assert response.status_code == 422 and response.json()["code"] == "invalid_input"
+
+
+def test_meta_names_the_release_it_answers_from(context_pack, monkeypatch):
+    monkeypatch.delenv("AI_BUILDER_TOKEN", raising=False)
+    with TestClient(create_app(context_pack)) as client:
+        meta = client.get("/api/meta").json()
+    assert meta["context_release"] == hashlib.sha256((context_pack / "release-manifest.json").read_bytes()).hexdigest()
+    assert meta["context_commit"] == ""
 
 
 def test_provider_answer_is_source_validated(context_pack, monkeypatch):

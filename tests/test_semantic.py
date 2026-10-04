@@ -208,9 +208,11 @@ def test_builder_default_dry_run_never_reads_credentials_or_uses_network(public_
     monkeypatch.setattr(builder, "os", SimpleNamespace(environ=NoEnvironment()))
     monkeypatch.setattr(builder, "plan", lambda: (metadata, inputs))
     monkeypatch.setattr(builder, "build", forbidden)
+    monkeypatch.setattr(builder, "PROJECT", root.parents[1])
     assert builder.main([]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["mode"] == "dry-run" and output["public_primary_chunks"] == 2
+    assert output["new_windows"] == 2 and output["reused_windows"] == 0
     assert not (root.parent / "semantic").exists()
 
 
@@ -228,3 +230,57 @@ def test_builder_commits_only_public_vectors_and_hash_metadata(public_docs, monk
     persisted = (output / "index.json").read_text()
     assert "synthetic-token" not in persisted and "撤掉帮助" not in persisted
     assert SemanticIndex(root, docs).load()
+
+
+def test_rebuild_keeps_unchanged_vectors_and_embeds_only_new_text(public_docs, monkeypatch):
+    root, docs = public_docs
+    monkeypatch.setattr(builder, "PROJECT", root.parents[1])
+    requested = []
+    async def synthetic(client, token, batch, timeout):
+        requested.append(list(batch))
+        return [normalized_vector([float(len(text) % 7 + 1), 1.0] + [0.0] * 254) for text in batch], len(batch)
+    monkeypatch.setattr(builder, "request_embeddings", synthetic)
+    first = asyncio.run(builder.build(*prepare_index(root, docs), "synthetic-token"))
+    output = root.parent / "semantic"
+    original = (output / "vectors.f32").read_bytes()
+    assert first["embedded_windows"] == 2
+    # The same release again: nothing is embedded and the vector bytes stay the same.
+    again = asyncio.run(builder.build(*prepare_index(root, docs), "", builder.reusable(output)))
+    assert again["embedded_windows"] == 0 and (output / "vectors.f32").read_bytes() == original
+    # One changed source: only its window is embedded.
+    docs[1].text = "长期维护产品，要看它一年后还能不能改。"
+    (root / docs[1].path).write_text(docs[1].text, encoding="utf-8")
+    write_manifest(root)
+    requested.clear()
+    changed = asyncio.run(builder.build(*prepare_index(root, docs), "synthetic-token", builder.reusable(output)))
+    assert changed["embedded_windows"] == 1 and changed["reused_windows"] == 1
+    assert len(requested) == 1 and "一年后" in requested[0][0]
+    width = DIMENSIONS * 4
+    assert (output / "vectors.f32").read_bytes()[:width] == original[:width]
+    assert sorted(path.name for path in output.iterdir()) == ["index.json", "vectors.f32"]
+    assert SemanticIndex(root, docs).load()
+
+
+def test_an_index_under_the_old_name_is_reused_and_renamed(public_docs, monkeypatch):
+    root, docs = public_docs
+    metadata, output = index_file(root, docs)
+    legacy = output / metadata["vector_file"]
+    raw = legacy.read_bytes()
+    monkeypatch.setattr(builder, "PROJECT", root.parents[1])
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("unchanged windows were embedded again")
+    monkeypatch.setattr(builder, "request_embeddings", forbidden)
+    result = asyncio.run(builder.build(*prepare_index(root, docs), "", builder.reusable(output)))
+    assert result["reused_windows"] == 2 and not legacy.exists() and (output / "vectors.f32").read_bytes() == raw
+    assert SemanticIndex(root, docs).load()
+
+
+@pytest.mark.parametrize("mutation", ["checksum", "model", "path"])
+def test_reuse_ignores_an_index_built_another_way(public_docs, mutation):
+    root, docs = public_docs
+    metadata, output = index_file(root, docs)
+    if mutation == "checksum": (output / metadata["vector_file"]).write_bytes(b"\0" * (2 * DIMENSIONS * 4))
+    if mutation == "model": metadata["model"] = "another-model"
+    if mutation == "path": metadata["vector_file"] = "../vectors.f32"
+    (output / "index.json").write_text(json.dumps(metadata))
+    assert builder.reusable(output) == {}

@@ -72,6 +72,7 @@ class ContextIndex:
         self._titles = []
         self.architecture = None
         self.source_revision = "main"
+        self.release_sha256 = ""
 
     def load(self) -> None:
         lock_path = self.root.parent / "context-lock.json"
@@ -103,6 +104,7 @@ class ContextIndex:
         self._titles = [(doc.title + " " + doc.section).lower() for doc in self.documents]
         manifest = self.root / "release-manifest.json"
         self.manifest = json.loads(manifest.read_text()) if manifest.is_file() else {}
+        self.release_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest() if manifest.is_file() else ""
         from .context_architecture import load
         self.architecture = load(self.root, self.documents)
 
@@ -111,7 +113,10 @@ class ContextIndex:
         counts["retrieval_chunks"] = len(self.documents)
         counts["source_families"] = len({doc.source_family or doc.source_id for doc in self.documents})
         counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
-        return {"context_date": self.manifest.get("snapshot_at", ""), "counts": counts}
+        # Which Open Context release this service answers from, so a deploy can be checked from outside.
+        commit = self.source_revision if re.fullmatch(r"[a-f0-9]{40}", self.source_revision) else ""
+        return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,
+                "context_commit": commit, "counts": counts}
 
     def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None) -> list[Passage]:
         if not self.documents:
