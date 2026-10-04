@@ -28,7 +28,7 @@ ask.lizheng.ai 的页面文件由本仓库 `src/` 构建，再同步进主站 `c
 | 分享链接 | `ask-ops:{v3}:share:*`、`shares` | 主站 | 主站 |
 | 公开问答 | `ask-ops:{v3}:discovery:*` | Ops | Ops；主站只经 Ops 的公开接口读，不直接读这些键 |
 
-跨仓库的形状靠测试守着：Ops 用主站 writer 脚本的副本测存档记录（`tests/fixtures/writer-contract.json`）和使用统计（`tests/fixtures/usage-writer.lua`）；分享证明的格式两边各有测试。
+跨仓库的形状靠测试守着：Ops 用主站 writer 脚本的副本测存档记录（`tests/fixtures/writer-contract.json`）和使用统计（`tests/fixtures/usage-writer.json`）；分享证明的格式两边各有测试。
 
 ## 主要流程
 
