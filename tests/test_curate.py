@@ -130,6 +130,14 @@ def test_a_number_written_as_a_name_is_sent_back_once_then_titled(context_pack, 
         assert body["source_reasons"] == [{"id": "S1", "reason": "可对照《合成文章》的例子。"}]
 
 
+def test_a_mark_without_its_letter_is_published_with_it(context_pack, token):
+    _, transport = provider(decision(summary="看能不能独立用出来。[1]",
+                                     sections=[{"heading": "先看能不能用出来", "body": "合成正文 [1]。", "source_ids": ["S1"], "kind": "source"}]))
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        body = call(client, request()).json()
+    assert body["summary"] == "看能不能独立用出来。[S1]" and body["sections"][0]["body"] == "合成正文 [S1]。"
+
+
 @pytest.mark.parametrize("bad", [
     decision(topic_label="一个非常非常长的新主题名称超过十个字"),
     decision(question=""),

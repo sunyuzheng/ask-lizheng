@@ -549,6 +549,15 @@ def test_titles_sit_in_the_sentence_without_stray_spaces():
     assert unlabel("As S1 shows", titles, None) == "As 《甲》 shows"
 
 
+def test_a_mark_without_its_letter_gets_it_back():
+    titles = {"S1": "《甲》", "S3": "《丙》"}
+    # Asked to keep numbers out of sentences, the model once wrote [3] for [S3]; pages would show "[3]".
+    assert unlabel("要关注定性的信息 [3]。可被证伪 [1]。", titles, {"S1", "S3"}) == "要关注定性的信息 [S3]。可被证伪 [S1]。"
+    assert unlabel("先看证据[1]", titles, None) == "先看证据"
+    assert unlabel("可与[1]相互印证。", titles, None) == "可与《甲》相互印证。"
+    assert unlabel("数组从 [0] 开始。", titles, {"S1"}) == "数组从 [0] 开始。"
+
+
 @pytest.mark.parametrize("title, short", [
     ("战术勤劳与战略懒惰：大厂为什么越忙，产品质量越差？", "《战术勤劳与战略懒惰》"),
     ("立正本人的话 · 打工人如何获得财富自由？｜什么才是真正的财富和真正的自由？（中文字幕）｜Multiple-Fire系列", "《打工人如何获得财富自由？》"),

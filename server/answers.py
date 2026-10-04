@@ -65,7 +65,7 @@ SYSTEM_PROMPT = """你是基于公开 lizheng-open-context 材料的 AI 阅读�
 1. 只能依据 sources 内的 excerpt 作材料性判断。title 不是正文；discovery_only=true 的条目仅可用于发现资料，绝不能支撑 sections。
 2. source_ids 必须选择提供的 S 编号。每个 section 要有对应来源；source 表示对该段材料的忠实转述，synthesis 表示综合理解，application 表示将想法应用到用户处境的 AI 推演。把你的推演写成可能的选择与理由，不冒充源作者的具体建议。
 3. 作者、主讲者、转述对象与发布者分别看待。source_context、evidence_role、content_origin、generation_method、attribution_note、yuzheng_stance_weight 决定归属。AI 写的综合、翻译、第三方或嘉宾观点不能独立证明立正的立场；同一视频的原文与翻译只是同一证据。保留日期变化和材料间张力。
-4. 输出转述，不输出直接引语、引文、原话或名言，不生成 URL、Markdown 超链接、时间码或来源摘要。服务器将独立补上原始链接与摘录。可以在正文使用 [S1] 这样的编号，但必须也放在该 section.source_ids 中。读者看不到 S 编号，只看得到 [S1] 变成的角标数字，所以编号只以 [S1] 的形式标在句末，不当作名字写进句子（不写“S1 指出”“S5 和 S8 认为”“可与S1相互印证”）；要说明是哪份材料时，写它是哪篇文章或哪期视频。heading、followups、clarifying_questions 和 source_reasons 的 reason 里不写编号。
+4. 输出转述，不输出直接引语、引文、原话或名言，不生成 URL、Markdown 超链接、时间码或来源摘要。服务器将独立补上原始链接与摘录。可以在正文使用 [S1] 这样的编号，但必须也放在该 section.source_ids 中。编号照 [S1] 原样写（方括号加字母 S），标在句末，页面会把它显示成角标数字；不要把编号当作名字写进句子（不写“S1 指出”“S5 和 S8 认为”“可与S1相互印证”），要说明是哪份材料时，写它是哪篇文章或哪期视频。heading、followups、clarifying_questions 和 source_reasons 的 reason 里不写编号。
 5. 已知部分可以先答。只有会实质改变资料内建议的关键缺口才提问，clarifying_questions 最多 2 个；无需完整背景问卷。资料不支持的题目使用 unsupported，解释缺口，可提出相邻且有材料支持的问题。不能因为几条关键词偶合，就用无关材料硬答。尤其赛事结果、新闻或其他材料外的查询，澄清年份/项目也不会让资料突然支持答案，因此不要追问这些条件、不要承诺下一轮查外部网页、也不要提你的通用知识或知识截止日期；本产品只依据给出的公开材料。
 6. 不能把来源里的案例情境直接写成用户事实。用户没有提供的薪酬制度、岗位、能力、心理动机、客户行为或流程瓶颈，应作为可能原因/待检验解释，不能用“你的……就是……”直接确诊。没有个人条件时也可以解释机制，但明确它在什么情况下成立。
 7. 针对特定人的建议，先点明对象及条件再解释可迁移的关系。例如周洁案例的高变现、稳定本职与投资业务不能直接变成读者应选高变现或拆开本职的指令；没有这些条件，就比较不同目标下的选择，或问一个关键条件。不能只在 limitations 里加免责而让正文给无条件建议。
@@ -407,7 +407,7 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
 def number_rewrite(sentences: list[str], unmarked: str) -> str:
     """The rewrite request for sentences that name sources by number; unmarked names the fields that show no marks."""
     return ("有句子把来源编号当成名字写给了读者：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
-            + "。读者看不到 S 编号，只看得到 [S1] 变成的角标数字。要指出处时，把观点直接说出来、在句末标 [S1]，"
+            + "。页面只把 [S1] 这种写法显示成角标数字，句子里单独出现的 S1 读者看不懂。要指出处时，把观点直接说出来、在句末照原样标 [S1]，"
             + f"或写明是哪篇文章、哪期视频；{unmarked}里不写编号。")
 
 
@@ -445,14 +445,18 @@ def short_title(title: str) -> str:
 NUMBER_GROUP = re.compile(r"([\[［【（(])\s*(S\d+(?:\s*[,，、;；/和与及]\s*S\d+)*)\s*[\]］】）)]")
 # A mark, which stays, or a number written as a name, with the spaces around it.
 NAMED_NUMBER = re.compile(r"\[S\d+\]|[ \t]*(?<![A-Za-z0-9])(S\d+)(?![A-Za-z0-9])[ \t]*")
+# A mark the model wrote without its letter: [3] for [S3]. Pages show it as it is.
+LETTERLESS_MARK = re.compile(r"[\[［【](\d{1,2})[\]］】]")
 
 
 def unlabel(text: str, titles: dict[str, str], cite: set[str] | None) -> str:
     """The words a reader can follow where a text names sources by number. titles holds what to
     write for each known number; cite holds the numbers this text may mark, or is None where marks
-    do not show. A named source becomes its title, marked where it may be; numbers in brackets
-    become marks, or go where marks do not show (a parenthesis keeps the titles); an unknown
-    number goes. Text without such numbers is returned as it is."""
+    do not show. A mark without its letter gets it back; a named source becomes its title, marked
+    where it may be; numbers in brackets become marks, or where marks do not show, go at the end
+    of a sentence and become titles inside it; an unknown number goes. Text without such numbers
+    is returned as it is."""
+    text = LETTERLESS_MARK.sub(lambda match: f"[S{match.group(1)}]" if f"S{match.group(1)}" in titles else match.group(0), text)
     if not numbers_as_names([(text, cite is not None)]):
         return text
     def group(match):
@@ -460,7 +464,12 @@ def unlabel(text: str, titles: dict[str, str], cite: set[str] | None) -> str:
         if cite is not None:
             return "".join(f"[{source_id}]" for source_id in ids if source_id in cite)
         named = [titles[source_id] for source_id in ids if titles.get(source_id)]
-        return f"（{'、'.join(named)}）" if match.group(1) in "（(" and named else ""
+        if not named:
+            return ""
+        if match.group(1) in "（(":
+            return f"（{'、'.join(named)}）"
+        # A bracket the sentence goes on from names its sources; one that ends it was a citation.
+        return "、".join(named) if match.string[match.end():match.end() + 1].isalnum() else ""
     def name(match):
         if match.group(1) is None:
             return match.group(0)
