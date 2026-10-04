@@ -194,6 +194,33 @@ def test_actual_chinese_editions_are_retrievable_reading_aids(actual_architectur
     assert all(doc.evidence_role == "translation" and doc.yuzheng_stance_weight == "verify-original" for doc in editions)
 
 
+@pytest.mark.parametrize("question,expected", [
+    ("你相信玄学吗？科学解释不了的东西你怎么看", "science-limits-open-mind"),
+    ("人死后会去哪？这个世界公平吗", "oneness-and-fairness"),
+    ("怎么理解觉醒？我总觉得找不到自己", "self-and-constructed-me"),
+    ("要不要为了升职加薪拼命？人生的意义到底是什么", "define-your-own-meaning"),
+    ("能不能直接告诉我现在做什么能赚钱", "method-over-answers"),
+    ("我给同事的建议总是没人听，怎么说服别人", "prove-less-understand-first"),
+    ("钱已经够了但还是心有不甘，要不要打造人设", "subdue-the-mind-real-needs"),
+    ("要不要给孩子报很多补习班，鸡娃有用吗", "parenting-time-not-control"),
+])
+def test_actual_value_questions_route_to_his_own_words(actual_architecture, question, expected):
+    selected = actual_architecture.route(question)
+    assert selected and selected[0] == expected
+    docs = [actual_architecture.documents[row["docindex"]] for row in actual_architecture.linked_candidates(selected[:1])]
+    # His reviewed turns, posts and lessons back these cards; a whole conversation with a guest never does.
+    assert docs and all(doc.yuzheng_stance_weight != "not-evidence" for doc in docs)
+    assert any(doc.source_type == "video-excerpt" for doc in docs)
+
+
+def test_actual_conversation_excerpts_are_his_words_and_the_conversations_are_not(actual_architecture):
+    excerpts = [doc for doc in actual_architecture.documents if doc.source_type == "video-excerpt"]
+    assert len({doc.source_id for doc in excerpts}) == 12
+    assert all(doc.author == "Yuzheng Sun" and doc.evidence_role == "primary-speech" for doc in excerpts)
+    public = [doc for doc in actual_architecture.documents if doc.source_id in {"youtube-VSX1wxueZPU", "youtube-CTcMvIZFQcw"}]
+    assert public and all(doc.yuzheng_stance_weight == "not-evidence" and doc.source_visibility == "public" for doc in public)
+
+
 @pytest.mark.parametrize("question", ["AI是什么？", "我有几个项目。", "今年世界杯谁获胜？", "哪里有好吃的火锅？"])
 def test_actual_generic_and_unsupported_topics_do_not_select_cards(actual_architecture, question):
     assert actual_architecture.route(question) == []
