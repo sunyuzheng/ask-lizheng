@@ -54,6 +54,6 @@ npm run build
 .venv/bin/python -m server.live_eval
 ```
 
-产品设计、Context 架构与验收记录见 `docs/PRODUCT.md`、`docs/CONTEXT_ARCHITECTURE.md` 和 `docs/VERIFICATION.md`。源内容遵守原有许可证；项目代码为 MIT。
+产品设计、Context 架构与验收记录见 `docs/PRODUCT.md`、`docs/CONTEXT_ARCHITECTURE.md` 和 `docs/VERIFICATION.md`。版权见 [`LICENSE.md`](LICENSE.md)：程序和文档是 MIT；`data/context` 里的资料沿用 Open Context 的许可，不随 MIT 授权。
 
 Superlinear账号与每日3次／Founding Member不限次的实现说明见[ACCOUNT_QUOTAS.md](docs/ACCOUNT_QUOTAS.md)，邮箱验证及服务端发布配置见[ACCOUNT_AUTH_HANDOFF.md](docs/ACCOUNT_AUTH_HANDOFF.md)。按配置交接中的验收步骤协调启用两个入口。

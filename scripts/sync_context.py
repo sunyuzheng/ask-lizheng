@@ -37,8 +37,8 @@ def sync(source):
             target = candidate / row['path']
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / row['path'], target)
-        for name in ['release-manifest.json', 'LICENSE', 'LICENSE-CONTENT.md']:
-            shutil.copyfile(source / name, candidate / name)
+        # License files are release files like any other; only the manifest describes itself.
+        shutil.copyfile(manifest_path, candidate / 'release-manifest.json')
         if not (candidate / 'scripts/search.py').is_file():
             raise ValueError('Search implementation missing from release')
         if destination.exists():
@@ -47,7 +47,7 @@ def sync(source):
     lock = {'repository': 'https://github.com/sunyuzheng/lizheng-open-context',
             'snapshot_at': manifest['snapshot_at'], 'release_manifest_sha256': digest(manifest_path),
             'files': len(files), 'counts': manifest['counts'],
-            'licenses': {'code': 'MIT', 'first_party_content': 'CC-BY-4.0', 'metadata': 'CC0', 'third_party': 'Original rights retained'}}
+            'licenses': {name: info['files'] for name, info in manifest['licenses'].items()}}
     try:
         revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL, text=True).strip()
         committed = subprocess.check_output(['git', '-C', str(source), 'show', revision + ':release-manifest.json'], stderr=subprocess.DEVNULL)
