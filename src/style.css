@@ -1271,10 +1271,17 @@ main {
 }
 
 /* One question others asked: a row, its answer opening in place (and clear of the header when a
-   question beside the question box opens it). */
+   question beside the question box opens it), its like beside it. */
 .qcard {
   border-top: 1px solid var(--rule);
   scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.qcard-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: clamp(14px, 3vw, 32px);
 }
 
 .qcard-head {
@@ -1384,8 +1391,113 @@ main {
   margin-top: 16px;
 }
 
-.qcard-like.on {
+/* A like, as Product Hunt and Reddit show one: an arrow over the count. It acts, so it takes the
+   green once liked; until then a hairline, like the other buttons. */
+.upvote {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  width: 46px;
+  min-height: 52px;
+  margin-top: 16px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: box-shadow 0.2s, color 0.2s, background 0.2s;
+}
+
+.upvote:hover {
+  box-shadow: inset 0 0 0 1px var(--green);
   color: var(--green-text);
+}
+
+.upvote.on {
+  background: var(--green-tint);
+  box-shadow: inset 0 0 0 1.5px var(--green);
+  color: var(--green-text);
+}
+
+.upvote-arrow {
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid currentColor;
+  border-left: 6px solid transparent;
+}
+
+.upvote.on .upvote-arrow {
+  animation: lift 0.35s var(--ease);
+}
+
+@keyframes lift {
+  40% {
+    transform: translateY(-3px);
+  }
+}
+
+/* In 最常问, the topic's other questions open under it: smaller rows behind a rule, each with its
+   own like and answer. */
+.qcard-similar {
+  margin-top: -10px;
+  padding-bottom: 18px;
+}
+
+.qcard.open .qcard-similar {
+  margin-top: -8px;
+}
+
+.qcard-similar-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--green-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qcard-similar-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.qcard-similar-list {
+  margin-top: 6px;
+  padding-left: clamp(14px, 3vw, 24px);
+  border-left: 1px solid var(--rule-2);
+}
+
+.qcard.nested:first-child {
+  border-top: 0;
+}
+
+.qcard.nested .qcard-head {
+  gap: 4px;
+  padding: 14px 0;
+}
+
+/* The green stays with what acts: the toggle above and the likes. */
+.qcard.nested .qcard-time {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.qcard.nested .qcard-question {
+  font-size: 16.5px;
+}
+
+.qcard.nested .upvote {
+  width: 40px;
+  min-height: 44px;
+  margin-top: 10px;
+}
+
+.qcard.nested .qcard-body {
+  padding-bottom: 22px;
 }
 
 .discovery-more {
@@ -1480,6 +1592,18 @@ main {
 
 .question-context {
   margin-top: 12px;
+}
+
+/* A question reopened from 我的提问: when it was asked. */
+.question-when {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.question-when time {
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .question-context summary,
@@ -2494,6 +2618,84 @@ main {
 .about-row ul {
   margin: 0;
   padding-left: 20px;
+}
+
+/* 我的提问: the questions asked on this device, as rows. */
+.dialog.history h2 {
+  margin: 0;
+  padding-right: 40px;
+}
+
+.history .dialog-intro {
+  font-size: 14.5px;
+}
+
+.history-list {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.history-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.history-item {
+  display: grid;
+  gap: 4px;
+  padding: 14px 0;
+  text-align: left;
+}
+
+.history-item time {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-item span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink);
+  transition: color 0.2s;
+}
+
+.history-item:hover:not(:disabled) span {
+  color: var(--green-text);
+}
+
+.history-item:disabled {
+  opacity: 0.5;
+}
+
+.history-forget {
+  color: var(--faint);
+}
+
+.history-empty {
+  margin-top: 20px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.history-foot {
+  margin-top: 16px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.history-foot .text-button:first-child {
+  margin-left: 0;
 }
 
 .dialog-foot {

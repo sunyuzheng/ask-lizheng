@@ -4,7 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import {Check, LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, askedLastDay, discoveryDetail, discoveryLists, discoveryPage, discoveryView, voteDiscovery, DISCOVERY_LIST_SIZE} from './discovery.js';
+import {askedAgo, askedLastDay, discoveryDetail, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery, DISCOVERY_LIST_SIZE} from './discovery.js';
+import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
 import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
@@ -80,6 +81,16 @@ const DISCOVERY = {
   attribution: 'AI整理，不是立正本人回复。',
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
+  similar: n => `另外${n}个类似提问`,
+};
+// 我的提问 (history.js): what was asked on this device. Its note is where the page says what the
+// privacy policy means for the person: we cannot tell which questions were theirs.
+const HISTORY = {
+  title: '我的提问',
+  note: '只保存在这台设备上。提问不和账号、邮箱或IP记在一起，我们不知道哪个问题是谁问的，所以这份记录只在你手里。换了设备或浏览器，或者清除了浏览器数据，就看不到了。',
+  empty: '还没有提问。',
+  clear: '全部清除',
+  confirm: n => `清除这台设备上的${n}条提问？`,
 };
 // 回答从哪里来: what the answers are made from, and that it is distilled, not just raw text (the
 // user, 2026-10-04: the Statsig posts are articles like the rest; end the list with 等). Counted from
@@ -370,26 +381,37 @@ const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问']];
 // Wide enough for 别人正在问 beside the question box (style.css uses the same width).
 const WIDE = window.matchMedia('(min-width: 1100px)');
 
-function QuestionCard({card, open, detail, vote, share, signedIn, selected, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect}) {
+// A like, as Product Hunt and Reddit show one: an arrow over the count, beside the question. Anyone
+// may like, counted by browser (2026-10-05); green once liked, and no count until someone has.
+function Upvote({like, nested, onLike}) {
+  return <button type="button" className={`upvote ${like.voted ? 'on' : ''} ${nested ? 'nested' : ''}`} aria-pressed={like.voted}
+    aria-label={like.likes > 0 ? `有帮助，${like.likes}人` : '有帮助'} title={like.voted ? '取消' : '有帮助'} onClick={onLike}>
+    <span className="upvote-arrow" aria-hidden="true"/>
+    {like.likes > 0 && <span className="upvote-count">{like.likes}</span>}
+  </button>;
+}
+
+function QuestionCard({card, open, detail, like, share, selected, nested, children, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect}) {
   const prefix = `q-${card.public_id}`;
-  const likes = vote?.likes ?? card.likes;
   const similar = card.similar_count ?? card.topic_question_count;
   const often = card.role === 'common' && similar >= 2;
-  const meta = [!often && similar >= 2 && `${similar}次类似提问`, likes > 0 && `${likes}人觉得有帮助`]
-    .filter(Boolean).join(' · ');
+  const meta = !often && similar >= 2 ? `${similar}次类似提问` : '';
   const select = id => onSelect(prefix, id);
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
-  return <article className={`qcard ${open ? 'open' : ''}`} id={`qcard-${card.public_id}`}>
-    <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
-      {often ? <span className="qcard-time often">{similar}次类似提问</span>
-        : card.asked_at
-        ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
-          title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
-        : <span className="qcard-time common">常被问到</span>}
-      <span className="qcard-question">{card.question}</span>
-      {!open && card.summary && <span className="qcard-summary">{card.summary}</span>}
-      {meta && <span className="qcard-meta">{meta}</span>}
-    </button>
+  return <article className={`qcard ${open ? 'open' : ''} ${nested ? 'nested' : ''}`} id={nested ? undefined : `qcard-${card.public_id}`}>
+    <div className="qcard-row">
+      <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
+        {often ? <span className="qcard-time often">{similar}次类似提问</span>
+          : card.asked_at
+          ? <time className={`qcard-time ${Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}`} dateTime={card.asked_at}
+            title={new Date(card.asked_at).toLocaleString('zh-CN', {dateStyle: 'long', timeStyle: 'short'})}>{askedAgo(card.asked_at)}</time>
+          : <span className="qcard-time common">常被问到</span>}
+        <span className="qcard-question">{card.question}</span>
+        {!open && !nested && card.summary && <span className="qcard-summary">{card.summary}</span>}
+        {meta && <span className="qcard-meta">{meta}</span>}
+      </button>
+      <Upvote like={like} nested={nested} onLike={onLike}/>
+    </div>
     {open && <div className="qcard-body">
       {answer ? <div className="answer">
         <div className="summary"><Markdown text={answer.summary} sources={answer.sources} onSelect={select}/></div>
@@ -403,12 +425,61 @@ function QuestionCard({card, open, detail, vote, share, signedIn, selected, onTo
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">
         <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
-        {signedIn && <button type="button" className={`ghost-button qcard-like ${vote?.voted ? 'on' : ''}`} aria-pressed={!!vote?.voted} onClick={onLike}>{vote?.voted ? '觉得有帮助' : '有帮助'}</button>}
         <button type="button" className="pill-button" aria-expanded={!!share?.open} onClick={onShare}>分享</button>
       </div>
       {share?.open && <SharePanel state={share} link onCopy={onCopy} onSend={onSend}/>}
     </div>}
+    {children}
   </article>;
+}
+
+// When a question on this device was asked: 今天 14:32, 10月3日 9:05, then the year when it is not this one.
+function askedOn(iso, now = new Date()) {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('zh-CN', {hour: 'numeric', minute: '2-digit'});
+  if (date.toDateString() === now.toDateString()) return `今天 ${time}`;
+  return `${date.getFullYear() === now.getFullYear() ? '' : `${date.getFullYear()}年`}${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+}
+
+// 我的提问: the questions asked on this device, newest first. Opening one shows it as a conversation,
+// where it can be followed up and shared; each can be deleted, or all of them.
+function MyQuestions({items, busy, close, onOpen, onForget, onForgetAll}) {
+  const ref = useRef(null);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    const previous = document.activeElement;
+    ref.current?.focus();
+    const handler = event => {
+      if (event.key === 'Escape') close();
+      if (event.key !== 'Tab') return;
+      const all = ref.current?.querySelectorAll('button:not(:disabled),a');
+      const first = all?.[0], last = all?.[all.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handler);
+    return () => { document.removeEventListener('keydown', handler); previous?.focus(); };
+  }, []);
+  return <div className="backdrop" onClick={close}>
+    <section className="dialog history" role="dialog" aria-modal="true" aria-labelledby="history-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
+      <button type="button" className="icon-button dialog-close" aria-label="关闭" onClick={close}><X size={20}/></button>
+      <h2 id="history-title">{HISTORY.title}</h2>
+      <p className="dialog-intro">{HISTORY.note}<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
+      {items.length ? <ol className="history-list">{items.map(item => <li key={item.id}>
+        <button type="button" className="history-item" disabled={busy} onClick={() => onOpen(item)}>
+          <time dateTime={item.asked_at}>{askedOn(item.asked_at)}</time>
+          <span>{item.question}</span>
+        </button>
+        <button type="button" className="icon-button history-forget" aria-label={`删除这条提问：${item.question.slice(0, 30)}`} title="删除" onClick={() => onForget(item.id)}><X size={16}/></button>
+      </li>)}</ol> : <p className="history-empty">{HISTORY.empty}</p>}
+      {items.length > 0 && <div className="history-foot">
+        {confirming ? <p role="alert">{HISTORY.confirm(items.length)}
+          <button type="button" className="text-button" onClick={() => { setConfirming(false); onForgetAll(); }}>清除</button>
+          <button type="button" className="text-button" onClick={() => setConfirming(false)}>取消</button>
+        </p> : <button type="button" className="text-button" onClick={() => setConfirming(true)}>{HISTORY.clear}</button>}
+      </div>}
+    </section>
+  </div>;
 }
 
 // The iPhone app asks once before the first question goes to the AI service, as App Store rules
@@ -560,8 +631,17 @@ function App() {
   }, [hasDiscovery]);
   const [askedRecently, setAskedRecently] = useState(0);
   const [openCard, setOpenCard] = useState('');
+  // In 最常问: whose similar questions are open (any number), and which of those shows its answer.
+  const [openSimilar, setOpenSimilar] = useState(() => new Set());
+  const [openNested, setOpenNested] = useState('');
   const [cardDetails, setCardDetails] = useState({});
-  const [cardVotes, setCardVotes] = useState({});
+  // Likes: what this browser liked (kept on this device), and the votes on their way, shown at once.
+  const [likes, setLikes] = useState(readLikes);
+  const [voting, setVoting] = useState({});
+  const votingNow = useRef(new Set());
+  // 我的提问: the questions asked on this device (history.js).
+  const [askedHere, setAskedHere] = useState(readHistory);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [cardShares, setCardShares] = useState({});
   const [cardSource, setCardSource] = useState('');
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
@@ -755,11 +835,12 @@ function App() {
     questionFrom.current = from;
     setQuestion(value); setError(''); focusInput();
   };
-  const toggleCard = (card, from = view) => {
-    if (openCard === card.public_id) { setOpenCard(''); return; }
-    setOpenCard(card.public_id);
+  const toggleCard = (card, from = view, nested = false) => {
+    const [shown, show] = nested ? [openNested, setOpenNested] : [openCard, setOpenCard];
+    if (shown === card.public_id) { show(''); return; }
+    show(card.public_id);
     markUsage('d_open');
-    track('Ask Discovery Open', {surface: SURFACE, view: from});
+    track('Ask Discovery Open', {surface: SURFACE, view: nested ? 'similar' : from});
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
     setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
@@ -770,12 +851,23 @@ function App() {
     track('Ask Discovery Similar', {surface: SURFACE, view});
     prefill(card.question, undefined, 'card');
   };
+  const likeOf = card => voting[card.public_id] || likeState(likes, card.public_id, card.likes);
+  // A like shows at once; if it does not go through, it goes back.
   const likeCard = async card => {
-    const vote = !cardVotes[card.public_id]?.voted;
-    const result = await voteDiscovery(card.public_id, card.revision, vote);
-    if (!result) return;
-    setCardVotes(prev => ({...prev, [card.public_id]: result}));
-    track('Ask Discovery Vote', {surface: SURFACE, vote});
+    const id = card.public_id;
+    if (votingNow.current.has(id)) return;
+    votingNow.current.add(id);
+    const shown = likeOf(card), vote = !shown.voted;
+    setVoting(prev => ({...prev, [id]: {voted: vote, likes: Math.max(0, shown.likes + (vote ? 1 : -1))}}));
+    const result = await voteDiscovery(id, card.revision, vote);
+    votingNow.current.delete(id);
+    if (result) { setLikes(prev => rememberLike(prev, id, result)); track('Ask Discovery Vote', {surface: SURFACE, vote}); }
+    setVoting(prev => { const next = {...prev}; delete next[id]; return next; });
+  };
+  const toggleSimilar = card => {
+    const open = !openSimilar.has(card.public_id);
+    setOpenSimilar(prev => { const next = new Set(prev); if (open) next.add(card.public_id); else next.delete(card.public_id); return next; });
+    if (open) track('Ask Discovery Similar List', {surface: SURFACE});
   };
   // 别人正在问, beside the question box: a question there opens in the list below, among the newest.
   function openFromLive(card) {
@@ -790,7 +882,7 @@ function App() {
   function showView(target) {
     if (view === target) return;
     setView(target);
-    setOpenCard('');
+    setOpenCard(''); setOpenNested(''); setOpenSimilar(new Set());
     const top = document.getElementById('questions');
     if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({block: 'start', behavior: scrollBehavior()});
     track('Ask Discovery Sort', {surface: SURFACE, sort: target});
@@ -832,6 +924,17 @@ function App() {
     window.scrollTo({top: 0, behavior: scrollBehavior()});
     focusInput();
   };
+  // A question from 我的提问 opens as the conversation, its answer as it came; it can be followed up.
+  function openAsked(item) {
+    if (busy) return;
+    setHistoryOpen(false);
+    setMessages([{id: Number(item.id) || Date.now(), question: item.question, intent: item.intent, context: '', personal: item.personal,
+      model: item.model, result: item.result, askedAt: item.asked_at}]);
+    setQuestion(''); setError(''); setSelected(''); setSourceTurn(null); setEditingSituation(false);
+    conversationId.current = null;
+    track('Ask History Open', {surface: SURFACE});
+    window.scrollTo({top: 0});
+  }
   const revokeConsent = () => {
     const saved = clearConsent();
     consented.current = '';
@@ -907,7 +1010,11 @@ function App() {
         else if (name === 'quota') seeQuota(value);
         else if (name === 'result') {
           received = true;
-          if (value.status === 'answered') markUsage('answer');
+          if (value.status === 'answered') {
+            markUsage('answer');
+            setAskedHere(keepAsked({id: String(id), asked_at: new Date(id).toISOString(), question: payload.question, intent: payload.intent,
+              personal: !!payload.context, model: meta?.model || 'AI', result: value}));
+          }
           seeQuota(value.quota);
           update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000)});
         } else if (name === 'error') throw failure(value.code, value.code === 'answer_archive_failed' ? '这次回答未能确认归档，请重试；问题和已找到的材料仍保留。' : MESSAGES.failed);
@@ -951,7 +1058,7 @@ function App() {
     setExporting(`${m.id}-${kind}`);
     try {
       const {exportAnswer} = await import('./share.js');
-      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!m.context});
+      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!(m.context || m.personal)});
       const file = new File([blob], name, {type});
       if (kind === 'png' && window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({files: [file]})) {
         try { await navigator.share({files: [file], title: '问问立正'}); return; }
@@ -1085,6 +1192,21 @@ function App() {
     {meta?.mode === 'search-only' && <p className="form-note">现在只能检索原文，模型连上后才能生成回答。</p>}
   </div>;
 
+  // One question others asked; in 最常问, the topic's other questions open under it, each with its
+  // own like and answer.
+  const questionCard = (card, nested = false) => <QuestionCard key={card.public_id} card={card} nested={nested}
+    open={(nested ? openNested : openCard) === card.public_id} detail={cardDetails[card.public_id]} like={likeOf(card)} share={cardShares[card.public_id]}
+    selected={cardSource} onToggle={() => toggleCard(card, view, nested)}
+    onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
+    onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource}>
+    {!nested && card.role === 'common' && card.similar?.length > 0 && <div className="qcard-similar">
+      <button type="button" className="qcard-similar-toggle" aria-expanded={openSimilar.has(card.public_id)} onClick={() => toggleSimilar(card)}>
+        {DISCOVERY.similar(card.similar.length)}<Chev/>
+      </button>
+      {openSimilar.has(card.public_id) && <div className="qcard-similar-list">{card.similar.map(item => questionCard(item, true))}</div>}
+    </div>}
+  </QuestionCard>;
+
   return <div className={`app ${conversation ? 'in-conversation' : ''}`}>
     <a className="skip-link" href="#main-content">跳到提问与回答</a>
     <header className="header">
@@ -1094,6 +1216,7 @@ function App() {
         </button>
         <nav className="header-nav" aria-label="页面">
           {conversation && <button type="button" className="header-link new-chat" onClick={newChat} disabled={busy}>新问题</button>}
+          {askedHere.length > 0 && <button type="button" className="header-link" aria-haspopup="dialog" onClick={() => setHistoryOpen(true)}>{HISTORY.title}</button>}
           <button type="button" className="header-link" onClick={() => openAbout(false)} aria-label="怎样用好它"><span className="long">怎样用好它</span><span className="short">说明</span></button>
           <a className="header-link site-link" href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a>
         </nav>
@@ -1133,11 +1256,7 @@ function App() {
           <div className="discovery-list" aria-busy={!questionLists}>
             {/* While the questions load, the rows they will fill; never the examples first. */}
             {!questionLists ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
-              : discovery.map(card => <QuestionCard key={card.public_id} card={card}
-              open={openCard === card.public_id} detail={cardDetails[card.public_id]} vote={cardVotes[card.public_id]} share={cardShares[card.public_id]}
-              signedIn={!!account?.authenticated} selected={cardSource} onToggle={() => toggleCard(card)}
-              onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
-              onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource}/>)}
+              : discovery.map(card => questionCard(card))}
           </div>
           {/* The rest of the list here; past it, every question on lizheng.ai's public pages. */}
           {questionLists && (shownList.length > discovery.length
@@ -1179,6 +1298,7 @@ function App() {
                 <header className="question">
                   <span className="sr-only">你的问题</span>
                   <h2><Phrases text={m.question}/></h2>
+                  {m.askedAt && <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt)}</time>问的，保存在这台设备上</p>}
                   {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
                 {!m.result && (working || m.previewSources?.length > 0) && (working
@@ -1189,7 +1309,7 @@ function App() {
                     ? <p className="answer-meta"><span>找到的材料</span></p>
                     : <p className="answer-meta"><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
-                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!m.context}/>)}
+                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!(m.context || m.personal)}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
                     <p>再补充一点，回答会更贴合你</p>
                     {m.result.clarifying_questions.map(item => <button type="button" key={item} onClick={() => {
@@ -1243,6 +1363,8 @@ function App() {
         </aside>}
       </div>}
     </main>
+    {historyOpen && <MyQuestions items={askedHere} busy={busy} close={() => setHistoryOpen(false)} onOpen={openAsked}
+      onForget={id => setAskedHere(forgetAsked(id))} onForgetAll={() => { setAskedHere(forgetAll()); setHistoryOpen(false); }}/>}
     {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept} onRevokeConsent={revokeConsent}/>}
     {asking && <AppConsent meta={meta} publicArchive={publicArchive} contextKept={contextKept} onCancel={() => { setAsking(null); focusInput(); }} onAgree={() => { const retry = asking.retry; consented.current = consentScope(meta); revokedConsent.current = false; saveConsent(consented.current); setAsking(null); void submit(undefined, retry); }}/>}
   </div>;

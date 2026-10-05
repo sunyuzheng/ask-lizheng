@@ -12,6 +12,11 @@ const count = value => Number.isInteger(value) && value >= 0;
 const card = value => !!value && typeof value === 'object' && ID.test(value.public_id) && count(value.revision)
   && (value.topic_key === undefined || typeof value.topic_key === 'string') && text(value.question) && typeof value.summary === 'string' && typeof value.topic_label === 'string'
   && count(value.topic_question_count) && count(value.likes);
+// Another question under a card of 最常问 (Ops gives each topic's others, most liked first): what its
+// row shows, and what a like needs.
+const similarRow = value => !!value && typeof value === 'object' && ID.test(value.public_id) && count(value.revision) && text(value.question)
+  && typeof value.published_at === 'string' && (value.asked_at === undefined || typeof value.asked_at === 'string') && count(value.likes);
+const row = ({public_id, revision, question, published_at, asked_at, likes}) => ({public_id, revision, question, published_at, likes, ...(asked_at ? {asked_at} : {})});
 // The answer renders with the conversation's own components, so only the fields they read, as strings.
 const SOURCE_FIELDS = ['id', 'title', 'url', 'date', 'source_type', 'excerpt', 'reason', 'timecode', 'author', 'attribution_note', 'public_copy_url',
   'source_visibility', 'text_access', 'membership_platform', 'membership_url', 'membership_verified_at', 'transcript_source_kind', 'transcript_quality', 'speaker_classification'];
@@ -31,7 +36,8 @@ export async function discoveryLists(signal) {
     if (!response.ok) return null;
     const value = await response.json();
     if (!Array.isArray(value?.recent) || !Array.isArray(value?.frequent)) return null;
-    return {recent: value.recent.filter(card), frequent: value.frequent.filter(card)};
+    return {recent: value.recent.filter(card), frequent: value.frequent.filter(card)
+      .map(item => ({...item, similar: Array.isArray(item.similar) ? item.similar.filter(similarRow).map(row) : []}))};
   } catch { return null; }
 }
 
@@ -73,6 +79,12 @@ export function sameQuestion(a, b) {
 }
 
 const askedTime = card => Date.parse(card.asked_at) || 0;
+// Most recently asked first (a common question written fresh, never asked, counts as oldest); or
+// most liked first, then most recently asked.
+const askedFirst = (a, b) => askedTime(b) - askedTime(a);
+const likedFirst = (a, b) => b.likes - a.likes || askedFirst(a, b);
+// How many questions open under a card of 最常问 at most (Ops' DISCOVERY_SIMILAR_SIZE).
+export const DISCOVERY_SIMILAR_SIZE = 8;
 
 // How many similar askings a card stands for: its topic's count, plus the same question asked
 // in other words that the curation filed under another topic.
@@ -80,9 +92,9 @@ export const similarCount = (card, cards) => card.topic_question_count + new Set
   .filter(other => other.public_id !== card.public_id && other.topic_key !== card.topic_key && sameQuestion(other.question, card.question))
   .map(other => other.public_id)).size;
 
-// One question asked in other words shows once: as the wording asked most recently (a common
-// question written fresh, never asked, counts as oldest), with the similar askings of them all.
-export function foldDiscovery(cards) {
+// One question asked in other words, as groups: each shown once, through the wording that comes
+// first (the first given among equals), with the similar askings of them all.
+function fold(cards, first) {
   const groups = [];
   for (const card of cards) {
     if (groups.some(group => group.some(other => other.public_id === card.public_id))) continue;
@@ -90,10 +102,13 @@ export function foldDiscovery(cards) {
     if (group) group.push(card); else groups.push([card]);
   }
   return groups.map(group => {
-    const card = group.reduce((a, b) => askedTime(b) > askedTime(a) ? b : a);
-    return {...card, similar_count: similarCount(card, group)};
+    const card = [...group].sort(first)[0];
+    return {card: {...card, similar_count: similarCount(card, group)}, group};
   });
 }
+// One question asked in other words shows once: as the wording asked most recently (a common
+// question written fresh, never asked, counts as oldest), with the similar askings of them all.
+export const foldDiscovery = cards => fold(cards, askedFirst).map(({card}) => card);
 
 // How many published questions were asked in the last day. 最近问 holds the 30 newest, so
 // below 30 the count is exact; at 30 there may be more, and the page says 30+.
@@ -103,21 +118,35 @@ const topicOf = card => card.topic_key || card.public_id;
 const often = (a, b) => b.similar_count - a.similar_count || b.likes - a.likes
   || Number(!!askedTime(a)) - Number(!!askedTime(b)) || Date.parse(b.published_at) - Date.parse(a.published_at);
 
-// What a list shows, the same for everyone; one question asked two ways shows once, as its wording
-// asked most recently, counting the similar askings of them all (over both lists).
-// 最近问 (recent): the questions people asked, most recently asked first; a common question written
-// fresh was never asked and is left to 最常问.
-// 最常问 (frequent): each topic once, through its question asked most recently, ranked by similar
+// What a list shows, the same for everyone (over both lists); one question asked two ways shows
+// once, counting the similar askings of them all.
+// 最近问 (recent): the questions people asked, most recently asked first, each as its wording asked
+// most recently; a common question written fresh was never asked and is left to 最常问.
+// 最常问 (frequent): each topic once, through its most liked question, the most recently asked among
+// equals (2026-10-05, the user: likes decide which question stands for its topic), ranked by similar
 // askings, then likes, then a common question written fresh before a single asking, then newest.
+// Under it, `similar`: the topic's other questions and its other wordings, most liked first.
 // The same rules as lizheng.ai's homepage, which tests them.
 export function discoveryView(lists, view) {
   const pool = new Map();
   for (const card of [...lists.frequent, ...lists.recent]) if (!pool.has(card.public_id)) pool.set(card.public_id, card);
-  const cards = foldDiscovery([...pool.values()]);
-  if (view === 'recent') return cards.filter(askedTime).sort((a, b) => askedTime(b) - askedTime(a)).map(card => ({...card, role: 'fresh'}));
-  const latest = new Map();
-  for (const card of cards) if (!latest.has(topicOf(card)) || askedTime(card) > askedTime(latest.get(topicOf(card)))) latest.set(topicOf(card), card);
-  return [...latest.values()].sort(often).map(card => ({...card, role: 'common'}));
+  if (view === 'recent') return foldDiscovery([...pool.values()]).filter(askedTime).sort(askedFirst).map(card => ({...card, role: 'fresh'}));
+  // Every question known of each topic: the cards, and those Ops gives under its cards of 最常问.
+  const known = new Map();
+  for (const card of pool.values()) known.set(card.public_id, {item: row(card), topic: topicOf(card)});
+  for (const card of lists.frequent) for (const item of card.similar || []) if (!known.has(item.public_id)) known.set(item.public_id, {item, topic: topicOf(card)});
+  const picks = new Map();
+  for (const entry of fold([...pool.values()], likedFirst)) {
+    const current = picks.get(topicOf(entry.card));
+    if (!current || likedFirst(entry.card, current.card) < 0) picks.set(topicOf(entry.card), entry);
+  }
+  return [...picks.values()].map(({card, group}) => {
+    const folded = new Set(group.map(other => other.public_id));
+    const similar = [...known.values()]
+      .filter(({item, topic}) => item.public_id !== card.public_id && (topic === topicOf(card) || folded.has(item.public_id)))
+      .map(({item}) => item).sort(likedFirst).slice(0, DISCOVERY_SIMILAR_SIZE);
+    return {...card, similar};
+  }).sort(often).map(card => ({...card, role: 'common'}));
 }
 
 export async function discoveryDetail(id, signal) {
@@ -136,7 +165,7 @@ export async function discoveryDetail(id, signal) {
   } catch { return null; }
 }
 
-/** Signed-in accounts only; the site derives the voter from its own session. */
+/** Anyone may like, counted by browser: the site keys the vote to this browser's anonymous cookie. */
 export async function voteDiscovery(id, revision, vote) {
   try {
     const response = await fetch('/api/ask-lizheng/discovery/vote', {
@@ -148,4 +177,34 @@ export async function voteDiscovery(id, revision, vote) {
     const value = await response.json();
     return count(value?.likes) && typeof value?.voted === 'boolean' ? {likes: value.likes, voted: value.voted} : null;
   } catch { return null; }
+}
+
+// Which questions this browser liked, and the count each vote came back with, kept on this device
+// only (the server keeps no list of what a browser liked that the page could read). The lists reach
+// readers a few minutes after a vote; until then the vote's own count shows.
+const LIKES_KEY = 'ask-discovery-likes';
+const LIKE_FRESH_MS = 10 * 60000;
+export function readLikes() {
+  try {
+    const value = JSON.parse(localStorage.getItem(LIKES_KEY) || '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(([id, item]) => ID.test(id) && !!item
+      && typeof item.voted === 'boolean' && count(item.likes) && Number.isFinite(item.at)));
+  } catch { return {}; }
+}
+/** Keeps a vote's result, the 300 most recent; returns what was kept. */
+export function rememberLike(memory, id, result, now = Date.now()) {
+  const next = Object.fromEntries(Object.entries({...memory, [id]: {voted: result.voted, likes: result.likes, at: now}})
+    .sort((a, b) => b[1].at - a[1].at).slice(0, 300));
+  try { localStorage.setItem(LIKES_KEY, JSON.stringify(next)); } catch { /* Shown for this visit only. */ }
+  return next;
+}
+/** How a question's like shows here: the lists' count, unless a vote from this browser in the last
+ * ten minutes is newer than the lists. */
+export function likeState(memory, id, listed, now = Date.now()) {
+  const mine = memory[id];
+  if (!mine) return {voted: false, likes: listed};
+  if (now - mine.at < LIKE_FRESH_MS) return {voted: mine.voted, likes: mine.voted ? Math.max(listed, mine.likes) : Math.min(listed, mine.likes)};
+  // Long since: the lists count it, unless the question was edited since, which clears its likes.
+  return {voted: mine.voted && listed > 0, likes: listed};
 }
