@@ -73,10 +73,10 @@ const START = {
   lines: ['回答只从立正讲过、写过的东西里来，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
   identity: '这是AI回答，不是立正本人实时回复。',
 };
-// Questions others asked, published with personal details removed.
+// Questions others asked, published as they were asked (2026-10-05; before, with personal details removed).
 const DISCOVERY = {
   title: '别人在问什么',
-  note: '真实的提问和回答，去掉了个人信息。你想问的，可能已经有人问过。',
+  note: '真实的提问和回答。你想问的，可能已经有人问过。',
   attribution: 'AI整理，不是立正本人回复。',
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
@@ -449,7 +449,7 @@ function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
       <h2 id="consent-title">{publicArchive ? '参与公开问答' : '同意AI处理你的输入'}</h2>
       <p>{publicArchive ? `${PUBLIC_QA.zh.notice} 同意后保存问题、完整回答与出处，用于帮助别人、改进回答和内容选题。` : '提问按输入旁的说明和隐私政策保存，用于改进回答及内容选题。'}</p>
       <p><b>AI处理</b><br/>Builder Space转交输入给{recipient || '待确认的服务商'}生成回答、OpenAI匹配资料。回答AI接收问题、选填处境、最多6轮问题与回答摘要及公开资料；OpenAI接收用于匹配的问题、处境及必要时的上一轮问题。{recipient === 'DeepSeek' && 'DeepSeek可能保留输入并用于改进模型，没有训练退出选项。'}</p>
-      <p><b>公开范围</b><br/>{publicArchive ? `常见问答由同一AI去掉个人信息后精选展示；分享页显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
+      <p><b>公开范围</b><br/>{publicArchive ? `常见问答由同一AI挑选后原样展示；分享页显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
       <p>发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a> · <a className="inline-link" href="https://space.ai-builders.com/privacy" target="_blank" rel="noopener noreferrer">服务商数据说明<Ext/></a></p>
       {!recipient && <p role="alert">回答服务商尚未确认，暂时不能发送。你仍可浏览公开问答。</p>}
       <p className="consent-choice">不同意也能浏览问答；可在「说明」里撤回AI同意。</p>
@@ -577,7 +577,8 @@ function App() {
   const metaTimers = useRef([]);
   // The page shows v4's notice only once the service says it keeps to v4.
   const knownNotice = ops => ops.answer_archive === true && (ops.notice === 'v3'
-    || (ops.notice === 'v4' && ops.retention === 'until_deleted' && typeof ops.context_archive === 'boolean' && ops.public_display === 'deidentified'));
+    || (ops.notice === 'v4' && ops.retention === 'until_deleted' && typeof ops.context_archive === 'boolean'
+      && (ops.public_display === 'as_asked' || ops.public_display === 'deidentified')));
   const storageConfirmed = value => value?.query_logging?.enabled === true && typeof value?.ops_logging?.enabled === 'boolean'
     && (!value.ops_logging.enabled || knownNotice(value.ops_logging));
   const storageReady = storageConfirmed(meta) && !meta?.settings_error;

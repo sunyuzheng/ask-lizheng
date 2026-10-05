@@ -13,7 +13,7 @@ export const PUBLIC_QA = {
     title: '这里是公开问答',
     about: [
       '像在一场有录像的讲座上举手提问：在场的人都听得到，录像会放到网上，也搜得到。',
-      '问题、回答和出处都会保存。常见的问题去掉个人信息后，放进「别人在问什么」；你也可以把自己的问答分享出去。{owner}会从这些问题里找选题，也用它们改进回答。',
+      '问题、回答和出处都会保存。常见的问题会原样放进「别人在问什么」；你也可以把自己的问答分享出去。{owner}会从这些问题里找选题，也用它们改进回答。',
       '不记名：提问不和邮箱、账号或IP记在一起，我们不知道是谁问的；登录只用来核验Founding身份。但你写的内容本身可能认出你，发给AI前也不会自动删掉，所以别写名字、公司和联系方式。',
       {kept: '「结合我的处境」像递给台上的一张纸条：只给{owner}分析，不单独公开；但回答可能提到纸条上的内容。',
         notKept: '「结合我的处境」像递给台上的一张纸条：只用来回答你，我们不保存；但回答可能提到纸条上的内容。'},
@@ -32,7 +32,7 @@ export const PUBLIC_QA = {
     title: 'This is public Q&A',
     about: [
       'Think of raising your hand at a talk that’s being recorded: everyone in the room hears you, and the recording goes online, where search engines can find it.',
-      'Questions, answers and sources are all kept. Common questions appear in “What others are asking” with personal details removed, and you can share your own. I look through the questions for topics to write about, and use them to improve the answers.',
+      'Questions, answers and sources are all kept. Common questions appear in “What others are asking” as they were asked, and you can share your own. I look through the questions for topics to write about, and use them to improve the answers.',
       'No names attached: questions aren’t linked to an email, account or IP address, so we don’t know who asked. Signing in only checks Founding Member status. But what you write may still identify you, and it isn’t redacted before AI processing, so leave out names, companies and contact details.',
       {kept: '“Apply to my situation” is like passing a note to the stage: only I see it, for analysis, and it isn’t published on its own, but the answer may mention what it said.',
         notKept: '“Apply to my situation” is like passing a note to the stage: it’s only used to answer you and we don’t keep it, but the answer may mention what it said.'},

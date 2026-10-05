@@ -101,6 +101,36 @@ def test_a_decline_returns_only_its_reason(context_pack, token):
         assert call(client, request()).json() == {"publish": False, "skip_reason": "personal"}
 
 
+def test_v2_publishes_as_asked_and_only_names_the_topic(context_pack, token):
+    # 2026-10-05: questions asked under the talk wording are published as asked; the model only judges.
+    seen, transport = provider({"publish": True, "skip_reason": None, "topic_key": None, "topic_label": "学会还是看懂"})
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        body = call(client, request(v=2)).json()
+    assert body == {"publish": True, "topic_key": None, "topic_label": "学会还是看懂"}
+    system = seen[0]["messages"][0]["content"]
+    assert "原样公开" in system and "去掉一切可能认出" not in system and seen[0]["max_tokens"] == 400
+    # An existing topic keeps its name; a decline is only its reason.
+    _, transport = provider({"publish": True, "skip_reason": None, "topic_key": KEY, "topic_label": "别的名字"})
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        assert call(client, request(v=2)).json() == {"publish": True, "topic_key": KEY, "topic_label": "学会还是看懂"}
+    _, transport = provider({"publish": False, "skip_reason": "personal", "topic_key": None, "topic_label": ""})
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        assert call(client, request(v=2)).json() == {"publish": False, "skip_reason": "personal"}
+
+
+@pytest.mark.parametrize("bad", [
+    {"publish": True, "skip_reason": None, "topic_key": "b" * 32, "topic_label": "主题"},
+    {"publish": True, "skip_reason": None, "topic_key": None, "topic_label": ""},
+    {"publish": False, "skip_reason": None, "topic_key": None, "topic_label": ""},
+    # A v1 public version is not a v2 reply: v2 never rewrites the question.
+    {"publish": True, "skip_reason": None, "topic_key": None, "topic_label": "主题", "question": "改写过的问题"},
+])
+def test_v2_rejects_anything_but_a_decision_and_topic(context_pack, token, bad):
+    _, transport = provider(bad, bad)
+    with TestClient(create_app(context_pack, provider_transport=transport)) as client:
+        assert call(client, request(v=2)).status_code == 503
+
+
 def test_one_repair_then_give_up(context_pack, token):
     # An unknown source id, then a fixed reply: repaired once.
     seen, transport = provider(decision(sections=[{"heading": "h", "body": "b", "source_ids": ["S9"], "kind": "source"}]), decision())

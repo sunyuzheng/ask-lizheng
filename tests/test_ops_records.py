@@ -137,7 +137,7 @@ def test_durable_ack_before_model_and_exact_finish_no_legacy_record(context_pack
     app = create_app(context_pack, quota_store=store, query_record_transport=httpx.MockTransport(transport))
     with TestClient(app) as client:
         assert client.get("/api/meta").json()["ops_logging"] == {"enabled": True, "retention": "until_deleted", "notice": "v4", "answer_archive": True,
-            "context_archive": False, "public_display": "deidentified"}
+            "context_archive": False, "public_display": "as_asked"}
         response = post(client, payload(context="synthetic private background", history=[{"question": "synthetic history", "summary": "old summary"}]), **identity())
         assert events(response)[-1][1]["status"] == "answered" and app.state.slots._value == 3
         assert [r["event"] for r in stored] == ["start", "finish"] and stored[1]["status"] == "answered"

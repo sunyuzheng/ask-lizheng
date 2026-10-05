@@ -1,4 +1,4 @@
-// Published, de-identified questions people asked, curated in the separate Ops service and
+// Questions people asked, published as asked, chosen in the separate Ops service and
 // served by lizheng.ai on this host. Anywhere else the reads fail quietly and the page keeps its examples.
 
 // 最近问 and 最常问: two short lists, the same for every reader, so the CDN can serve them.

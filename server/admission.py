@@ -16,7 +16,7 @@ FIELDS = {"v", "sub", "tier", "attempt", "exp", "method", "path", "body_sha256"}
 OPS_FIELDS = {"visitor", "entrypoint"}
 ADMISSION_PURPOSE = "ask-lizheng:admission:v1"
 QUOTA_STORE_PURPOSE = "ask-lizheng:quota-store:v1"
-# Ops holds only this derived key, to ask for one question's public, de-identified version.
+# Ops holds only this derived key, to ask whether one question is published, and under which topic.
 CURATE_PURPOSE = "ask-lizheng:curate:v1"
 MESSAGES = {
     "admission_required": "请从问问立正页面发起请求。",

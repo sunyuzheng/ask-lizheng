@@ -251,10 +251,11 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
                 "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
-                # v4: answers may be published with personal details removed. The situation is not kept
-                # (since 2026-10-04); pages say so when context_archive is false.
+                # v4: answers may be published, as asked since 2026-10-05 (public_display "as_asked"; before,
+                # "deidentified"). The situation is not kept (since 2026-10-04); pages say so when
+                # context_archive is false.
                 "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v4", "answer_archive": True,
-                                "context_archive": False, "public_display": "deidentified"}}
+                                "context_archive": False, "public_display": "as_asked"}}
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret

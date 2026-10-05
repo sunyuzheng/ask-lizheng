@@ -1,9 +1,14 @@
-"""Public versions of asked questions, written by the model for Ops' automatic feed.
+"""Ops' automatic feed: whether an asked question is published, and under which topic.
 
 Ops sends one question asked under the v4 notice (no situation, first turn) with its archived
 answer and the topics already published. The model decides whether others would find it worth
-reading, removes anything that could identify the asker or anyone else, and names its topic. Ops
-publishes what comes back; the owner can withdraw any item there.
+reading and names its topic. Ops publishes what comes back; the owner can withdraw any item there.
+
+Two versions. v2 (2026-10-05, the user: 「自动去个人信息这一步删掉吧，没必要了」): the question and
+answer are published as asked, so the model only judges and names the topic; the asker was told it
+is like raising a hand at a talk, public with no names. v1 (questions asked before that wording):
+the model also writes a public version with anything that could identify the asker or anyone else
+removed, as those askers were told.
 """
 from __future__ import annotations
 
@@ -60,7 +65,7 @@ class CurateTopic(BaseModel):
 
 class CurateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    v: Literal[1]
+    v: Literal[1, 2]
     question: str = Field(min_length=1, max_length=2000)
     answer: CurateAnswer
     topics: list[CurateTopic] = Field(default_factory=list, max_length=300)
@@ -94,6 +99,30 @@ class CurateDecision(BaseModel):
     limitations: str = Field(max_length=900)
     followups: list[str] = Field(max_length=3)
     source_reasons: list[SourceReason] = Field(max_length=12)
+
+
+class JudgeDecision(BaseModel):
+    """v2: whether to publish as asked, and the topic. When it declines, only skip_reason matters."""
+    model_config = ConfigDict(extra="forbid")
+    publish: bool
+    skip_reason: Literal["personal", "sensitive", "low_quality", "weak_answer", "unsafe"] | None
+    topic_key: str | None
+    topic_label: str = Field(max_length=80)
+
+
+JUDGE_PROMPT = """你在为「问问立正」挑选公开问答。提问的人提交前已经被告知：这里像在讲座上举手提问，问答会公开，但不记名，只写愿意当众说的话。问题和回答会原样公开，你不改写。
+你会收到一个问题、它的回答（按段落，带出处编号S1、S2…）和已经公开的主题列表。请做两件事：
+
+1. 判断要不要公开（publish）。值得公开的：别人也可能想问的问题，并且回答有实质内容、能帮到人。不公开时给出 skip_reason：
+   - personal：写了能认出具体某个人的信息（私人的名字、联系方式、账号，或者公司、学校加职位这类能对上某个人的组合；立正、公开人物和公开作品不算），或者问题只关于提问者自己的具体处境，别人不会这样问；
+   - sensitive：涉及健康、法律纠纷、感情、具体的财务情况，或者别人的隐私；
+   - low_quality：测试、乱码、过短或没有意义的问题；
+   - weak_answer：回答没有实质内容，或没有回答这个问题；
+   - unsafe：违法、有害或不适合公开的内容。
+2. 要公开时归到主题。已有主题如果和这个问题问的是同一件事，topic_key 填那个 key、topic_label 填它的名称；否则 topic_key 填 null，起一个新的主题名，不超过10个字，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」。
+
+只输出一个 JSON 对象，字段都必须有：{"publish": true或false, "skip_reason": 上面五个之一或null, "topic_key": 已有key或null, "topic_label": "主题名"}。
+不公开时，publish 为 false、给出 skip_reason，topic_key 为 null，topic_label 为空字符串。"""
 
 
 PROMPT = """你在为「问问立正」整理公开问答。提问的人在提交前已经被告知：问答去掉个人信息后可能公开，帮到更多人。
@@ -131,6 +160,23 @@ def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float |
     expected = hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise AdmissionError("invalid_admission", 403)
+
+
+def judged(decision: JudgeDecision, request: CurateRequest) -> dict:
+    """What Ops receives for v2: a decline with its reason, or the topic to publish the question under."""
+    if not decision.publish:
+        if decision.skip_reason is None:
+            raise ValueError("A declined question needs skip_reason.")
+        return {"publish": False, "skip_reason": decision.skip_reason}
+    keys = {topic.key: topic.label for topic in request.topics}
+    if decision.skip_reason is not None or not decision.topic_label.strip():
+        raise ValueError("A published question needs a topic and no skip_reason.")
+    if decision.topic_key is not None and decision.topic_key not in keys:
+        raise ValueError("topic_key must be one of the given keys, or null.")
+    if decision.topic_key is None and len(decision.topic_label.strip()) > 16:
+        raise ValueError("A new topic_label must be at most 10 Chinese characters.")
+    return {"publish": True, "topic_key": decision.topic_key,
+            "topic_label": keys[decision.topic_key] if decision.topic_key else decision.topic_label.strip()}
 
 
 def checked(decision: CurateDecision, request: CurateRequest) -> dict:
@@ -179,8 +225,9 @@ def numbers_named(decision: CurateDecision) -> list[str]:
 
 
 async def curate_question(client: httpx.AsyncClient, token: str, model: str, request: CurateRequest) -> dict:
+    judge_only = request.v == 2
     messages = [
-        {"role": "system", "content": PROMPT},
+        {"role": "system", "content": JUDGE_PROMPT if judge_only else PROMPT},
         {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
     ]
     deadline = time.monotonic() + CURATE_SECONDS
@@ -190,7 +237,7 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise ProviderFailure("provider_timeout")
-            payload = {"model": model, "temperature": .2, "max_tokens": 3500, "messages": messages,
+            payload = {"model": model, "temperature": .2, "max_tokens": 400 if judge_only else 3500, "messages": messages,
                        "response_format": {"type": "json_object"}, **model_options(model)}
             async with asyncio.timeout(remaining):
                 response = await client.post("https://space.ai-builders.com/backend/v1/chat/completions", json=payload,
@@ -208,6 +255,8 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
             content = choice.get("message", {}).get("content")
             if choice.get("finish_reason") == "length" or not isinstance(content, str) or len(content) > 40000:
                 raise ValueError("The reply was cut off; return the complete JSON object.")
+            if judge_only:
+                return judged(JudgeDecision.model_validate_json(content), request)
             decision = CurateDecision.model_validate_json(content)
             result = checked(decision, request)
             # A source number written as a name is sent back once; the titles stand in if it comes back again.
