@@ -424,6 +424,10 @@ function QuestionCard({card, open, detail, like, share, selected, nested, childr
         <p className="qcard-attribution">{DISCOVERY.attribution}</p>
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">
+        {/* Where reading an answer ends, the same like as beside the question. */}
+        <button type="button" className={`pill-button qcard-like ${like.voted ? 'on' : ''}`} aria-pressed={like.voted} onClick={onLike}>
+          <span className="upvote-arrow" aria-hidden="true"/>有帮助{like.likes > 0 && <span className="qcard-like-count">{like.likes}</span>}
+        </button>
         <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
         <button type="button" className="pill-button" aria-expanded={!!share?.open} onClick={onShare}>分享</button>
       </div>
@@ -1249,7 +1253,6 @@ function App() {
         <div className="home-body">
         {discoveryState !== 'none' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
-            {askedRecently >= 3 && <p className="discovery-live">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
             <div className="discovery-views" role="group" aria-label="怎样看这些问题">
               {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
             </div></div>
