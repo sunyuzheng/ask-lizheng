@@ -91,8 +91,8 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 7585,
-      "sha256": "2b6dfd3cf2e898c9fd960f81d623db9fcfc957acf34059ca7ccaf64ff319d4a7",
+      "bytes": 7636,
+      "sha256": "4711ba65fbff47f6a1971ad1a0c646a9f23611475a5873f0fb153b4127be66ec",
       "license": "MIT"
     },
     {
@@ -5803,8 +5803,8 @@
     },
     {
       "path": "scripts/validate_release.py",
-      "bytes": 60216,
-      "sha256": "7566c09b2f47df84cde6370875097facbf339d56bf99df8b7d96d39c2157107b",
+      "bytes": 60419,
+      "sha256": "384264abd5d3988eaa6692f712ca8c3bfe57197d4bf25de52a306009eb5a8c1d",
       "license": "MIT"
     },
     {
