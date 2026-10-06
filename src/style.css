@@ -1449,6 +1449,29 @@ main {
   color: var(--green-text);
 }
 
+/* 反馈或举报: quiet, apart from the other actions; it leaves for the community post. */
+.qcard-feedback {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-left: auto;
+  padding: 0 4px;
+  color: var(--faint);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.qcard-feedback:hover {
+  color: var(--ink-2);
+}
+
+.qcard-feedback-note {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
 @keyframes lift {
   40% {
     transform: translateY(-3px);

@@ -57,6 +57,9 @@ const LINKS = {
   context: 'https://github.com/sunyuzheng/lizheng-open-context',
   site: 'https://www.lizheng.ai/',
   community: 'https://www.superlinear.academy/c/tools/lizheng-context',
+  // Feedback and reports, in the open (2026-10-06, the user): comments under the community post
+  // that introduced the Ask.
+  feedback: 'https://www.superlinear.academy/c/tools/ask-lizheng',
   stay: 'https://stay.superlinear.academy/',
   privacy: 'https://www.lizheng.ai/ask/privacy',
 };
@@ -82,6 +85,8 @@ const DISCOVERY = {
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
   similar: n => `另外${n}个类似提问`,
+  feedback: '反馈或举报',
+  feedbackCopied: '这条问答的链接已复制，留言时贴上就行。',
 };
 // 我的提问 (history.js): what was asked on this device. Its note is where the page says what the
 // privacy policy means for the person: we cannot tell which questions were theirs.
@@ -391,7 +396,7 @@ function Upvote({like, nested, onLike}) {
   </button>;
 }
 
-function QuestionCard({card, open, detail, like, share, selected, nested, children, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect}) {
+function QuestionCard({card, open, detail, like, share, feedback, selected, nested, children, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect, onFeedback}) {
   const prefix = `q-${card.public_id}`;
   const similar = card.similar_count ?? card.topic_question_count;
   const often = card.role === 'common' && similar >= 2;
@@ -430,7 +435,10 @@ function QuestionCard({card, open, detail, like, share, selected, nested, childr
         </button>
         <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
         <button type="button" className="pill-button" aria-expanded={!!share?.open} onClick={onShare}>分享</button>
+        {/* Feedback and reports go to the community post, with this answer's link on the clipboard. */}
+        <a className="qcard-feedback" href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={onFeedback}>{DISCOVERY.feedback}<Ext/></a>
       </div>
+      {feedback && <p className="qcard-feedback-note" role="status">{DISCOVERY.feedbackCopied}</p>}
       {share?.open && <SharePanel state={share} link onCopy={onCopy} onSend={onSend}/>}
     </div>}
     {children}
@@ -581,6 +589,7 @@ function About({close, meta, account, focusInput, publicArchive, contextKept, on
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<Ext/></a>
         <a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a>
         <a href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a>
+        <a href={LINKS.feedback} target="_blank" rel="noopener noreferrer">反馈或举报<Ext/></a>
       </div>
     </section>
   </div>;
@@ -647,6 +656,8 @@ function App() {
   const [askedHere, setAskedHere] = useState(readHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [cardShares, setCardShares] = useState({});
+  // Which answers' links were copied on the way to the community post for feedback.
+  const [cardFeedback, setCardFeedback] = useState({});
   const [cardSource, setCardSource] = useState('');
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
   const [accountWaking, setAccountWaking] = useState(false);
@@ -867,6 +878,10 @@ function App() {
     votingNow.current.delete(id);
     if (result) { setLikes(prev => rememberLike(prev, id, result)); track('Ask Discovery Vote', {surface: SURFACE, vote}); }
     setVoting(prev => { const next = {...prev}; delete next[id]; return next; });
+  };
+  const feedbackCard = card => {
+    track('Ask Feedback', {surface: SURFACE, location: 'card'});
+    void copyWhenReady(discoveryPage(card.public_id)).then(copied => { if (copied) setCardFeedback(prev => ({...prev, [card.public_id]: true})); });
   };
   const toggleSimilar = card => {
     const open = !openSimilar.has(card.public_id);
@@ -1200,9 +1215,9 @@ function App() {
   // own like and answer.
   const questionCard = (card, nested = false) => <QuestionCard key={card.public_id} card={card} nested={nested}
     open={(nested ? openNested : openCard) === card.public_id} detail={cardDetails[card.public_id]} like={likeOf(card)} share={cardShares[card.public_id]}
-    selected={cardSource} onToggle={() => toggleCard(card, view, nested)}
+    feedback={cardFeedback[card.public_id]} selected={cardSource} onToggle={() => toggleCard(card, view, nested)}
     onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
-    onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource}>
+    onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource} onFeedback={() => feedbackCard(card)}>
     {!nested && card.role === 'common' && card.similar?.length > 0 && <div className="qcard-similar">
       <button type="button" className="qcard-similar-toggle" aria-expanded={openSimilar.has(card.public_id)} onClick={() => toggleSimilar(card)}>
         {DISCOVERY.similar(card.similar.length)}<Chev/>
@@ -1285,7 +1300,7 @@ function App() {
         </section>
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
-          <p><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
+          <p><a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
         </div>
       </div> : <div className="layout">
