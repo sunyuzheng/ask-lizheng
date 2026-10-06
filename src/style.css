@@ -1575,7 +1575,8 @@ main {
 
 .footer p:last-child {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
 }
 
 .footer a,

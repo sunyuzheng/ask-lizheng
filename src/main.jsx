@@ -62,7 +62,19 @@ const LINKS = {
   feedback: 'https://www.superlinear.academy/c/tools/ask-lizheng',
   stay: 'https://stay.superlinear.academy/',
   privacy: 'https://www.lizheng.ai/ask/privacy',
+  // The apps (2026-10-06, the user): the App Store listing, and the Android page on lizheng.ai,
+  // which offers the direct download used in mainland China.
+  ios: 'https://apps.apple.com/app/id6818687873',
+  android: 'https://www.lizheng.ai/ask/android',
 };
+// The app links in the footer, for visitors in a browser: a phone sees its own app, a computer both.
+const APPS = (() => {
+  if (IN_APP || typeof navigator === 'undefined') return [];
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const apps = [{key: 'ios', label: 'iPhone App', href: LINKS.ios}, {key: 'android', label: '安卓App', href: LINKS.android}];
+  return ios ? apps.slice(0, 1) : /Android/.test(ua) ? apps.slice(1) : apps;
+})();
 // Where a link to the membership page sits, so its visits can be told apart there.
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
 // Visits in the iPhone app count as their own surface.
@@ -1300,7 +1312,7 @@ function App() {
         </section>
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
-          <p><a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
+          <p>{APPS.map(app => <a key={app.key} href={app.href} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask App Link', {surface: SURFACE, app: app.key})}>{app.label}<Ext/></a>)}<a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
         </div>
       </div> : <div className="layout">
