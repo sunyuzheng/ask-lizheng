@@ -10,6 +10,8 @@ import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
+import appStoreBadge from './badges/app-store-zh.svg';
+import googlePlayBadge from './badges/google-play-zh.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
@@ -62,18 +64,23 @@ const LINKS = {
   feedback: 'https://www.superlinear.academy/c/tools/ask-lizheng',
   stay: 'https://stay.superlinear.academy/',
   privacy: 'https://www.lizheng.ai/ask/privacy',
-  // The apps (2026-10-06, the user): the App Store listing, and the Android page on lizheng.ai,
-  // which offers the direct download used in mainland China.
+  // The apps: the App Store, Google Play, and the APK on lizheng.ai that mainland China installs
+  // from (its page tells WeChat users to open it in a browser first).
   ios: 'https://apps.apple.com/app/id6818687873',
+  play: 'https://play.google.com/store/apps/details?id=ai.lizheng.ask',
+  apk: 'https://www.lizheng.ai/ask/android/ask-lizheng.apk',
   android: 'https://www.lizheng.ai/ask/android',
 };
-// The app links in the footer, for visitors in a browser: a phone sees its own app, a computer both.
-const APPS = (() => {
+// 下载App under the question box (2026-10-07, the user: the stores' logos, somewhere easy to see).
+// An iPhone sees the App Store; an Android phone Google Play and the APK (in WeChat, which blocks APK
+// downloads, only the APK's page); a computer all three. Inside the apps there are none.
+const APP_BADGES = (() => {
   if (IN_APP || typeof navigator === 'undefined') return [];
   const ua = navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  const apps = [{key: 'ios', label: 'iPhone App', href: LINKS.ios}, {key: 'android', label: '安卓App', href: LINKS.android}];
-  return ios ? apps.slice(0, 1) : /Android/.test(ua) ? apps.slice(1) : apps;
+  const store = {key: 'ios', href: LINKS.ios}, play = {key: 'play', href: LINKS.play};
+  const apk = {key: 'apk', href: IN_WECHAT ? LINKS.android : LINKS.apk};
+  return ios ? [store] : /Android/.test(ua) ? (IN_WECHAT ? [apk] : [play, apk]) : [store, play, apk];
 })();
 // Where a link to the membership page sits, so its visits can be told apart there.
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
@@ -205,6 +212,22 @@ function Mark({className = ''}) {
 
 // Type, not icons: ↗ marks a link that leaves the page, a small chevron what opens in place.
 const Ext = () => <span className="ext" aria-hidden="true">↗</span>;
+// The stores' own badges at their own proportions; the APK gets one drawn to match.
+function AppBadges() {
+  const open = key => track('Ask App Link', {surface: SURFACE, app: key, location: 'stage'});
+  return <div className="apps">
+    <span className="apps-label">下载App</span>
+    {APP_BADGES.map(({key, href}) => key === 'apk'
+      ? <a key={key} className="app-badge apk" href={href} onClick={() => open(key)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4.5 15.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span><small>国内直接下载</small><b>安卓安装包</b></span>
+        </a>
+      : <a key={key} className="app-badge" href={href} target="_blank" rel="noopener noreferrer" onClick={() => open(key)}>
+          {key === 'ios' ? <img src={appStoreBadge} alt="在 App Store 下载" width="109" height="40"/>
+            : <img src={googlePlayBadge} alt="在 Google Play 下载" width="135" height="40"/>}
+        </a>)}
+  </div>;
+}
 const Chev = () => <span className="chev" aria-hidden="true"/>;
 
 // Chinese text may break anywhere; keep each phrase together and break after punctuation.
@@ -1266,6 +1289,7 @@ function App() {
           <p className="identity"><Phrases text={START.identity}/></p>
         </section>
         {composer}
+        {APP_BADGES.length > 0 && <AppBadges/>}
         {discoveryState !== 'none' && <aside className="live" aria-labelledby="live-title" aria-busy={!questionLists}>
           <h2 id="live-title">{DISCOVERY.live}</h2>
           {askedRecently >= 3 && <p className="live-count">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
@@ -1312,7 +1336,7 @@ function App() {
         </section>
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
-          <p>{APPS.map(app => <a key={app.key} href={app.href} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask App Link', {surface: SURFACE, app: app.key})}>{app.label}<Ext/></a>)}<a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
+          <p><a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
         </div>
       </div> : <div className="layout">

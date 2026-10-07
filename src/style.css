@@ -467,7 +467,7 @@ main {
   .stage-inner.with-live {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-areas: "hero live" "composer live";
+    grid-template-areas: "hero live" "composer live" "apps live";
     column-gap: clamp(48px, 5vw, 80px);
   }
 
@@ -477,6 +477,10 @@ main {
 
   .with-live .composer-area {
     grid-area: composer;
+  }
+
+  .with-live .apps {
+    grid-area: apps;
   }
 
   .with-live .live {
@@ -489,6 +493,77 @@ main {
   .with-live .hero-live {
     display: none;
   }
+}
+
+/* 下载App: the stores' badges under the question box, on the stage. */
+.apps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 28px;
+}
+
+.apps-label {
+  margin-right: 4px;
+  font-size: 13px;
+  color: var(--on-forest-2);
+}
+
+.app-badge {
+  display: inline-flex;
+  height: 40px;
+  border-radius: 7px;
+  transition: opacity 0.2s;
+}
+
+.app-badge:hover {
+  opacity: 0.85;
+}
+
+.app-badge:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.app-badge img {
+  display: block;
+  width: auto;
+  height: 40px;
+}
+
+.app-badge.apk {
+  box-sizing: border-box;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 0 9px;
+  border: 1px solid #a6a6a6;
+  background: #000;
+  color: #fff;
+  text-decoration: none;
+  line-height: 1.15;
+}
+
+.apk svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.apk span {
+  display: flex;
+  flex-direction: column;
+}
+
+.apk small {
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+.apk b {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .live h2 {
