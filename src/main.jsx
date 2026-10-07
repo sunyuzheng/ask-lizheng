@@ -10,8 +10,7 @@ import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
-import appStoreBadge from './badges/app-store-zh.svg';
-import googlePlayBadge from './badges/google-play-zh.png';
+import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 
@@ -212,20 +211,29 @@ function Mark({className = ''}) {
 
 // Type, not icons: ↗ marks a link that leaves the page, a small chevron what opens in place.
 const Ext = () => <span className="ext" aria-hidden="true">↗</span>;
-// The stores' own badges at their own proportions; the APK gets one drawn to match.
+// One black button per place to get the app: the store's logo and its name, without 下载, which
+// the label in front already says (2026-10-07, the user: everyone knows these logos). The Apple glyph
+// and the Play logo are cut from the stores' own Chinese badges.
+const APP_BUTTONS = {
+  ios: {name: 'App Store', label: '在 App Store 下载', icon: <svg viewBox="8.6 8.5 18.9 23.2" aria-hidden="true" fill="currentColor">
+    <path d="M24.76888,20.30068a4.94881,4.94881,0,0,1,2.35656-4.15206,5.06566,5.06566,0,0,0-3.99116-2.15768c-1.67924-.17626-3.30719,1.00483-4.1629,1.00483-.87227,0-2.18977-.98733-3.6085-.95814a5.31529,5.31529,0,0,0-4.47292,2.72787c-1.934,3.34842-.49141,8.26947,1.3612,10.97608.9269,1.32535,2.01018,2.8058,3.42763,2.7533,1.38706-.05753,1.9051-.88448,3.5794-.88448,1.65876,0,2.14479.88448,3.591.8511,1.48838-.02416,2.42613-1.33124,3.32051-2.66914a10.962,10.962,0,0,0,1.51842-3.09251A4.78205,4.78205,0,0,1,24.76888,20.30068Z"/>
+    <path d="M22.03725,12.21089a4.87248,4.87248,0,0,0,1.11452-3.49062,4.95746,4.95746,0,0,0-3.20758,1.65961,4.63634,4.63634,0,0,0-1.14371,3.36139A4.09905,4.09905,0,0,0,22.03725,12.21089Z"/>
+  </svg>},
+  play: {name: 'Google Play', label: '在 Google Play 下载', icon: <img src={playLogo} alt="" width="20" height="22"/>},
+  apk: {name: '安卓安装包', label: '下载安卓安装包', icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4.5 15.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+};
 function AppBadges() {
   const open = key => track('Ask App Link', {surface: SURFACE, app: key, location: 'stage'});
   return <div className="apps">
     <span className="apps-label">下载App</span>
-    {APP_BADGES.map(({key, href}) => key === 'apk'
-      ? <a key={key} className="app-badge apk" href={href} onClick={() => open(key)}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4.5 15.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span><small>国内直接下载</small><b>安卓安装包</b></span>
-        </a>
-      : <a key={key} className="app-badge" href={href} target="_blank" rel="noopener noreferrer" onClick={() => open(key)}>
-          {key === 'ios' ? <img src={appStoreBadge} alt="在 App Store 下载" width="109" height="40"/>
-            : <img src={googlePlayBadge} alt="在 Google Play 下载" width="135" height="40"/>}
-        </a>)}
+    {APP_BADGES.map(({key, href}) => {
+      const {name, label, icon} = APP_BUTTONS[key];
+      // The APK downloads from lizheng.ai; the stores open in a new tab.
+      const away = key === 'apk' ? {} : {target: '_blank', rel: 'noopener noreferrer'};
+      return <a key={key} className={`app-badge ${key}`} href={href} aria-label={label} {...away} onClick={() => open(key)}>
+        {icon}<b>{name}</b>
+      </a>;
+    })}
   </div>;
 }
 const Chev = () => <span className="chev" aria-hidden="true"/>;

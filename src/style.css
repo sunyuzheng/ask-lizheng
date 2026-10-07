@@ -500,7 +500,7 @@ main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 12px;
+  gap: 10px;
   margin-top: 28px;
 }
 
@@ -511,9 +511,17 @@ main {
 }
 
 .app-badge {
+  box-sizing: border-box;
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
   height: 40px;
+  padding: 0 12px 0 10px;
+  border: 1px solid #a6a6a6;
   border-radius: 7px;
+  background: #000;
+  color: #fff;
+  text-decoration: none;
   transition: opacity 0.2s;
 }
 
@@ -526,44 +534,24 @@ main {
   outline-offset: 2px;
 }
 
+.app-badge svg,
 .app-badge img {
+  flex: none;
   display: block;
   width: auto;
-  height: 40px;
-}
-
-.app-badge.apk {
-  box-sizing: border-box;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px 0 9px;
-  border: 1px solid #a6a6a6;
-  background: #000;
-  color: #fff;
-  text-decoration: none;
-  line-height: 1.15;
-}
-
-.apk svg {
-  flex: none;
-  width: 22px;
   height: 22px;
 }
 
-.apk span {
-  display: flex;
-  flex-direction: column;
+.app-badge.ios svg {
+  height: 21px;
+  margin-top: -2px;
 }
 
-.apk small {
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-}
-
-.apk b {
+.app-badge b {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .live h2 {

@@ -165,6 +165,6 @@ Context infra 将原文、AI 整理的判断卡和按问题组装的证据包分
 
 ## 首页的 App 下载标志（2026-10-07）
 
-安卓 App 做好的同一天，立正：「ios的link也放到ask lizheng网页主页」，先放在页脚。第二天 Google Play 上架，他又说：「也下载安卓apk安装包 我们要提供一下下载的 方便国内安卓的人。app下载可以用logo方式做在更显眼的位置。」于是页脚的文字链接去掉，改成首屏提问框下面一行「下载App」和商店标志：苹果和 Google 官方的中文标志（`src/badges/`，按各自比例、同样40高），国内安装包画成同样的黑底标志「国内直接下载 / 安卓安装包」，链到 https://www.lizheng.ai/ask/android/ask-lizheng.apk （网址不带版本号）。iPhone 只看到 App Store，安卓手机看到 Google Play 和安装包，微信里的安卓只看到安装包、链到下载页（微信不让直接下载安装包，那页会教用浏览器打开），电脑三个都有；App 和小程序里都不显示。点击记成 Vercel 事件「Ask App Link」（`app` 是 ios、play 或 apk）。
+安卓 App 做好的同一天，立正：「ios的link也放到ask lizheng网页主页」，先放在页脚。第二天 Google Play 上架，他又说：「也下载安卓apk安装包 我们要提供一下下载的 方便国内安卓的人。app下载可以用logo方式做在更显眼的位置。」于是页脚的文字链接去掉，改成首屏提问框下面一行「下载App」和三个黑底按钮。起初用苹果和 Google 官方的中文标志，当天他又说：「logo里面的“下载”感觉是没必要的吧 前面有下载app了 然后这个logo大家也知道是什么」，于是改成同一种按钮，只有图标和名字：「App Store」「Google Play」「安卓安装包」。苹果图标和 Google Play 图标是从官方中文标志里裁出来的（`src/badges/google-play-logo.png`，苹果的直接写在代码里）。官方标志按规定不能改字，所以这三个是我们自己的按钮，不是改过的官方标志。安装包链到 https://www.lizheng.ai/ask/android/ask-lizheng.apk （网址不带版本号）。iPhone 只看到 App Store，安卓手机看到 Google Play 和安装包，微信里的安卓只看到安装包、链到下载页（微信不让直接下载安装包，那页会教用浏览器打开），电脑三个都有；App 和小程序里都不显示。点击记成 Vercel 事件「Ask App Link」（`app` 是 ios、play 或 apk）。
 
 `src/in-app.js` 同时把微信小程序（web-view 的 User-Agent 带 `miniProgram`）也算作 App：不显示会员购买链接，第一次提问前同样征求同意。
