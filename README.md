@@ -1,6 +1,6 @@
 # 问问立正
 
-卡住的时候，问问立正：从立正六年的视频（含会员视频）、文章、《真本事》课程和《Growth Data Analytics Playbook》中文版里找出处，整理成回答。这里保存完整前端、检索与模型后端，以及 Builder Space 的部署入口。
+卡住的时候，问问立正：从立正的文章、视频和对谈、《真本事》课程和《Growth Data Analytics Playbook》中文版里找出处，整理成回答。这里保存完整前端、检索与模型后端，以及 Builder Space 的部署入口。
 
 ## 使用体验
 
@@ -25,7 +25,7 @@ python3 -m venv .venv
 
 ## 公开资料
 
-`data/context` 是 [lizheng-open-context](https://github.com/sunyuzheng/lizheng-open-context) 的哈希校验副本；它的 release manifest 和许可一起保留，版本绑定在 `data/context-lock.json`。本产品不读取个人私有资料。
+`data/context` 是 [lizheng-open-context](https://github.com/sunyuzheng/lizheng-open-context) 的哈希校验副本；它的 release manifest 和许可一起保留，版本绑定在 `data/context-lock.json`。人物和节目目录、原稿与AI提炼都由该仓库维护，详见[Context架构](docs/CONTEXT_ARCHITECTURE.md)。
 
 Open Context 推到 main 就会自动上线（2026-10-04 起，立正的决定：推 main 就是批准它的内容进入问问立正）。`.github/workflows/update-context.yml` 每半小时比较一次，有新版本就运行 `scripts/update_context.py`：先跑 Open Context 自己的 release validation 和测试，再同步副本、重建语义索引、跑本仓库测试，只把 `data/` 提交到 main，用 `config/builder-deploy.json` 的线上设置部署 Builder，等线上 `/api/meta` 的 `context_release` 变成新版本、语义索引就绪，再把 `context-live` 标签移到这个提交。任何一步失败就停下，这次运行失败，GitHub 发邮件给立正；部署没完成的，下一轮会再部署。想马上更新就运行 `gh workflow run update-context.yml -R sunyuzheng/ask-lizheng`。部署令牌存在仓库的 `builder` 环境里（只有 main 上的运行能读），换令牌时要一起换。
 
@@ -38,7 +38,7 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 .venv/bin/python scripts/build_semantic_index.py --build
 ```
 
-该脚本只复制 release manifest 中列出的公开文件，不复制 `.source-cache`、Git、凭证或上游运行数据。回答时用词法与语义候选、概念别名和子问题覆盖选择不同 source family；8 组带原文的判断卡补入条件、边界和关联材料。把原始出处与归属随片段交给模型。模型只能选择来源编号，URL、摘录、日期与视频时间点由服务器提供。译文、转载与原作不重复算独立证据。
+该脚本只复制 release manifest 中列出的公开文件，不复制 `.source-cache`、Git、凭证或上游运行数据。回答时用词法与语义候选、概念别名和子问题覆盖选择不同 source family；29组带原文的判断卡补入条件、边界和关联材料。把原始出处与归属随片段交给模型。模型只能选择来源编号，URL、摘录、日期与视频时间点由服务器提供。译文、转载与原作不重复算独立证据。
 
 ## API 与部署
 

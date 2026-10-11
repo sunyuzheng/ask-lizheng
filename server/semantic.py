@@ -95,6 +95,10 @@ def _source_projection(root: Path, path: str, records: dict, cache: dict):
                 documents = module.parse_markdown(source_path)
             else:
                 raise SemanticIndexError("Unsupported primary source projection")
+            if hasattr(module, "apply_guest_catalog"):
+                if (root / "catalog/guests.json").exists():
+                    _verified_file(root, "catalog/guests.json", records)
+                documents = module.apply_guest_catalog(documents)
         finally:
             sys.modules.pop(name, None)
         result = {doc.id: doc for doc in documents}

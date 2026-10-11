@@ -86,14 +86,10 @@ const APP_BADGES = (() => {
 const stayLink = medium => `${LINKS.stay}?utm_source=ask-lizheng&utm_medium=${medium}`;
 // Visits in the iPhone app count as their own surface.
 const SURFACE = IN_APP ? 'app' : 'ask';
-// The first screen (2026-10-04, the user: the subtitle is where the product says what is different
-// about it, not an inventory of the material): answers only from his own work, each paragraph back
-// to its source, and the questions are public, the newest beside the question box. The material
-// itself is further down, in 回答从哪里来. No punctuation in the title: at this size a comma and a
-// full stop read as shapes, not pauses.
+// The subtitle names the source material; the detailed layers and attribution are below.
 const START = {
   title: ['卡住的时候', '问问立正'],
-  lines: ['回答只从立正讲过、写过的东西里来，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
+  lines: ['回答依据立正的文章、视频和对谈资料，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
   identity: '这是AI回答，不是立正本人实时回复。',
 };
 // Questions others asked, published as they were asked (2026-10-05; before, with personal details removed).
@@ -116,33 +112,29 @@ const HISTORY = {
   clear: '全部清除',
   confirm: n => `清除这台设备上的${n}条提问？`,
 };
-// 回答从哪里来: what the answers are made from, and that it is distilled, not just raw text (the
-// user, 2026-10-04: the Statsig posts are articles like the rest; end the list with 等). Counted from
-// what the service answers from (/api/meta counts), so the numbers follow Open Context; before they
-// arrive, the same sentences without them.
+// Counts come from the deployed release; traditional and structured transcripts overlap.
 const count = (counts, key) => (Number.isInteger(counts?.[key]) ? counts[key] : null);
 function materialsText(counts) {
   const n = key => count(counts, key);
-  const videos = n('video_transcripts'), member = n('member_video_transcripts'), lessons = n('member_course_lessons');
-  const articles = ['community_posts_full_text', 'knowledge_bank_full_text', 'blog_posts_zh'].map(n);
+  const dialogues = n('structured_public_dialogues'), lessons = n('member_course_lessons');
+  const articles = ['community_posts_full_text', 'blog_posts_zh'].map(n);
   const parts = [
-    videos ? `${videos}期视频的字幕${member ? `（其中${member}期是会员视频）` : ''}` : '四百多期视频的字幕（一半是会员视频）',
-    articles.every(value => value !== null) ? `${articles.reduce((a, b) => a + b, 0)}篇文章` : '三百来篇文章',
-    lessons ? `《真本事》整门课的${lessons}讲文字稿` : '《真本事》整门课的文字稿',
-    // Word joiners keep 中文版等 on one line after the long English title.
+    '立正主讲的视频与已收录的会员文字稿',
+    dialogues ? `${dialogues}份公开对谈原稿` : '公开对谈原稿',
+    articles.every(value => value !== null) ? `${articles.reduce((a, b) => a + b, 0)}篇文章` : '文章',
+    lessons ? `《真本事》的${lessons}讲文字稿` : '《真本事》课程文字稿',
     ...(n('book_chapters_zh') === 0 ? [] : ['《Growth Data Analytics Playbook》中\u2060文\u2060版']),
   ];
-  return `立正六年里讲过、写过的东西：${parts.join('、')}\u2060等。`;
+  return `可检索的原始资料包括${parts.join('、')}\u2060等。`;
 }
 function refinedText(counts) {
-  const cards = count(counts, 'reasoning_cards'), talks = count(counts, 'conversation_excerpt_files'), excerpts = count(counts, 'conversation_excerpts');
-  return `这些原文还经过提炼：他反复讲的判断，整理成了${cards ? `${cards}张` : ''}判断卡，每张都连着说这些话的原文；`
-    + (talks && excerpts ? `${talks}场重要对话里他本人说的${excerpts}段话，也逐段核对了出来。` : '重要对话里他本人说的话，也逐段核对了出来。');
+  const cards = count(counts, 'reasoning_cards');
+  return `原文之外，还有阅读地图和${cards ? `${cards}张` : ''}判断卡，帮助找到相关的思路；这些AI提炼都连着原文，可以分别查阅。`;
 }
 const MATERIALS = {
   title: '回答从哪里来',
-  how: '回答时先找到相关的判断，再回到原文，整理成段落。每一段都标明出处：文章附日期，视频跳到他讲这段的地方。',
-  open: '这些材料都开源在GitHub',
+  how: '回答会区分立正和嘉宾的发言，保留尚待确认的归属。每一段标明出处：文章附日期，视频附对应时间点。',
+  open: '原稿、人物目录和提炼都在Open Context',
 };
 const MESSAGES = {
   quota: '今天的3次已经用完。北京时间每天0点恢复；Founding Member验证后不限次。',

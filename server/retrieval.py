@@ -76,6 +76,7 @@ class ContextIndex:
         self.architecture = None
         self.source_revision = "main"
         self.release_sha256 = ""
+        self.participant_aliases = {}
 
     def load(self) -> None:
         lock_path = self.root.parent / "context-lock.json"
@@ -103,6 +104,13 @@ class ContextIndex:
         module.ROOT = self.root
         self.search_module = module
         self.documents = module.load_documents()
+        catalog_path = self.root / "catalog/guests.json"
+        self.participant_aliases = {}
+        if catalog_path.is_file():
+            catalog = json.loads(catalog_path.read_text())
+            for entity in catalog["entities"]:
+                for name in [entity["display_name"], *entity["aliases"]]:
+                    self.participant_aliases.setdefault(name.casefold(), set()).add(entity["entity_id"])
         self._texts = [plain_text(doc.text).lower() for doc in self.documents]
         self._titles = [(doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
                          + " " + getattr(doc, "participant_aliases", "")
@@ -123,6 +131,19 @@ class ContextIndex:
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,
                 "context_commit": commit, "counts": counts}
 
+    def participant_entities(self, query: str) -> set[str]:
+        """Resolve explicit names from the shared directory for programme retrieval."""
+        query = query.casefold()
+        matches = []
+        for alias, identities in self.participant_aliases.items():
+            expression = re.escape(alias)
+            if re.search(r"[a-z]", alias):
+                expression = r"(?<![a-z0-9])" + expression + r"(?![a-z0-9])"
+            for match in re.finditer(expression, query):
+                matches.append((match.start(), match.end(), identities))
+        return set().union(*(identities for start, end, identities in matches
+            if not any(a <= start and b >= end and b - a > end - start for a, b, _ in matches)))
+
     def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None) -> list[Passage]:
         if not self.documents:
             return []
@@ -133,6 +154,9 @@ class ContextIndex:
         prior = " ".join(field(item, "question") + " " + field(item, "summary") for item in history[-2:])
         if history and len(query) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", query):
             query += " " + field(history[-1], "question")[:500]
+        participants = self.participant_entities(query)
+        def participant_match(doc):
+            return bool(participants.intersection(getattr(doc, "participant_entity_ids", "").split("；")))
         card_ids = self.card_ids(question, context, history, semantic_candidates)
         linked = self.architecture.linked_candidates(card_ids) if self.architecture else []
         auxiliary = (context + " " + prior)[:1200]
@@ -156,9 +180,9 @@ class ContextIndex:
         ranked = []
         for index, (doc, body, title) in enumerate(zip(self.documents, self._texts, self._titles)):
             matched = [term for term in primary if term in body or term in title]
-            if not matched:
+            if not matched and not participant_match(doc):
                 continue
-            if len(primary) > 3 and len(matched) < 2 and not any(term in title and len(term) > 2 for term in matched):
+            if not participant_match(doc) and len(primary) > 3 and len(matched) < 2 and not any(term in title and len(term) > 2 for term in matched):
                 continue
             def term_score(term):
                 frequency = body.count(term)
@@ -202,7 +226,8 @@ class ContextIndex:
             index = candidate["docindex"]
             focus_by_index[index] = candidate["focus_terms"]
             fused[index] = fused.get(index, 0) + .055 * candidate["weight"]
-        ranked = sorted(((score, index) for index, score in fused.items()), key=lambda row: (-row[0], self.documents[row[1]].title))
+        ranked = sorted(((score, index) for index, score in fused.items()),
+                        key=lambda row: (not participant_match(self.documents[row[1]]), -row[0], self.documents[row[1]].title))
         seen = set()
         family_speakers = {}
         selected_raw = {}

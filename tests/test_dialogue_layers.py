@@ -294,3 +294,68 @@ def test_public_programme_context_disambiguates_same_first_name_without_assignin
     assert passages[0].evidence["source_family"] == "synthetic-conversation"
     assert passages[0].source["speaker_id"] == "unknown"
     assert passages[0].evidence["yuzheng_stance_weight"] == "not-evidence"
+
+
+def test_shared_catalog_retrieval_and_embedding_keep_turn_ownership(context_pack):
+    path = dialogue(context_pack)
+    catalog = context_pack / "catalog/guests.json"
+    catalog.write_text(json.dumps({
+        "entities": [{"entity_id": "guest:synthetic", "display_name": "目录嘉宾", "aliases": ["目录别名"]}],
+        "sources": [{"source_id": "youtube-synthetic", "title": "合成节目", "url": "https://www.youtube.com/watch?v=synthetic"}],
+        "appearances": [{"entity_id": "guest:synthetic", "source_id": "youtube-synthetic"}],
+    }, ensure_ascii=False))
+    write_manifest(context_pack)
+    index = ContextIndex(context_pack); index.load()
+    docs = [d for d in index.documents if d.path == path.relative_to(context_pack).as_posix()]
+    _, inputs = prepare_index(context_pack, docs)
+    assert all(d.participant_aliases == "目录别名" for d in docs)
+    assert all("目录别名" not in text for text in inputs)
+    unknown = next(d for d in docs if d.speaker_id == "unknown")
+    assert unknown.speaker_name == "" and unknown.yuzheng_stance_weight == "not-evidence"
+    passages = index.retrieve("目录别名")
+    assert any(p.source.get("participant_aliases") == "目录别名" for p in passages)
+    docs[0].participant_aliases = "spoofed alias"
+    with pytest.raises(SemanticIndexError, match="attribution differs"):
+        prepare_index(context_pack, docs)
+
+
+def test_shared_catalog_is_manifest_pinned_before_embedding(context_pack):
+    dialogue(context_pack)
+    catalog = context_pack / "catalog/guests.json"
+    catalog.write_text(json.dumps({"entities": [], "sources": [], "appearances": []}))
+    write_manifest(context_pack)
+    index = ContextIndex(context_pack); index.load()
+    catalog.write_text(json.dumps({"entities": [], "sources": [], "appearances": [], "drift": True}))
+    with pytest.raises(SemanticIndexError):
+        prepare_index(context_pack, index.documents)
+
+
+def test_explicit_catalog_guest_precedes_unrelated_topic_and_semantic_hits(context_pack):
+    path = dialogue(context_pack)
+    source_file(context_pack, "corpus/community-posts", "topic.md", {
+        "id": "unrelated-topic", "title": "职业发展", "source_type": "community-post",
+        "author": "Yuzheng Sun", "source_url": "https://example.org/topic",
+        "content_origin": "yuzheng-published-text", "evidence_role": "published-source",
+    }, "职业发展与学习方法。" * 30)
+    (context_pack / "catalog/guests.json").write_text(json.dumps({
+        "entities": [{"entity_id": "guest:synthetic", "display_name": "合成嘉宾", "aliases": ["Synthetic Person"]}],
+        "sources": [{"source_id": "youtube-synthetic", "url": "https://www.youtube.com/watch?v=synthetic"}],
+        "appearances": [{"entity_id": "guest:synthetic", "source_id": "youtube-synthetic"}],
+    }))
+    index = ContextIndex(context_pack); index.load()
+    unrelated = next(i for i, doc in enumerate(index.documents) if doc.source_id == "unrelated-topic")
+    passages = index.retrieve("请问合成嘉宾如何看职业发展", semantic_candidates=[{"docindex": unrelated, "score": .99}])
+    assert passages[0].source["participant_entity_ids"] == "guest:synthetic"
+    assert any(p.source.get("speaker_id") == "unknown" and p.source["speaker_status"] == "unresolved" for p in passages)
+    assert index.retrieve("职业发展")[0].evidence["source_family"] != "synthetic-conversation"
+    assert index.participant_entities("Synthetic Person 职业发展") == {"guest:synthetic"}
+    assert index.participant_entities("XSynthetic Person 职业发展") == set()
+
+
+def test_catalog_name_resolution_preserves_shared_aliases_and_specific_names():
+    index = ContextIndex(Path("unused"))
+    index.participant_aliases = {"jo": {"guest:a", "guest:b"}, "synthetic jo": {"guest:a"}, "john": {"guest:c"}}
+    assert index.participant_entities("Jo") == {"guest:a", "guest:b"}
+    assert index.participant_entities("Synthetic Jo") == {"guest:a"}
+    assert index.participant_entities("John") == {"guest:c"}
+    assert index.participant_entities("enjoy") == set()
