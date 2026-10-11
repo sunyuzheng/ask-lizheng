@@ -1,15 +1,15 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
   "snapshot_at": "2026-10-11",
-  "release_manifest_sha256": "dc802eae6c7cdf75e4bf553ce5da72668d04d1309abf0d2dba9b4f2a7ae6e934",
+  "release_manifest_sha256": "3b3a0de774eb526b71057bd27c0b4b0a1ddb1c51ba2173aece2e7b1c6d983c7e",
   "files": 1326,
   "counts": {
     "structured_public_dialogues": 339,
     "structured_dialogue_cues": 248599,
-    "guest_entities": 149,
+    "guest_entities": 152,
     "guest_sources": 406,
-    "guest_appearances": 417,
-    "guest_slug_routes": 153,
+    "guest_appearances": 425,
+    "guest_slug_routes": 156,
     "guest_articles": 23,
     "guest_redirects": 3,
     "guest_public_raw_records": 339,
@@ -35,14 +35,14 @@
     "english_community_full_text_files": 49,
     "english_community_original_yuzheng": 11,
     "english_community_third_party_or_unresolved": 39,
-    "english_video_translations": 77
+    "english_video_translations": 76
   },
   "licenses": {
-    "CC-BY-4.0": 572,
-    "CC0-1.0": 38,
-    "LicenseRef-Lizheng-Reference-Use-1.0": 620,
+    "CC-BY-4.0": 568,
+    "CC0-1.0": 39,
+    "LicenseRef-Lizheng-Reference-Use-1.0": 623,
     "LicenseRef-Original-Rights-Retained": 39,
     "MIT": 50
   },
-  "source_commit": "12222fce105ce57cb489a51badbb57c6510b9098"
+  "source_commit": "5f1f8f04d4c296f4a1cebb7495733b23ae26acf9"
 }

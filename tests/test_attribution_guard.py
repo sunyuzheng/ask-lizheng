@@ -47,7 +47,7 @@ def test_both_attempts_misattributed_fail_closed(passages, clock):
         payload = json.loads(request.content)
         calls.append(payload)
         if len(calls) == 2:
-            assert "不是立正本人的材料" in payload["messages"][-1]["content"]
+            assert "未确认的发言" in payload["messages"][-1]["content"]
         return response(answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。"))
     with pytest.raises(answers.ProviderFailure) as exc:
         generate(provider, passages)
@@ -63,7 +63,7 @@ def test_first_attempt_can_be_repaired_once(passages, clock):
         calls.append(payload)
         if len(calls) == 1:
             return response(answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。"))
-        assert "不是立正本人的材料" in payload["messages"][-1]["content"]
+        assert "未确认的发言" in payload["messages"][-1]["content"]
         return response(answer_for(sid, f"一位作者提到，先评估生活约束 [{sid}]。"))
     result = generate(provider, passages)
     assert "立正" not in result.sections[0].body
@@ -110,3 +110,30 @@ def test_stream_keeps_prior_valid_section_but_not_misattributed_section(passages
     wrong = answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。").sections[0]
     answer.sections.append(wrong)
     assert answers.completed_sections(answer.model_dump_json(), passages) == [answer.sections[0]]
+
+
+@pytest.mark.parametrize("field", ["body", "followup", "reason", "indirect-followup"])
+def test_programme_guest_alias_is_not_a_fragment_speaker(passages, field):
+    p = next(p for p in passages if p.source["author"] == "Guest Author")
+    p.evidence["participant_aliases"] = "Synthetic Alpha"
+    p.source.update(speaker_id="unknown", speaker_status="unresolved")
+    sid = p.source["id"]
+    answer = answer_for(sid, f"节目讨论了合成问题。[{sid}]。")
+    if field == "body": answer.sections[0].body = f"Synthetic Alpha认为合成结论成立。[{sid}]。"
+    if field == "followup": answer.followups = ["Synthetic Alpha说的合成结论是什么？"]
+    if field == "reason": answer.source_reasons = [answers.SourceReason(source_id=sid, reason="Synthetic Alpha的观点集中在这里。") ]
+    if field == "indirect-followup": answer.followups = ["Synthetic Alpha对合成问题给了什么具体方法？"]
+    assert answers.misattributed(answer, passages)
+
+
+def test_named_confirmed_guest_statement_is_supported(passages):
+    p = next(p for p in passages if p.source["author"] == "Guest Author")
+    p.evidence.update(participant_aliases="Synthetic Alpha", speech_act="statement")
+    p.source.update(speaker_id="guest:synthetic-alpha", speaker_name="Synthetic Alpha", speaker_status="reviewed-source-attribution")
+    sid = p.source["id"]
+    answer = answer_for(sid, f"Synthetic Alpha认为合成结论成立。[{sid}]。")
+    assert not answers.misattributed(answer, passages)
+    p.evidence["speech_act"] = "question"
+    assert answers.misattributed(answer, passages)
+    answer.sections[0].body = f"不能确认Synthetic Alpha的观点。[{sid}]。"
+    assert not answers.misattributed(answer, passages)

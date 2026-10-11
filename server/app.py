@@ -23,7 +23,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, model_options, sources_only, unsupported_result
+from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
 from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
@@ -313,8 +313,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         try:
             question = payload.question.strip()
             semantic = await application.state.semantic.candidates(application.state.provider, token, question + "\n")
-            passages = await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12, semantic) if semantic \
-                else await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12)
+            passages = await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12, semantic, intent="understand") if semantic \
+                else await asyncio.to_thread(application.state.index.retrieve, question, "", [], 12, intent="understand")
             if not passages or not any(not passage.discovery for passage in passages):
                 return JSONResponse(status_code=422, content={"code": "unsupported"})
             cards = application.state.index.reasoning_bundle(question, "", [], passages, semantic)
@@ -334,7 +334,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         rate_check(request, "search", 3)
         if not q.strip():
             raise HTTPException(422, "请输入一个主题或问题。")
-        passages = await asyncio.to_thread(application.state.index.retrieve, q, limit=8)
+        passages = await asyncio.to_thread(application.state.index.retrieve, q, limit=8, intent=intent)
         return {"sources": [passage.source for passage in passages]}
 
     @application.get("/api/quota")
@@ -512,7 +512,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 # can open actual public excerpts without waiting on either AI call.
                 semantic_task = asyncio.create_task(application.state.semantic.candidates(application.state.provider, token, semantic_query))
                 try:
-                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12)
+                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, intent=payload.intent)
                     if passages:
                         yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
                     yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"})
@@ -526,7 +526,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         semantic_task.cancel()
                     await asyncio.gather(semantic_task, return_exceptions=True)
                 if semantic_candidates:
-                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates)
+                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates, intent=payload.intent)
                 yield sse("sources", {"phase": "matched", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
                 if await request.is_disconnected():
                     return
@@ -536,11 +536,15 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     yield sse("error", {"message": "公开资料暂时无法读取，请稍后再试。", "code": "context_unavailable"})
                     return
                 token = os.getenv("AI_BUILDER_TOKEN", "")
+                if payload.intent == "find" and application.state.index.participant_entities(
+                        application.state.index.retrieval_query(payload.question, payload.history)):
+                    yield sse("result", await settled_result(guest_reading_result(passages)))
+                    return
                 if not token:
                     yield sse("result", await settled_result(sources_only(passages, "当前没有连接 AI 模型；这里展示的是公开资料检索结果。", payload.intent)))
                     return
                 if not any(not passage.discovery for passage in passages):
-                    result = sources_only(passages, "这些条目只收录目录信息；可以打开原文继续阅读。", "find") if payload.intent == "find" and passages else unsupported_result(passages)
+                    result = sources_only(passages, "找到这些节目，可以打开节目或原稿继续阅读。", "find") if passages else unsupported_result(passages)
                     yield sse("result", await settled_result(result))
                     return
                 cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)

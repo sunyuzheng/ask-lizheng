@@ -89,7 +89,7 @@ const SURFACE = IN_APP ? 'app' : 'ask';
 // The subtitle names the source material; the detailed layers and attribution are below.
 const START = {
   title: ['卡住的时候', '问问立正'],
-  lines: ['回答依据立正的文章、视频和对谈资料，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
+  lines: ['回答主要依据立正的文章与主讲内容，每一段都能点回原文。', '这里的问答是公开的：别人刚问了什么，你都能看到。'],
   identity: '这是AI回答，不是立正本人实时回复。',
 };
 // Questions others asked, published as they were asked (2026-10-05; before, with personal details removed).
@@ -112,20 +112,24 @@ const HISTORY = {
   clear: '全部清除',
   confirm: n => `清除这台设备上的${n}条提问？`,
 };
-// Counts come from the deployed release; traditional and structured transcripts overlap.
+// Unique source counts come from the deployed reader's attributed source pool.
 const count = (counts, key) => (Number.isInteger(counts?.[key]) ? counts[key] : null);
 function materialsText(counts) {
   const n = key => count(counts, key);
-  const dialogues = n('structured_public_dialogues'), lessons = n('member_course_lessons');
-  const articles = ['community_posts_full_text', 'blog_posts_zh'].map(n);
+  const videos = n('yuzheng_solo_transcripts'), articles = n('yuzheng_articles');
+  const comments = n('yuzheng_comments'), lessons = n('yuzheng_course_lessons');
   const parts = [
-    '立正主讲的视频与已收录的会员文字稿',
-    dialogues ? `${dialogues}份公开对谈原稿` : '公开对谈原稿',
-    articles.every(value => value !== null) ? `${articles.reduce((a, b) => a + b, 0)}篇文章` : '文章',
+    videos !== null ? `${videos}份单人主讲文字稿` : '单人主讲文字稿',
+    articles !== null ? `${articles}篇文章` : '文章',
+    comments !== null ? `${comments}份公开回复` : '公开回复',
     lessons ? `《真本事》的${lessons}讲文字稿` : '《真本事》课程文字稿',
-    ...(n('book_chapters_zh') === 0 ? [] : ['《Growth Data Analytics Playbook》中\u2060文\u2060版']),
+    '对谈中已确认属于立正的发言',
   ];
-  return `可检索的原始资料包括${parts.join('、')}\u2060等。`;
+  return `回答主要依据${parts.join('、')}\u2060。`;
+}
+function dialoguesText(counts) {
+  const programmes = count(counts, 'guest_sources'), texts = count(counts, 'structured_public_dialogues');
+  return `对谈单独索引${programmes !== null ? `：${programmes}期节目` : ''}${texts !== null ? `，其中${texts}份对谈原稿已收录` : ''}。在「从哪读起」按嘉宾或话题查找，打开节目和原文；嘉宾的观点归嘉宾本人。`;
 }
 function refinedText(counts) {
   const cards = count(counts, 'reasoning_cards');
@@ -133,7 +137,7 @@ function refinedText(counts) {
 }
 const MATERIALS = {
   title: '回答从哪里来',
-  how: '回答会区分立正和嘉宾的发言，保留尚待确认的归属。每一段标明出处：文章附日期，视频附对应时间点。',
+  how: '每一段标明出处：文章附日期，视频附对应时间点。',
   open: '原稿、人物目录和提炼都在Open Context',
 };
 const MESSAGES = {
@@ -1330,7 +1334,8 @@ function App() {
         <section className="materials" aria-labelledby="materials-title">
           <h2 id="materials-title">{MATERIALS.title}</h2>
           <div>
-            <p className="materials-list"><Phrases text={materialsText(meta?.counts)}/></p>
+            <p className="materials-list"><strong>立正本人</strong> · <Phrases text={materialsText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/solo-videos.md`} target="_blank" rel="noreferrer">浏览主讲文字稿<Ext/></a></p>
+            <p className="materials-list"><strong>对谈索引</strong> · <Phrases text={dialoguesText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/dialogues.md`} target="_blank" rel="noreferrer">浏览对谈索引<Ext/></a></p>
             <p><Phrases text={refinedText(meta?.counts)}/></p>
             <p><Phrases text={MATERIALS.how}/></p>
             <p><a className="inline-link" href={LINKS.context} target="_blank" rel="noreferrer">{MATERIALS.open}<Ext/></a></p>

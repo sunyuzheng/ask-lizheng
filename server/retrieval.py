@@ -57,6 +57,27 @@ def is_discovery(doc) -> bool:
     return doc.source_type.endswith("-catalog") or doc.evidence_role in {"metadata-only", "discovery-only"}
 
 
+def has_body_text(doc) -> bool:
+    """A title and archive access notice locate a source; they are not its body."""
+    lines = [line.strip() for line in getattr(doc, "text", "").splitlines()]
+    return any(line and not re.match(r"^#{1,6}\s", line)
+               and not (doc.source_type == "course-lesson" and line.startswith("> **会员课程**"))
+               for line in lines)
+
+
+def is_yuzheng_basis(doc) -> bool:
+    """Positive source attribution, applied before every answer candidate path."""
+    return (
+        getattr(doc, "data_layer", "") == "raw"
+        and getattr(doc, "content_origin", "") in {"yuzheng-published-text", "yuzheng-spoken-source"}
+        and getattr(doc, "yuzheng_stance_weight", "") in {"direct", "direct-with-quotation-boundaries"}
+        and getattr(doc, "evidence_role", "") in {"primary-authored", "primary-speech", "published-source"}
+        and (getattr(doc, "content_origin", "") != "yuzheng-spoken-source" or getattr(doc, "speaker_id", "") == "yuzheng")
+        and getattr(doc, "speech_act", "") not in {"question", "introduction", "acknowledgement", "joke", "reported-other"}
+        and has_body_text(doc)
+    )
+
+
 @dataclass
 class Passage:
     source: dict
@@ -77,6 +98,7 @@ class ContextIndex:
         self.source_revision = "main"
         self.release_sha256 = ""
         self.participant_aliases = {}
+        self.guest_catalog = {}
 
     def load(self) -> None:
         lock_path = self.root.parent / "context-lock.json"
@@ -106,8 +128,10 @@ class ContextIndex:
         self.documents = module.load_documents()
         catalog_path = self.root / "catalog/guests.json"
         self.participant_aliases = {}
+        self.guest_catalog = {}
         if catalog_path.is_file():
             catalog = json.loads(catalog_path.read_text())
+            self.guest_catalog = catalog
             for entity in catalog["entities"]:
                 for name in [entity["display_name"], *entity["aliases"]]:
                     self.participant_aliases.setdefault(name.casefold(), set()).add(entity["entity_id"])
@@ -126,6 +150,15 @@ class ContextIndex:
         counts["retrieval_chunks"] = len(self.documents)
         counts["source_families"] = len({doc.source_family or doc.source_id for doc in self.documents})
         counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
+        own = [doc for doc in self.documents if is_yuzheng_basis(doc)]
+        def families(types, classification=None):
+            return len({doc.source_family or doc.source_id for doc in own
+                        if doc.source_type in types and (classification is None or doc.speaker_classification == classification)})
+        counts.update(yuzheng_solo_transcripts=families({"video-transcript"}, "solo-yuzheng"),
+                      yuzheng_articles=families({"community-post", "knowledge-bank", "blog-post"}),
+                      yuzheng_comments=families({"community-comment"}),
+                      yuzheng_course_lessons=families({"course-lesson"}),
+                      yuzheng_dialogue_sources=families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed"))
         # Which Open Context release this service answers from, so a deploy can be checked from outside.
         commit = self.source_revision if re.fullmatch(r"[a-f0-9]{40}", self.source_revision) else ""
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,
@@ -144,19 +177,32 @@ class ContextIndex:
         return set().union(*(identities for start, end, identities in matches
             if not any(a <= start and b >= end and b - a > end - start for a, b, _ in matches)))
 
-    def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None) -> list[Passage]:
+    @staticmethod
+    def retrieval_query(question: str, history: list | None = None) -> str:
+        query = question.strip()
+        if history and len(query) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", query):
+            item = history[-1]
+            previous = item.get("question", "") if isinstance(item, dict) else getattr(item, "question", "")
+            query += " " + str(previous)[:500]
+        return query
+
+    def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None, *, intent: str = "find") -> list[Passage]:
+        if intent not in {"find", "understand", "apply"}:
+            raise ValueError("Invalid retrieval intent")
         if not self.documents:
             return []
-        query = question.strip()
+        eligible = {i for i, doc in enumerate(self.documents)
+                    if (is_discovery(doc) or has_body_text(doc)) and (intent == "find" or is_yuzheng_basis(doc))}
         history = history or []
+        query = self.retrieval_query(question, history)
         def field(item, key):
             return str(item.get(key, "")) if isinstance(item, dict) else str(getattr(item, key, ""))
         prior = " ".join(field(item, "question") + " " + field(item, "summary") for item in history[-2:])
-        if history and len(query) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", query):
-            query += " " + field(history[-1], "question")[:500]
         participants = self.participant_entities(query)
         def participant_match(doc):
             return bool(participants.intersection(getattr(doc, "participant_entity_ids", "").split("；")))
+        if intent == "find" and participants:
+            eligible = {i for i in eligible if participant_match(self.documents[i])}
         card_ids = self.card_ids(question, context, history, semantic_candidates)
         linked = self.architecture.linked_candidates(card_ids) if self.architecture else []
         auxiliary = (context + " " + prior)[:1200]
@@ -179,6 +225,8 @@ class ContextIndex:
         clause_terms = [set(module.query_terms(clause)) - STOP_TERMS for clause in clauses]
         ranked = []
         for index, (doc, body, title) in enumerate(zip(self.documents, self._texts, self._titles)):
+            if index not in eligible:
+                continue
             matched = [term for term in primary if term in body or term in title]
             if not matched and not participant_match(doc):
                 continue
@@ -219,15 +267,25 @@ class ContextIndex:
         fused = {index: 1 / (40 + rank) for rank, (_, index) in enumerate(ranked, 1)}
         for rank, candidate in enumerate(semantic_candidates or [], 1):
             index = candidate["docindex"]
-            if 0 <= index < len(self.documents) and candidate["score"] >= MIN_SIMILARITY:
+            if index in eligible and candidate["score"] >= MIN_SIMILARITY:
                 fused[index] = fused.get(index, 0) + 1 / (40 + rank)
         focus_by_index = {}
         for candidate in linked:
             index = candidate["docindex"]
+            if index not in eligible:
+                continue
             focus_by_index[index] = candidate["focus_terms"]
             fused[index] = fused.get(index, 0) + .055 * candidate["weight"]
         ranked = sorted(((score, index) for index, score in fused.items()),
                         key=lambda row: (not participant_match(self.documents[row[1]]), -row[0], self.documents[row[1]].title))
+        if intent == "find" and len(participants) > 1:
+            covered, representatives = set(), []
+            for row in ranked:
+                ids = participants.intersection(getattr(self.documents[row[1]], "participant_entity_ids", "").split("；"))
+                if ids - covered:
+                    representatives.append(row); covered.update(ids)
+            first = {row[1] for row in representatives}
+            ranked = representatives + [row for row in ranked if row[1] not in first]
         seen = set()
         family_speakers = {}
         selected_raw = {}
@@ -305,7 +363,45 @@ class ContextIndex:
             passages.append(Passage(source, evidence, is_discovery(doc)))
             if len(passages) >= limit:
                 break
-        return passages
+        # A named programme remains reachable even when its conversation has
+        # no attributable own statements. Return its entry, not guest speech.
+        return passages or (self.programme_discovery(query, limit) if participants else [])
+
+    def programme_discovery(self, query: str, limit: int = 8) -> list[Passage]:
+        identities = self.participant_entities(query)
+        catalog = self.guest_catalog
+        source_ids = {a["source_id"] for a in catalog.get("appearances", []) if a["entity_id"] in identities}
+        names = {e["entity_id"]: e["display_name"] for e in catalog.get("entities", [])}
+        rows = [s for s in catalog.get("sources", []) if s["source_id"] in source_ids]
+        rows.sort(key=lambda s: (s.get("published_at", ""), s["source_id"]), reverse=True)
+        if len(identities) > 1:
+            covered, first = set(), []
+            for row in rows:
+                ids = {a["entity_id"] for a in catalog["appearances"] if a["source_id"] == row["source_id"]} & identities
+                if ids - covered:
+                    first.append(row); covered.update(ids)
+            selected = {s["source_id"] for s in first}
+            rows = first + [s for s in rows if s["source_id"] not in selected]
+        result = []
+        for row in rows[:limit]:
+            people = [a["entity_id"] for a in catalog["appearances"] if a["source_id"] == row["source_id"]]
+            source = {"id": "S" + str(len(result) + 1), "title": row["title"], "url": row["url"],
+                      "date": row.get("published_at", ""), "excerpt": "", "author": "节目目录",
+                      "source_type": "programme-catalog", "evidence_role": "discovery-only",
+                      "reason": "可打开节目或原稿，了解这场对谈。", "attribution_note": "",
+                      "participant_entity_ids": "；".join(people), "participant_names": "；".join(names[p] for p in people),
+                      "data_layer": "raw", "content_origin": "metadata-only"}
+            doc = next((d for d in self.documents if d.source_id == row["source_id"]), None)
+            if doc:
+                for key in SOURCE_ACCESS_FIELDS:
+                    value = getattr(doc, key, "")
+                    if value:
+                        source[key] = value
+                if doc.path.startswith("corpus/"):
+                    source["public_copy_url"] = "https://github.com/sunyuzheng/lizheng-open-context/blob/" + self.source_revision + "/" + quote(doc.path, safe="/")
+            result.append(Passage(source, {**source, "discovery_only": True, "yuzheng_stance_weight": "not-evidence",
+                                            "source_family": row["url"]}, True))
+        return result
 
     def card_ids(self, question, context, history, semantic_candidates=None):
         if not self.architecture:

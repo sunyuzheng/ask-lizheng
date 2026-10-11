@@ -49,6 +49,7 @@ def context_pack(tmp_path):
     shutil.copy(public_root / "scripts" / "search.py", tmp_path / "scripts" / "search.py")
     (tmp_path / "release-manifest.json").write_text(json.dumps({"snapshot_at": "2026-09-30", "counts": {"video_transcripts": 1}}))
     shared = {"published_at": "2025-04-01", "content_status": "current", "author": "Yuzheng Sun",
+              "content_origin": "yuzheng-published-text",
               "evidence_role": "primary-authored", "yuzheng_stance_weight": "direct",
               "attribution_note": "测试用公开材料", "source_context": "Synthetic author-owned test fixture"}
     source_file(tmp_path, "corpus/community-posts", "career.md", {
@@ -60,6 +61,8 @@ def context_pack(tmp_path):
         **shared, "id": "video-public", "title": "如何积累能力", "source_type": "video-transcript",
         "source_url": "https://www.youtube.com/watch?v=testvideo", "source_family": "video-family",
         "evidence_role": "primary-speech",
+        "content_origin": "yuzheng-spoken-source",
+        "speaker_id": "yuzheng",
     }, timed)
     source_file(tmp_path, "corpus/english-translations", "translation.md", {
         **shared, "id": "translated-public", "title": "职业选择的 AI 翻译", "source_type": "video-translation",
@@ -70,6 +73,7 @@ def context_pack(tmp_path):
         **shared, "id": "other-author", "title": "职业选择：第三方观点", "source_type": "english-community",
         "source_url": "https://example.org/other-author", "source_family": "other-family", "author": "Guest Author",
         "original_author": "Guest Author", "yuzheng_stance_weight": "not-evidence",
+        "content_origin": "third-party-community",
         "attribution_note": "原作者观点，不代表发布者立场",
     }, "职业选择需要评估生活约束，能力与作品只是其中一部分。")
     (tmp_path / "catalog").mkdir()
@@ -420,11 +424,11 @@ def test_naming_yuzheng_for_another_speaker_gets_one_rewrite(context_pack, monke
         if len(attempts) == 1:
             answer = answer_for(guest, f"立正提到，职业选择要评估生活约束 [{guest}]。")
         else:
-            assert "不是立正本人的材料" in body["messages"][-1]["content"]
+            assert "未确认的发言" in body["messages"][-1]["content"]
             answer = answer_for(guest, f"一位作者提到，职业选择要评估生活约束 [{guest}]。")
         return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
-        result = events(client.post("/api/ask", json={"question": "职业选择要评估生活约束吗"}))[-1][1]
+        result = events(client.post("/api/ask", json={"question": "职业选择要评估生活约束吗", "intent": "find"}))[-1][1]
         assert result["status"] == "answered" and "立正" not in result["sections"][0]["body"]
         assert len(attempts) == 2
 
@@ -598,7 +602,9 @@ def test_unsupported_question_does_not_call_provider(context_pack, monkeypatch):
         result = events(client.post("/api/ask", json={"question": "zyxqvork"}))[-1][1]
         assert result["status"] == "unsupported"
         result = events(client.post("/api/ask", json={"question": "粒子物理"}))[-1][1]
-        assert result["status"] == "unsupported" and result["sources"]
+        assert result["status"] == "unsupported" and not result["sources"]
+        result = events(client.post("/api/ask", json={"question": "粒子物理", "intent": "find"}))[-1][1]
+        assert result["status"] == "sources-only" and result["sources"]
 
 
 def test_unnamed_guest_requires_identity_before_provider_call(context_pack, monkeypatch):

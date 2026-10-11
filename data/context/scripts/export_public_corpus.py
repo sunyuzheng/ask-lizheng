@@ -839,13 +839,19 @@ def export_knowledge_bank(
 
 
 def load_guests(path: Path) -> tuple[set[str], dict[str, list[str]]]:
+    """Read explicit source relationships from the owning public directory."""
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(catalog, dict) or catalog.get("schema_version") != 1:
+        raise ValueError("Expected the shared guest catalog")
+    entities = {e["entity_id"]: e for e in catalog["entities"]}
+    sources = {s["source_id"]: s for s in catalog["sources"]}
     guest_ids: set[str] = set()
     names: dict[str, list[str]] = {}
-    for guest in json.loads(path.read_text(encoding="utf-8")):
-        guest_name = guest.get("guest_name") or guest.get("guest_en_name") or "嘉宾"
-        for video_id in guest.get("all_video_ids") or []:
+    for row in catalog["appearances"]:
+        video_id = sources[row["source_id"]]["video_id"]
+        if video_id:
             guest_ids.add(video_id)
-            names.setdefault(video_id, []).append(guest_name)
+            names.setdefault(video_id, []).append(entities[row["entity_id"]]["display_name"])
     return guest_ids, names
 
 
@@ -942,27 +948,31 @@ def export_videos(
     transcript_allowlist: set[str],
 ) -> dict[str, int]:
     manifest_path = channel_root / "logs" / "library_manifest" / "library_manifest.json"
-    guest_path = channel_root / "guests.json"
+    guest_path = ROOT / "catalog" / "guests.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     guest_ids, guest_names = load_guests(guest_path)
     records = [record for record in manifest["records"] if eligible_video(record)]
-    # A public-media refresh must not erase the independently authorized
-    # member snapshot or upgrade its mixed/unresolved speaker attribution.
+    # Canonical transcript policies retain their exact snapshots across media refreshes.
     existing_catalog = ROOT / "catalog/videos.jsonl"
-    member_rows = []
-    member_files = []
+    policy_path = ROOT / "config" / "public-dialogue-policy.json"
+    policy = json.loads(policy_path.read_text()) if policy_path.is_file() else {}
+    dialogue_ids = {r["video_id"] for r in policy.get("records", [])}
+    retained_rows = []
+    retained_files = []
     if existing_catalog.is_file():
         for line in existing_catalog.read_text().splitlines():
             row = json.loads(line)
-            if row.get("inclusion_authorization") == "maintainer-request-2026-10-02-member-transcripts":
+            if (row.get("inclusion_authorization") == "maintainer-request-2026-10-02-member-transcripts"
+                    or (row.get("video_id") in dialogue_ids and row.get("transcript_included"))
+                    or row.get("inclusion_authorization") == "maintainer-request-2026-10-04-values-conversations"):
                 path = (ROOT / row["corpus_path"]).resolve()
                 path.relative_to(ROOT.resolve())
-                member_rows.append(row)
-                member_files.append((path, path.read_bytes()))
-    member_ids = {row["video_id"] for row in member_rows}
-    records = [record for record in records if record["video_id"] not in member_ids]
+                retained_rows.append(row)
+                retained_files.append((path, path.read_bytes()))
+    retained_ids = {row["video_id"] for row in retained_rows}
+    records = [record for record in records if record["video_id"] not in retained_ids]
     eligible_ids = {record["video_id"] for record in records}
-    stale_allowlist_ids = sorted(transcript_allowlist - eligible_ids - member_ids)
+    stale_allowlist_ids = sorted(transcript_allowlist - eligible_ids - retained_ids)
     if stale_allowlist_ids:
         raise ValueError(
             "Transcript allowlist contains videos outside the eligible public snapshot: "
@@ -971,13 +981,13 @@ def export_videos(
     corpus_dir = ROOT / "corpus" / "videos"
     catalog_path = ROOT / "catalog" / "videos.jsonl"
     reset_generated_dir(corpus_dir)
-    for path, contents in member_files:
+    for path, contents in retained_files:
         path.write_bytes(contents)
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
-    catalog_rows: list[dict[str, Any]] = list(member_rows)
-    transcript_available = sum(bool(row.get("transcript_available")) for row in member_rows)
-    transcript_included = sum(bool(row.get("transcript_included")) for row in member_rows)
-    mixed_speaker_count = sum(row.get("speaker_classification") == "mixed-or-unresolved" for row in member_rows)
+    catalog_rows: list[dict[str, Any]] = list(retained_rows)
+    transcript_available = sum(bool(row.get("transcript_available")) for row in retained_rows)
+    transcript_included = sum(bool(row.get("transcript_included")) for row in retained_rows)
+    mixed_speaker_count = sum(row.get("speaker_classification") == "mixed-or-unresolved" for row in retained_rows)
     unreviewed_count = 0
 
     for record in sorted(records, key=lambda item: item.get("youtube_published_at") or ""):

@@ -52,7 +52,7 @@ async def evaluate(root: Path, only: str = "") -> bool:
             start = time.monotonic()
             clarification = attribution_clarification(question, context)
             candidates = await semantic.candidates(client, token, question + " " + context) if semantic.ready and not clarification else []
-            passages = index.retrieve(question, context, semantic_candidates=candidates) if not clarification else []
+            passages = index.retrieve(question, context, semantic_candidates=candidates, intent=intent) if not clarification else []
             try:
                 if clarification:
                     result = clarification
