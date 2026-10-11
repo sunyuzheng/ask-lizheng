@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {Check, LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, askedLastDay, discoveryDetail, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery, DISCOVERY_LIST_SIZE} from './discovery.js';
+import {askedAgo, discoveryDetail, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
 import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
 import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
@@ -99,6 +99,7 @@ const DISCOVERY = {
   attribution: 'AI整理，不是立正本人回复。',
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
+  total: n => `已有${n}个公开问答`,
   similar: n => `另外${n}个类似提问`,
   feedback: '反馈或举报',
   feedbackCopied: '这条问答的链接已复制，留言时贴上就行。',
@@ -112,31 +113,27 @@ const HISTORY = {
   clear: '全部清除',
   confirm: n => `清除这台设备上的${n}条提问？`,
 };
-// Unique source counts come from the deployed reader's attributed source pool.
+// The numbers come from the deployed release: the sources an ordinary answer may cite, and the programmes.
 const count = (counts, key) => (Number.isInteger(counts?.[key]) ? counts[key] : null);
-function materialsText(counts) {
+function inventoryText(counts) {
   const n = key => count(counts, key);
-  const videos = n('yuzheng_solo_transcripts'), articles = n('yuzheng_articles');
-  const comments = n('yuzheng_comments'), lessons = n('yuzheng_course_lessons');
   const parts = [
-    videos !== null ? `${videos}份单人主讲文字稿` : '单人主讲文字稿',
-    articles !== null ? `${articles}篇文章` : '文章',
-    comments !== null ? `${comments}份公开回复` : '公开回复',
-    lessons ? `《真本事》的${lessons}讲文字稿` : '《真本事》课程文字稿',
-    '对谈中已确认属于立正的发言',
-  ];
-  return `回答主要依据${parts.join('、')}\u2060。`;
-}
-function dialoguesText(counts) {
-  const programmes = count(counts, 'guest_sources'), texts = count(counts, 'structured_public_dialogues');
-  return `对谈单独索引${programmes !== null ? `：${programmes}期节目` : ''}${texts !== null ? `，其中${texts}份对谈原稿已收录` : ''}。在「从哪读起」按嘉宾或话题查找，打开节目和原文；嘉宾的观点归嘉宾本人。`;
+    n('yuzheng_solo_transcripts') !== null && `${n('yuzheng_solo_transcripts')}份主讲文字稿`,
+    n('yuzheng_articles') !== null && `${n('yuzheng_articles')}篇文章`,
+    n('yuzheng_comments') && `${n('yuzheng_comments')}条公开回复`,
+    n('yuzheng_course_lessons') && `《真本事》${n('yuzheng_course_lessons')}讲`,
+    n('guest_sources') !== null && `${n('guest_sources')}期对谈节目${n('structured_public_dialogues') ? `（${n('structured_public_dialogues')}期有原稿）` : ''}`,
+  ].filter(Boolean);
+  return parts.length ? `现在收录${parts.join('、')}\u2060。` : '';
 }
 function refinedText(counts) {
   const cards = count(counts, 'reasoning_cards');
-  return `原文之外，还有阅读地图和${cards ? `${cards}张` : ''}判断卡，帮助找到相关的思路；这些AI提炼都连着原文，可以分别查阅。`;
+  return `还有${cards ? `${cards}张` : ''}判断卡和几份阅读地图，帮回答找到相关的思路。它们由AI整理，每一张都连着原文。`;
 }
 const MATERIALS = {
   title: '回答从哪里来',
+  own: '「想明白」的回答只引用立正自己写的文章、他一个人讲的视频和课，以及对谈里确认是他说的话。',
+  guests: '嘉宾的话不会算成他的观点。想找某位嘉宾的节目，用「从哪读起」。',
   how: '每一段标明出处：文章附日期，视频附对应时间点。',
   open: '原稿、人物目录和提炼都在Open Context',
 };
@@ -683,7 +680,7 @@ function App() {
     markUsage('d_shown');
     watchUsage(document.getElementById('questions'), 'd_seen');
   }, [hasDiscovery]);
-  const [askedRecently, setAskedRecently] = useState(0);
+  const [publicTotal, setPublicTotal] = useState(null);
   const [openCard, setOpenCard] = useState('');
   // In 最常问: whose similar questions are open (any number), and which of those shows its answer.
   const [openSimilar, setOpenSimilar] = useState(() => new Set());
@@ -772,11 +769,15 @@ function App() {
       setPersonal(draft.intent === 'apply' || !!draft.context);
       if (draft.context) setBackground({goal: '', facts: draft.context, tried: ''});
     }
-    // A question brought from a public answer page (www.lizheng.ai/ask/…, ?q=): in the box, not sent.
+    // A question brought from another page (a public answer, ?q=; a guest page adds &mode=find for
+    // 从哪读起): in the box, not sent.
     const params = new URLSearchParams(location.search);
     if (params.has('q')) {
       const brought = (params.get('q') || '').trim().slice(0, 300);
-      if (!draft && brought) { setQuestion(brought); questionFrom.current = 'page'; }
+      if (!draft && brought) {
+        setQuestion(brought); questionFrom.current = 'page';
+        if (params.get('mode') === 'find') setMode('find');
+      }
       history.replaceState(null, '', location.pathname + location.hash);
     }
     let stopped = false;
@@ -810,7 +811,7 @@ function App() {
       // On a wide screen the newest are already beside the question box (别人正在问), so the list
       // below starts with the most asked rather than showing the same questions twice.
       else if (!openList.current && WIDE.matches) setView('frequent');
-      setAskedRecently(askedLastDay(lists.recent));
+      setPublicTotal(lists.total);
       setQuestionLists(lists);
       setDiscoveryState('ready');
     });
@@ -1290,7 +1291,7 @@ function App() {
           <h1>{START.title[0]}<br/>{START.title[1]}</h1>
           <p className="intro">{START.lines.map(line => <span key={line} className="intro-line"><Phrases text={line}/></span>)}</p>
           {hasDiscovery && <a className="hero-live" href="#questions" onClick={toQuestions}>
-            {askedRecently >= 3 ? `最近24小时 ${askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题` : DISCOVERY.title}<span aria-hidden="true">↓</span>
+            {publicTotal ? DISCOVERY.total(publicTotal) : DISCOVERY.title}<span aria-hidden="true">↓</span>
           </a>}
           <p className="identity"><Phrases text={START.identity}/></p>
         </section>
@@ -1298,7 +1299,7 @@ function App() {
         {APP_BADGES.length > 0 && <AppBadges/>}
         {discoveryState !== 'none' && <aside className="live" aria-labelledby="live-title" aria-busy={!questionLists}>
           <h2 id="live-title">{DISCOVERY.live}</h2>
-          {askedRecently >= 3 && <p className="live-count">最近24小时 {askedRecently >= DISCOVERY_LIST_SIZE ? `${DISCOVERY_LIST_SIZE}+` : askedRecently} 个新问题</p>}
+          {publicTotal && <p className="live-count">{DISCOVERY.total(publicTotal)}</p>}
           <ol>{!questionLists ? [0, 1, 2].map(i => <li key={i} className="live-placeholder" aria-hidden="true"><i/><b/></li>)
             : liveCards.map(card => <li key={card.public_id}><button type="button" onClick={() => openFromLive(card)}>
               <time dateTime={card.asked_at} className={Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}>{askedAgo(card.asked_at)}</time>
@@ -1334,8 +1335,9 @@ function App() {
         <section className="materials" aria-labelledby="materials-title">
           <h2 id="materials-title">{MATERIALS.title}</h2>
           <div>
-            <p className="materials-list"><strong>立正本人</strong> · <Phrases text={materialsText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/solo-videos.md`} target="_blank" rel="noreferrer">浏览主讲文字稿<Ext/></a></p>
-            <p className="materials-list"><strong>对谈索引</strong> · <Phrases text={dialoguesText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/dialogues.md`} target="_blank" rel="noreferrer">浏览对谈索引<Ext/></a></p>
+            <p className="materials-list"><Phrases text={MATERIALS.own}/></p>
+            <p className="materials-list"><Phrases text={MATERIALS.guests}/></p>
+            {inventoryText(meta?.counts) && <p><Phrases text={inventoryText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/solo-videos.md`} target="_blank" rel="noreferrer">主讲文字稿<Ext/></a>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/dialogues.md`} target="_blank" rel="noreferrer">对谈原稿<Ext/></a></p>}
             <p><Phrases text={refinedText(meta?.counts)}/></p>
             <p><Phrases text={MATERIALS.how}/></p>
             <p><a className="inline-link" href={LINKS.context} target="_blank" rel="noreferrer">{MATERIALS.open}<Ext/></a></p>

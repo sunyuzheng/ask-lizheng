@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse, quote
 
+from .names import NameIndex
 from .semantic import MIN_SIMILARITY
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -22,6 +23,10 @@ SOURCE_ACCESS_FIELDS = (
     "membership_verified_at", "transcript_source_kind", "transcript_quality",
     "speaker_classification",
 )
+# Short quotation for anything not openly licensed: the reference-use license allows 500 characters
+# per quotation, and other authors' rights-retained work gets no more than that.
+OPEN_LICENSES = frozenset({"CC-BY-4.0", "CC0-1.0", "MIT"})
+SEMANTIC_LIMIT = 24
 SOURCE_ATTRIBUTION_FIELDS = (
     "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id", "source_snapshot_sha256", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act", "content_origin", "generation_method",
 )
@@ -101,6 +106,7 @@ class ContextIndex:
         self.release_sha256 = ""
         self.participant_aliases = {}
         self.guest_catalog = {}
+        self.names = NameIndex.from_catalog({})
 
     def load(self) -> None:
         lock_path = self.root.parent / "context-lock.json"
@@ -137,6 +143,10 @@ class ContextIndex:
             for entity in catalog["entities"]:
                 for name in [entity["display_name"], *entity["aliases"]]:
                     self.participant_aliases.setdefault(name.casefold(), set()).add(entity["entity_id"])
+        names_path = self.root / "catalog/guest-names.json"
+        # Open Context's shared name table; a pack published before it falls back to catalog names.
+        self.names = (NameIndex(json.loads(names_path.read_text())) if names_path.is_file()
+                      else NameIndex.from_catalog(self.guest_catalog))
         self._texts = [plain_text(doc.text).lower() for doc in self.documents]
         self._titles = [(doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
                          + " " + getattr(doc, "participant_aliases", "")
@@ -167,17 +177,16 @@ class ContextIndex:
                 "context_commit": commit, "counts": counts}
 
     def participant_entities(self, query: str) -> set[str]:
-        """Resolve explicit names from the shared directory for programme retrieval."""
-        query = query.casefold()
-        matches = []
-        for alias, identities in self.participant_aliases.items():
-            expression = re.escape(alias)
-            if re.search(r"[a-z]", alias):
-                expression = r"(?<![a-z0-9])" + expression + r"(?![a-z0-9])"
-            for match in re.finditer(expression, query):
-                matches.append((match.start(), match.end(), identities))
-        return set().union(*(identities for start, end, identities in matches
-            if not any(a <= start and b >= end and b - a > end - start for a, b, _ in matches)))
+        """People the question names, from the shared name table; uncertain matches name no one."""
+        return self.names.resolve(query)
+
+    def entity_label(self, entity_id: str) -> str:
+        return next((entity["display_name"] for entity in self.guest_catalog.get("entities", []) if entity["entity_id"] == entity_id), entity_id)
+
+    def name_evidence(self, entity_ids) -> dict:
+        """The names readers may use for these participants and for the host, for attribution checks."""
+        return {"participant_names_by_id": {entity_id: self.names.names_of(entity_id) for entity_id in entity_ids if entity_id},
+                "host_names": self.names.speaker_names("yuzheng")}
 
     @staticmethod
     def retrieval_query(question: str, history: list | None = None) -> str:
@@ -267,10 +276,13 @@ class ContextIndex:
         # Reciprocal rank fusion preserves exact-word matches while admitting
         # paraphrases. Curated links bring the basis and scope contrast together.
         fused = {index: 1 / (40 + rank) for rank, (_, index) in enumerate(ranked, 1)}
-        for rank, candidate in enumerate(semantic_candidates or [], 1):
+        # The semantic list ranks the whole index; this question's source purpose picks from it
+        # before any cut, so the closest eligible passages arrive however many others rank above.
+        semantic = [candidate for candidate in semantic_candidates or []
+                    if candidate["docindex"] in eligible and candidate["score"] >= MIN_SIMILARITY][:SEMANTIC_LIMIT]
+        for rank, candidate in enumerate(semantic, 1):
             index = candidate["docindex"]
-            if index in eligible and candidate["score"] >= MIN_SIMILARITY:
-                fused[index] = fused.get(index, 0) + 1 / (40 + rank)
+            fused[index] = fused.get(index, 0) + 1 / (40 + rank)
         focus_by_index = {}
         for candidate in linked:
             index = candidate["docindex"]
@@ -356,7 +368,8 @@ class ContextIndex:
                 source["public_copy_url"] = "https://github.com/sunyuzheng/lizheng-open-context/blob/" + self.source_revision + "/" + quote(doc.path, safe="/")
             if timestamp:
                 source["timecode"] = timestamp
-            evidence = {**source, "document_id": doc.id, "docindex": index, "source_path": doc.path, "source_family": family, "source_context": doc.source_context,
+            evidence = {**source, **self.name_evidence(getattr(doc, "participant_entity_ids", "").split("；")),
+                        "document_id": doc.id, "docindex": index, "source_path": doc.path, "source_family": family, "source_context": doc.source_context,
                         "yuzheng_stance_weight": doc.yuzheng_stance_weight,
                         "content_origin": doc.content_origin, "publisher": doc.publisher,
                         "generation_method": doc.generation_method,
@@ -392,7 +405,7 @@ class ContextIndex:
                       "source_type": "programme-catalog", "evidence_role": "discovery-only",
                       "reason": "可打开节目或原稿，了解这场对谈。", "attribution_note": "",
                       "participant_entity_ids": "；".join(people), "participant_names": "；".join(names[p] for p in people),
-                      "data_layer": "raw", "content_origin": "metadata-only"}
+                      "data_layer": "structured", "content_origin": "metadata-only"}
             doc = next((d for d in self.documents if d.source_id == row["source_id"]), None)
             if doc:
                 for key in SOURCE_ACCESS_FIELDS:
@@ -401,8 +414,8 @@ class ContextIndex:
                         source[key] = value
                 if doc.path.startswith("corpus/"):
                     source["public_copy_url"] = "https://github.com/sunyuzheng/lizheng-open-context/blob/" + self.source_revision + "/" + quote(doc.path, safe="/")
-            result.append(Passage(source, {**source, "discovery_only": True, "yuzheng_stance_weight": "not-evidence",
-                                            "source_family": row["url"]}, True))
+            result.append(Passage(source, {**source, **self.name_evidence(people), "discovery_only": True,
+                                            "yuzheng_stance_weight": "not-evidence", "source_family": row["url"]}, True))
         return result
 
     def card_ids(self, question, context, history, semantic_candidates=None):
@@ -427,7 +440,7 @@ class ContextIndex:
         return self.architecture.render_bundle(self.card_ids(question, context, history, semantic_candidates), passages)
 
     def _excerpt(self, doc, terms: list[str], weights: dict[str, float]) -> tuple[str, str, str]:
-        limit = 500 if getattr(doc, "license", "") == "LicenseRef-Lizheng-Reference-Use-1.0" else 2100
+        limit = 2100 if getattr(doc, "license", "") in OPEN_LICENSES else 500
         if doc.source_type == "video-excerpt" and getattr(doc, "data_layer", "") == "raw":
             # Structured speech and reviewed quotes already have a speaker
             # boundary. Neighboring document chunks must never be appended.

@@ -141,7 +141,12 @@ def update(token: str) -> dict | None:
         raise UpdateError("The copy does not name the Open Context commit it came from.")
     builder = module("build_semantic_index")
     try:
-        metadata, inputs = builder.plan()
+        # Planning runs Open Context's parser, so it runs in a child process without credentials;
+        # this process, which holds the token, embeds only the checked plan.
+        with tempfile.TemporaryDirectory() as plan_dir:
+            plan_path = Path(plan_dir) / "plan.json"
+            sh(sys.executable, "scripts/build_semantic_index.py", "--plan-out", str(plan_path), timeout=1200)
+            metadata, inputs = builder.read_plan(plan_path)
         built = asyncio.run(builder.build(metadata, inputs, token, builder.reusable(PROJECT / "data/semantic")))
     except builder.SemanticIndexError as exc:
         raise UpdateError("Semantic index: " + str(exc)) from None

@@ -536,9 +536,11 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     yield sse("error", {"message": "公开资料暂时无法读取，请稍后再试。", "code": "context_unavailable"})
                     return
                 token = os.getenv("AI_BUILDER_TOKEN", "")
-                if payload.intent == "find" and application.state.index.participant_entities(
-                        application.state.index.retrieval_query(payload.question, payload.history)):
-                    yield sse("result", await settled_result(guest_reading_result(passages)))
+                named = application.state.index.participant_entities(
+                    application.state.index.retrieval_query(payload.question, payload.history)) if payload.intent == "find" else set()
+                if named:
+                    people = sorted(application.state.index.entity_label(identity) for identity in named)
+                    yield sse("result", await settled_result(guest_reading_result(passages, people)))
                     return
                 if not token:
                     yield sse("result", await settled_result(sources_only(passages, "当前没有连接 AI 模型；这里展示的是公开资料检索结果。", payload.intent)))

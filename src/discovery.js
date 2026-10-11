@@ -39,7 +39,9 @@ export async function discoveryLists(signal) {
     const value = await response.json();
     if (!Array.isArray(value?.recent) || !Array.isArray(value?.frequent)) return null;
     return {recent: value.recent.filter(card), frequent: value.frequent.filter(card)
-      .map(item => ({...item, similar: Array.isArray(item.similar) ? item.similar.filter(similarRow).map(row) : []}))};
+      .map(item => ({...item, similar: Array.isArray(item.similar) ? item.similar.filter(similarRow).map(row) : []})),
+      // How many questions and answers are public in all (lizheng.ai counts its public index).
+      total: count(value.total) && value.total > 0 ? value.total : null};
   } catch { return null; }
 }
 

@@ -447,14 +447,6 @@ main {
   color: var(--on-forest);
 }
 
-:is(.hero-live, .live-count)::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mint);
-  animation: pulse 2.4s ease-out infinite;
-}
 
 /* 别人正在问: the newest questions, beside the question box, in the stage's own quiet lines. */
 .live {

@@ -228,3 +228,42 @@ def test_commit_holds_only_context_data_under_the_owner(tmp_path, monkeypatch):
     with pytest.raises(updater.UpdateError, match="outside the context data"):
         updater.commit_data("s", OLD, LOCK, NEWER, {"embedded_windows": 0, "reused_windows": 1})
     assert git(repo, "rev-list", "--count", "HEAD").strip() == "2"
+
+
+def test_open_context_code_runs_only_in_credential_free_children(monkeypatch):
+    """Planning the index runs Open Context's parser; it happens in a child without the token."""
+    commands, events = [], []
+    locks = iter([dict(LOCK), dict(NEWER)])
+    def sh(*args, **kwargs):
+        commands.append(args)
+        if args[:2] == ("git", "-C") and "rev-parse" in args:
+            return NEW + "\n"
+        if args[:2] == ("git", "-C") and "log" in args:
+            return "Subject\n"
+        if "--plan-out" in args:
+            Path(args[args.index("--plan-out") + 1]).write_text("{}")
+        return ""
+    class Builder:
+        SemanticIndexError = ValueError
+        def plan(self):
+            raise AssertionError("the parser must not run in the process that holds the token")
+        def read_plan(self, path):
+            events.append(("read_plan", Path(path).name))
+            return {"entries": []}, []
+        def reusable(self, path):
+            return {}
+        async def build(self, metadata, inputs, token, reuse):
+            events.append(("build", token))
+            return {"embedded_windows": 0, "reused_windows": 0}
+    monkeypatch.setattr(updater, "sh", sh)
+    monkeypatch.setattr(updater, "upstream_commit", lambda: NEW)
+    monkeypatch.setattr(updater, "read_lock", lambda: next(locks))
+    monkeypatch.setattr(updater, "module", lambda name: Builder())
+    monkeypatch.setattr(updater, "commit_data", lambda *args: False)
+    assert updater.update("SYNTHETIC_PRIVATE_SENTINEL") is None
+    plan = next(command for command in commands if "--plan-out" in command)
+    assert plan[1] == "scripts/build_semantic_index.py"
+    assert events == [("read_plan", "plan.json"), ("build", "SYNTHETIC_PRIVATE_SENTINEL")]
+    # Every child process, the planner among them, starts from quiet_env().
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "SYNTHETIC_PRIVATE_SENTINEL")
+    assert "AI_BUILDER_TOKEN" not in updater.quiet_env()

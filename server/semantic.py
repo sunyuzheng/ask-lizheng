@@ -31,6 +31,9 @@ MAX_BATCH = 32
 # One name, so each rebuild stores only the vectors that changed in Git; index.json pins the bytes.
 VECTOR_FILE = "vectors.f32"
 MIN_SIMILARITY = .40
+# Candidates returned above the threshold. Retrieval keeps the first 24 that its source purpose
+# admits, so this list must reach well past the passages other purposes would take.
+CANDIDATE_LIMIT = 1500
 PUBLIC_REPOSITORY = "sunyuzheng/lizheng-open-context"
 
 
@@ -60,6 +63,13 @@ def verify_public_pack(root: Path) -> tuple[dict, dict]:
             if relative != ".gitignore" and any(part.startswith(".") for part in Path(relative).parts):
                 raise SemanticIndexError("Hidden paths are not public index inputs")
             _verified_file(root, relative, records)
+        # Every file in the pack is in its manifest: nothing unverified is parsed or loaded.
+        for path in root.rglob("*"):
+            relative = path.relative_to(root).as_posix()
+            if path.is_dir() or "__pycache__" in path.parts or relative == "release-manifest.json":
+                continue
+            if relative not in records:
+                raise SemanticIndexError("A file in the public context pack is not in its manifest")
         return manifest, records
     except SemanticIndexError:
         raise
@@ -334,7 +344,8 @@ class SemanticIndex:
             scores[docindex] = max(score, scores.get(docindex, -1))
         # A conservative small-sample cutoff reduces unrelated semantic hits;
         # it is not an authority or factual-support probability.
-        return [{"docindex": docindex, "score": round(score, 6)} for docindex, score in heapq.nlargest(24, scores.items(), key=lambda row: row[1]) if score >= MIN_SIMILARITY]
+        return [{"docindex": docindex, "score": round(score, 6)}
+                for docindex, score in heapq.nlargest(CANDIDATE_LIMIT, scores.items(), key=lambda row: row[1]) if score >= MIN_SIMILARITY]
 
     async def candidates(self, client: httpx.AsyncClient, token: str, query: str) -> list[dict]:
         if not self.ready or not token or not query.strip():

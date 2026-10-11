@@ -3,6 +3,9 @@
 
 A build keeps the vector of every window whose exact text the current index already embeds, and asks
 the embedding service only for new or changed windows; --full embeds everything again.
+
+Planning runs Open Context's pinned parser. --plan-out writes the plan to a file so that step can run
+in a process without credentials; --from-plan embeds that plan without importing any upstream code.
 """
 
 from __future__ import annotations
@@ -35,6 +38,27 @@ def plan() -> tuple[dict, list[str]]:
     index = ContextIndex(root)
     index.load()
     return prepare_index(root, index.documents)
+
+
+def write_plan(path: Path) -> dict:
+    metadata, inputs = plan()
+    path.write_text(json.dumps({"metadata": metadata, "inputs": inputs}, ensure_ascii=False), encoding="utf-8")
+    return {"mode": "planned", "embedding_windows": len(inputs), "release_manifest_sha256": metadata["release_manifest_sha256"]}
+
+
+def read_plan(path: Path) -> tuple[dict, list[str]]:
+    """A plan written by --plan-out, checked against the pack before anything is embedded."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    metadata, inputs = data["metadata"], data["inputs"]
+    root = PROJECT / "data/context"
+    if (not isinstance(inputs, list) or len(inputs) != len(metadata["entries"])
+            or any(sha256(text.encode("utf-8")) != row["input_sha256"] for text, row in zip(inputs, metadata["entries"]))):
+        raise SemanticIndexError("The index plan does not match its own entries")
+    _, records = verify_public_pack(root)
+    if (metadata["release_manifest_sha256"] != sha256((root / "release-manifest.json").read_bytes())
+            or any(records.get(row["path"], {}).get("sha256") != row["sha256"] for row in metadata["files"])):
+        raise SemanticIndexError("The index plan was made for another release")
+    return metadata, inputs
 
 
 def reusable(output: Path) -> dict[str, bytes]:
@@ -111,9 +135,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="Embed only the displayed, verified public primary chunks; defaults to dry-run")
     parser.add_argument("--full", action="store_true", help="Embed every window again instead of keeping unchanged vectors")
+    parser.add_argument("--plan-out", type=Path, help="Only plan, writing the inputs to this file (needs no credential)")
+    parser.add_argument("--from-plan", type=Path, help="Embed a plan written by --plan-out instead of planning here")
     args = parser.parse_args(argv)
     try:
-        metadata, inputs = plan()
+        if args.plan_out:
+            print(json.dumps(write_plan(args.plan_out), ensure_ascii=False, indent=2))
+            return 0
+        metadata, inputs = read_plan(args.from_plan) if args.from_plan else plan()
         reuse = {} if args.full else reusable(PROJECT / "data/semantic")
         if not args.build:
             new = sum(row["input_sha256"] not in reuse for row in metadata["entries"])

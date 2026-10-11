@@ -399,16 +399,24 @@ OWN_VIEW_ORIGINS = frozenset({"yuzheng-published-text", "yuzheng-spoken-source"}
 REWRITE_SECONDS = 40
 
 
+def host_names(passages: list[Passage]) -> list[str]:
+    """The host's names from the shared name table, longest first; 立正 before a table existed."""
+    names = next((passage.evidence.get("host_names") for passage in passages if passage.evidence.get("host_names")), None)
+    return sorted(set(names or ["立正"]), key=len, reverse=True)
+
+
 def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
     """Reject named claims without a corresponding author or fragment speaker."""
     evidence = {passage.source["id"]: passage.evidence for passage in passages}
     non_stance_acts = {"question", "introduction", "acknowledgement", "joke", "reported-other"}
-    view_claim = re.compile(r"立正(?:本人)?(?:认为|主张|觉得|相信|建议|赞同|支持|反对|强调|的(?:立场|观点|判断))")
+    host = "|".join(re.escape(name) for name in host_names(passages))
+    view_claim = re.compile(r"(?:" + host + r")(?:本人)?(?:认为|主张|觉得|相信|建议|赞同|支持|反对|强调|的(?:立场|观点|判断))", re.I)
+    names_host = re.compile(r"(?<![A-Za-z0-9])(?:" + host + r")(?![A-Za-z0-9])", re.I)
     found = []
     for text in [answer.summary, *(section.body for section in answer.sections)]:
         for sentence in re.findall(r"[^。！？]+[。！？]?(?:\s*\[S\d+\])*", text):
             cited = SOURCE_NUMBER.findall(sentence)
-            if not cited or "立正" not in sentence.replace("问问立正", ""):
+            if not cited or not names_host.search(sentence.replace("问问立正", "")):
                 continue
             own = [evidence[c] for c in cited if evidence.get(c, {}).get("content_origin") in OWN_VIEW_ORIGINS]
             if not own:
@@ -425,10 +433,16 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
     # Programme names support discovery; only a fragment's speaker binding supports
     # a named guest's claim. Apply the same boundary to recommendations and followups.
     by_id = {p.source["id"]: p for p in passages}
-    aliases = set()
+    # Each name readers may use for a participant, with the entities it can mean.
+    aliases: dict[str, set[str]] = {}
     for p in passages:
+        for entity_id, names in (p.evidence.get("participant_names_by_id") or {}).items():
+            for name in names:
+                aliases.setdefault(name.strip(), set()).add(entity_id)
         for key in ("participant_names", "participant_aliases"):
-            aliases.update(name.strip() for name in str(p.evidence.get(key) or p.source.get(key) or "").split("；") if name.strip())
+            for name in str(p.evidence.get(key) or p.source.get(key) or "").split("；"):
+                if name.strip():
+                    aliases.setdefault(name.strip(), set())
     fields = [(answer.summary, list(by_id)), *[(s.body, s.source_ids) for s in answer.sections],
               *[(r.reason, [r.source_id]) for r in answer.source_reasons],
               *[(q, list(by_id)) for q in answer.followups]]
@@ -437,14 +451,16 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
         for sentence in re.findall(r"[^。！？]+[。！？]?(?:\s*\[S\d+\])*", text):
             ids = SOURCE_NUMBER.findall(sentence) or available
             relevant = [by_id[i] for i in ids if i in by_id]
-            for name in aliases:
+            for name, entities in aliases.items():
                 claim = re.search(r"(?<![A-Za-z0-9])" + re.escape(name) + r"\s*" + predicates, sentence, re.I)
                 if not claim or re.search(r"不能|无法|不足以|没有证据|尚不能", sentence[:claim.start()]):
                     continue
+                # The fragment's speaker ID decides; a recorded name ("卢蔚（Cooper）") need not match the wording.
                 confirmed = any(p.source.get("speaker_id") not in (None, "", "unknown")
                                 and p.source.get("speaker_status") != "unresolved"
                                 and p.evidence.get("speech_act") not in non_stance_acts
-                                and name.casefold() == str(p.source.get("speaker_name") or "").casefold()
+                                and (p.source.get("speaker_id") in entities
+                                     or name.casefold() == str(p.source.get("speaker_name") or "").casefold())
                                 for p in relevant)
                 if not confirmed and sentence.strip() not in found:
                     found.append(sentence.strip())
@@ -603,7 +619,7 @@ def sources_only(passages: list[Passage], reason: str = "", intent: str = "under
     }
 
 
-def guest_reading_result(passages: list[Passage]) -> dict:
+def guest_reading_result(passages: list[Passage], people: list[str] | None = None) -> dict:
     """Named-person reading requests are source navigation with exact attribution."""
     selected, seen = [], set()
     for passage in passages:
@@ -612,7 +628,14 @@ def guest_reading_result(passages: list[Passage]) -> dict:
             selected.append(passage); seen.add(family)
     result = sources_only(selected, intent="find")
     if selected:
-        result["summary"] = "找到了这些相关节目与原文片段。"
+        people = [name for name in dict.fromkeys(people or []) if name]
+        if len(people) > 1:
+            # Namesakes or several people: say who, rather than mixing them silently.
+            result["summary"] = f"这个名字对应{len(people)}位嘉宾：{'、'.join(people)}。下面是他们的节目与原文片段。"
+        elif people:
+            result["summary"] = f"找到了{people[0]}的节目与原文片段。"
+        else:
+            result["summary"] = "找到了这些相关节目与原文片段。"
     result["sources"] = [{**s, "id": "S" + str(i)} for i, s in enumerate(result["sources"], 1)]
     return result
 

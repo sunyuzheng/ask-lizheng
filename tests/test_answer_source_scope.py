@@ -129,3 +129,12 @@ def test_named_find_filters_unrelated_semantic_and_navigation_hits(context_pack)
     assert result and all("guest:alpha" in p.source["participant_entity_ids"].split("；") for p in result)
     assert ix.participant_entities(ix.retrieval_query("那还有哪些？", [{"question": "找Alpha的节目"}])) == {"guest:alpha"}
     assert ix.participant_entities(ix.retrieval_query("工作价值", [{"question": "找Alpha的节目"}])) == set()
+
+
+def test_semantic_candidates_are_cut_after_the_source_purpose(index):
+    """The closest eligible passage arrives even when many ineligible ones rank above it."""
+    outsiders = [i for i, d in enumerate(index.documents) if not is_yuzheng_basis(d)]
+    own = next(i for i, d in enumerate(index.documents) if is_yuzheng_basis(d))
+    semantic = [{"docindex": outsiders[n % len(outsiders)], "score": .95} for n in range(60)] + [{"docindex": own, "score": .5}]
+    passages = index.retrieve("毫不相干的提问词汇", intent="understand", semantic_candidates=semantic)
+    assert [p.evidence["docindex"] for p in passages] == [own]

@@ -1,6 +1,8 @@
 name: Update context
 # Keeps 问问立正 on the latest Open Context release (scripts/update_context.py). Pushing Open Context
-# main approves its content; this changes no code. A failed run emails the owner.
+# main approves its content. The release includes Open Context's parser (scripts/search.py), which
+# this service runs: its tests and the retrieval evaluation gate every update, and it runs without
+# credentials while the index is planned. A failed run emails the owner.
 on:
   schedule:
     - cron: '17,47 * * * *'

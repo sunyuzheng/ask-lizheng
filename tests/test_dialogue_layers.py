@@ -353,8 +353,12 @@ def test_explicit_catalog_guest_precedes_unrelated_topic_and_semantic_hits(conte
 
 
 def test_catalog_name_resolution_preserves_shared_aliases_and_specific_names():
+    from server.names import NameIndex
     index = ContextIndex(Path("unused"))
-    index.participant_aliases = {"jo": {"guest:a", "guest:b"}, "synthetic jo": {"guest:a"}, "john": {"guest:c"}}
+    index.names = NameIndex({"key_drop": "&()-./_", "speakers": [], "names": [
+        {"name": "Jo", "key": "jo", "entity_ids": ["guest:a", "guest:b"]},
+        {"name": "Synthetic Jo", "key": "syntheticjo", "entity_ids": ["guest:a"]},
+        {"name": "John", "key": "john", "entity_ids": ["guest:c"]}]})
     assert index.participant_entities("Jo") == {"guest:a", "guest:b"}
     assert index.participant_entities("Synthetic Jo") == {"guest:a"}
     assert index.participant_entities("John") == {"guest:c"}
