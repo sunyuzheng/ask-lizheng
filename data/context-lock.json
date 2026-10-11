@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
   "snapshot_at": "2026-10-11",
-  "release_manifest_sha256": "12f7471a0d563d06afb26c4fdc959c7006b6b5305f349171565ff07629359727",
-  "files": 1326,
+  "release_manifest_sha256": "f4db3fb65c446359b1201bf11454108c85eee3939cdd26cee52d269bff6bf650",
+  "files": 1330,
   "counts": {
     "structured_public_dialogues": 339,
     "structured_dialogue_cues": 248599,
@@ -27,10 +27,11 @@
     "knowledge_bank_full_text": 36,
     "video_catalog": 761,
     "video_transcripts": 428,
-    "video_metadata_only": 333,
+    "video_dialogue_transcripts": 331,
+    "video_metadata_only": 11,
     "member_video_transcripts": 218,
     "member_video_solo_reviewed": 45,
-    "known_guest_videos": 347,
+    "known_guest_videos": 387,
     "english_community_catalog": 50,
     "english_community_full_text_files": 49,
     "english_community_original_yuzheng": 11,
@@ -39,10 +40,10 @@
   },
   "licenses": {
     "CC-BY-4.0": 568,
-    "CC0-1.0": 39,
+    "CC0-1.0": 41,
     "LicenseRef-Lizheng-Reference-Use-1.0": 623,
     "LicenseRef-Original-Rights-Retained": 39,
-    "MIT": 50
+    "MIT": 52
   },
-  "source_commit": "f93e703e6cc5e88aa73613cfe6de71e1c1473cd5"
+  "source_commit": "0eeac564eb6920cc4c3f3f2cfbc0c88d7e4fe4b3"
 }
