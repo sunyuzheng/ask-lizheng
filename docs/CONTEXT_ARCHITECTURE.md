@@ -1,9 +1,10 @@
 # Context Infra：从资料到回答
 
-Open Context维护原稿和共享结构化资料。Context Infra负责解析、索引、检索、组织证据和回答；问问立正是它的在线产品。数据版本、检索策略和产品展示各在其所属层更新。
+已发表原文和媒体是主要事实依据，Open Context统一维护可回源的原稿和共享结构化记录。Context Infra负责解析、索引、检索、组织证据和回答；问问立正是它的在线产品。数据版本、检索策略和产品展示各在其所属层更新。
 
 ```mermaid
 flowchart LR
+  P[已发表原文与媒体] --> A
   A[Open Context：目录与Raw原文] --> B[按manifest校验的语料副本]
   B --> C[词法与语义索引]
   D[Open Context：Derived判断卡与阅读地图] --> E[相关原文与组织线索]
@@ -16,7 +17,7 @@ flowchart LR
 
 ## 资料合同
 
-公开原文、人物和节目关系以Open Context为准。`catalog/guests.json`维护人物、别名、节目及参与关系；`corpus/`保存原文与精校文本；`context/`保存回指原文的提炼。网站与本服务消费同一份公开release。
+公开原文、人物和节目关系统一在Open Context维护。`catalog/guests.json`维护人物、别名、节目及参与关系；`corpus/`保存原文与精校文本；`context/`保存回指原文的提炼。网站与本服务消费同一份公开release。原始发表提供事实依据，仓库版本固定当次使用的记录；来源中的观点保留表达者与发表时间。
 
 Raw可直接检索，Derived用于导航与组织。检索片段保留`data_layer`、`speaker_id/name/status`、`fragment_id`及源文件SHA。节目参与关系用于按人物发现资料；具体发言归属来自原文单元。字幕单元归属未知时显示“说话人待核”。相同来源的原文、译文和多个片段按source family管理。
 
@@ -42,6 +43,8 @@ Open Context推送main后触发`update-context`：验证上游、同步、增量
 
 ## 稳定性与验收
 
-索引适应Builder的256MB容器，语义服务失败时仍可使用词法检索。资料版本与模型服务就绪状态由`/api/meta`公开；可用真实查询核对姓名别名、不同发言者、跨时期观点、材料不足与多轮追问。结构测试守住数据流，实际问题验收检查回答是否忠实于来源。
+正确性首先来自明确的数据与调用职责：共享事实只在Open Context维护，所有召回路径使用同一来源用途规则，原文、提炼和AI回答保持各自归属。索引和页面从固定资料版本生成。采集在资料更新时进行，在线回答使用已有快照，来源网页的实时可用性不进入回答依赖。
+
+索引适应Builder的256MB容器，语义服务失败时仍可使用词法检索。资料版本与模型服务就绪状态由`/api/meta`公开。确定性的合同检查核对来源关系、版本和索引覆盖；真实问题与模型输出用于评估回答质量。测试是实现的验收证据，来源依据和数据模型决定它应当怎样工作。
 
 [context-infrastructure](https://github.com/grapeot/context-infrastructure)提供分层积累、提炼与按需加载的参考；这里的资料合同、供应链和部署实现由Open Context与问问立正维护。
