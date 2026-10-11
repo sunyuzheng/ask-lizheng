@@ -72,7 +72,9 @@ def is_yuzheng_basis(doc) -> bool:
         and getattr(doc, "content_origin", "") in {"yuzheng-published-text", "yuzheng-spoken-source"}
         and getattr(doc, "yuzheng_stance_weight", "") in {"direct", "direct-with-quotation-boundaries"}
         and getattr(doc, "evidence_role", "") in {"primary-authored", "primary-speech", "published-source"}
-        and (getattr(doc, "content_origin", "") != "yuzheng-spoken-source" or getattr(doc, "speaker_id", "") == "yuzheng")
+        and (getattr(doc, "content_origin", "") != "yuzheng-spoken-source" or (
+            getattr(doc, "speaker_id", "") == "yuzheng"
+            and getattr(doc, "speaker_status", "") in {"reviewed-source-attribution", "audio-anchor-reviewed"}))
         and getattr(doc, "speech_act", "") not in {"question", "introduction", "acknowledgement", "joke", "reported-other"}
         and has_body_text(doc)
     )

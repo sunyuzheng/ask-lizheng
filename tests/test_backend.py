@@ -62,7 +62,7 @@ def context_pack(tmp_path):
         "source_url": "https://www.youtube.com/watch?v=testvideo", "source_family": "video-family",
         "evidence_role": "primary-speech",
         "content_origin": "yuzheng-spoken-source",
-        "speaker_id": "yuzheng",
+        "speaker_id": "yuzheng", "speaker_status": "reviewed-source-attribution",
     }, timed)
     source_file(tmp_path, "corpus/english-translations", "translation.md", {
         **shared, "id": "translated-public", "title": "职业选择的 AI 翻译", "source_type": "video-translation",

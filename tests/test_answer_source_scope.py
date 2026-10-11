@@ -65,6 +65,10 @@ def test_positive_attribution_is_required_even_for_a_first_party_account(index):
     assert not is_yuzheng_basis(own)
     own.data_layer = "raw"; own.speaker_id = "unknown"
     assert not is_yuzheng_basis(own)
+    own.speaker_id = "yuzheng"; own.speaker_status = "unresolved"
+    assert not is_yuzheng_basis(own)
+    own.speaker_status = "reviewed-source-attribution"
+    assert is_yuzheng_basis(own)
 
 
 def test_source_heading_and_archive_access_note_are_not_answer_body(index):
