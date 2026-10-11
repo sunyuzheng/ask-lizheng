@@ -38,6 +38,21 @@ class CurateSource(BaseModel):
     id: str = Field(pattern=SOURCE_ID)
     title: str = Field(max_length=300)
     reason: str = Field(default="", max_length=800)
+    author: str = Field(default="", max_length=300)
+    attribution_note: str = Field(default="", max_length=2500)
+    data_layer: str = Field(default="", max_length=20)
+    speaker_id: str = Field(default="", max_length=160)
+    speaker_name: str = Field(default="", max_length=160)
+    speaker_status: str = Field(default="", max_length=100)
+    fragment_id: str = Field(default="", max_length=300)
+    source_snapshot_sha256: str = Field(default="", max_length=64)
+    participant_names: str = Field(default="", max_length=1000)
+    participant_entity_ids: str = Field(default="", max_length=1000)
+    participant_aliases: str = Field(default="", max_length=1000)
+    participant_metadata_basis: str = Field(default="", max_length=1000)
+    speech_act: str = Field(default="", max_length=100)
+    content_origin: str = Field(default="", max_length=100)
+    generation_method: str = Field(default="", max_length=100)
 
 
 class CurateSection(BaseModel):
@@ -136,6 +151,7 @@ PROMPT = """你在为「问问立正」整理公开问答。提问的人在提�
    - unsafe：违法、有害或不适合公开的内容。
 2. 要公开时，去掉一切可能认出提问者或其他人的信息：人名、公司、学校、机构、具体城市、职位与团队细节、收入年龄日期金额等精确数字、独特的经历。把问题改写成别人也会问的说法，保留原意和语气，不要加入原文没有的内容，不超过100字。回答同样处理：保留结构、判断和出处编号，只删改涉及个人的细节；不要新增观点。立正的名字、立正公开的作品和公开人物不算个人信息。
    出处编号照原回答的写法保留成 [S1]（方括号加字母 S），标在 summary、正文和 limitations 的句末，页面会把它显示成角标数字。不要把编号当作名字写进句子（不写“S1 指出”“可与S1相互印证”），要提到某份出处时写它是哪篇文章或哪期视频；标题、追问和 reason 里不写编号。原回答里把编号当名字写的句子，一并改掉。
+来源里的 author、speaker_id、speaker_name、speaker_status 与 data_layer 保留原回答的归属边界。不得把嘉宾发言改成立正的意见，不得给 unknown／unresolved 片段猜说话人，也不得把 AI 提炼改成原话。立正的提问或复述不等于赞同。若删掉姓名会让原回答混淆不同发言者，就保留公开作品中已确认的作者／嘉宾名。
 3. 归到主题。已有主题如果和这个问题问的是同一件事，topic_key 填那个 key、topic_label 填它的名称；否则 topic_key 填 null，起一个新的主题名，不超过10个字，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」。
 
 只输出一个 JSON 对象，字段都必须有：

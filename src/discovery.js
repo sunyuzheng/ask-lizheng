@@ -19,7 +19,9 @@ const similarRow = value => !!value && typeof value === 'object' && ID.test(valu
 const row = ({public_id, revision, question, published_at, asked_at, likes}) => ({public_id, revision, question, published_at, likes, ...(asked_at ? {asked_at} : {})});
 // The answer renders with the conversation's own components, so only the fields they read, as strings.
 const SOURCE_FIELDS = ['id', 'title', 'url', 'date', 'source_type', 'excerpt', 'reason', 'timecode', 'author', 'attribution_note', 'public_copy_url',
-  'source_visibility', 'text_access', 'membership_platform', 'membership_url', 'membership_verified_at', 'transcript_source_kind', 'transcript_quality', 'speaker_classification'];
+  'source_visibility', 'text_access', 'membership_platform', 'membership_url', 'membership_verified_at', 'transcript_source_kind', 'transcript_quality', 'speaker_classification',
+  'data_layer', 'speaker_id', 'speaker_name', 'speaker_status', 'fragment_id', 'source_snapshot_sha256', 'participant_names',
+  'participant_entity_ids', 'participant_aliases', 'participant_metadata_basis', 'speech_act', 'content_origin', 'generation_method'];
 const source = value => (value && /^S\d+$/.test(value.id) && text(value.title) && /^https:\/\//.test(value.url)
   ? Object.fromEntries(SOURCE_FIELDS.filter(key => typeof value[key] === 'string'
     && (!['public_copy_url', 'membership_url'].includes(key) || /^https:\/\//.test(value[key]))).map(key => [key, value[key]]))

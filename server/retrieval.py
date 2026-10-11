@@ -22,6 +22,9 @@ SOURCE_ACCESS_FIELDS = (
     "membership_verified_at", "transcript_source_kind", "transcript_quality",
     "speaker_classification",
 )
+SOURCE_ATTRIBUTION_FIELDS = (
+    "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id", "source_snapshot_sha256", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act", "content_origin", "generation_method",
+)
 QUESTION_FILLERS = re.compile("|".join(sorted(("我想", "我用", "我在", "我觉得", "我感觉", "但感觉", "不知道", "感觉", "应该", "怎么", "如何", "怎么办", "什么", "为什么", "我自己", "自己", "帮我", "请问", "能不能", "有没有", "一个", "很多", "但是", "但", "是否", "现在", "以后"), key=len, reverse=True)))
 CONCEPTS = (
     (("学会", "学习", "教程", "真学", "学到", "learn"), "假学习 学习方法 迁移 撤掉帮助 guided mistakes"),
@@ -101,7 +104,9 @@ class ContextIndex:
         self.search_module = module
         self.documents = module.load_documents()
         self._texts = [plain_text(doc.text).lower() for doc in self.documents]
-        self._titles = [(doc.title + " " + doc.section).lower() for doc in self.documents]
+        self._titles = [(doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
+                         + " " + getattr(doc, "participant_aliases", "")
+                         + " " + getattr(doc, "source_context", "")).lower() for doc in self.documents]
         manifest = self.root / "release-manifest.json"
         self.manifest = json.loads(manifest.read_text()) if manifest.is_file() else {}
         self.release_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest() if manifest.is_file() else ""
@@ -164,6 +169,13 @@ class ContextIndex:
             score += .65 * sum(term_score(term) for term in expanded if term in body or term in title)
             coverage = sum(bool(chunk.intersection(matched)) for chunk in clause_terms)
             score *= 1 + .12 * max(0, coverage - 1)
+            # Programme-name matches are useful discovery, but an introduction
+            # must not crowd out the actual exchange for a substantive question.
+            identity_terms = {part.strip().casefold() for part in getattr(doc, "participant_aliases", "").split("；")}
+            biography = re.search(r"是谁|介绍|背景|学历|经历|职业|名字|姓名|简历|career|education|biograph", question, flags=re.I)
+            if (getattr(doc, "speech_act", "") in {"introduction", "acknowledgement", "joke"}
+                    and not biography and question.strip().casefold() not in identity_terms):
+                score *= .6
             if doc.content_status != "current":
                 score *= .5
             if is_discovery(doc):
@@ -192,16 +204,39 @@ class ContextIndex:
             fused[index] = fused.get(index, 0) + .055 * candidate["weight"]
         ranked = sorted(((score, index) for index, score in fused.items()), key=lambda row: (-row[0], self.documents[row[1]].title))
         seen = set()
+        family_speakers = {}
+        selected_raw = {}
+        named_families = {
+            self.documents[index].source_family or self.documents[index].source_id
+            for _, index in ranked
+            if getattr(self.documents[index], "data_layer", "") == "raw"
+            and getattr(self.documents[index], "speaker_id", "") not in {"", "unknown"}
+        }
         passages = []
         for score, index in ranked:
             doc = self.documents[index]
             family = doc.source_family or doc.source_id
+            speaker = getattr(doc, "speaker_id", "")
+            layer = getattr(doc, "data_layer", "")
+            # Preserve distinct participants in one conversation while keeping
+            # translations and duplicate passages from becoming extra sources.
             if family in seen:
-                continue
+                owners = family_speakers.get(family, set())
+                if layer != "raw" or not speaker or len(selected_raw.get(family, [])) >= 3:
+                    continue
+                if speaker in owners:
+                    overlap = getattr(module, "raw_windows_overlap", None)
+                    if (family in named_families or speaker != "unknown" or overlap is None
+                            or not getattr(doc, "fragment_id", "")
+                            or any(overlap(doc, old) for old in selected_raw.get(family, []))):
+                        continue
             url = doc.original_source_url if doc.source_type == "video-translation" and doc.original_source_url else doc.source_url
             if urlparse(url).scheme not in {"http", "https"}:
                 continue
             seen.add(family)
+            family_speakers.setdefault(family, set()).add(speaker if layer == "raw" else "")
+            if layer == "raw":
+                selected_raw.setdefault(family, []).append(doc)
             focused = [term.lower() for term in focus_by_index.get(index, [])]
             excerpt_terms = list(dict.fromkeys(primary + expanded + focused))
             excerpt_weights = {term: weights.get(term, 4) * (1 if term in primary else .45) for term in excerpt_terms}
@@ -225,6 +260,10 @@ class ContextIndex:
             # These verified corpus fields describe the original video and its
             # separately public transcript; model output never owns access labels.
             for key in SOURCE_ACCESS_FIELDS:
+                value = getattr(doc, key, "")
+                if isinstance(value, str) and value:
+                    source[key] = value
+            for key in SOURCE_ATTRIBUTION_FIELDS:
                 value = getattr(doc, key, "")
                 if isinstance(value, str) and value:
                     source[key] = value
@@ -265,9 +304,18 @@ class ContextIndex:
         return self.architecture.render_bundle(self.card_ids(question, context, history, semantic_candidates), passages)
 
     def _excerpt(self, doc, terms: list[str], weights: dict[str, float]) -> tuple[str, str, str]:
+        limit = 500 if getattr(doc, "license", "") == "LicenseRef-Lizheng-Reference-Use-1.0" else 2100
+        if doc.source_type == "video-excerpt" and getattr(doc, "data_layer", "") == "raw":
+            # Structured speech and reviewed quotes already have a speaker
+            # boundary. Neighboring document chunks must never be appended.
+            raw = doc.text
+            anchor = TIMESTAMP.search(raw)
+            plain = plain_text(raw)
+            if len(plain) <= limit:
+                return plain, anchor.group(1) if anchor else "", anchor.group(2) if anchor else ""
         paragraphs = [(match.start(), match.group()) for match in re.finditer(r"\S[^\n]*(?:\n(?!\s*\n)[^\n]*)*", doc.text)]
         if not paragraphs:
-            return plain_text(doc.text)[:1800], "", ""
+            return plain_text(doc.text)[:min(1800, limit)], "", ""
         def value(row):
             text = plain_text(row[1]).lower()
             return sum(weights.get(term, 1) * min(text.count(term), 2) for term in terms)
@@ -276,21 +324,22 @@ class ContextIndex:
         size = sum(len(plain_text(row[1])) for row in paragraphs[start:end])
         # Timed speech uses one short paragraph per caption. Include the
         # surrounding thought, not merely the matching caption or video intro.
-        while size < 1500 and (start > 0 or end < len(paragraphs)):
+        while size < min(1500, limit) and (start > 0 or end < len(paragraphs)):
             if end < len(paragraphs):
                 size += len(plain_text(paragraphs[end][1])); end += 1
-            if start > 0 and size < 1500:
+            if start > 0 and size < min(1500, limit):
                 start -= 1; size += len(plain_text(paragraphs[start][1]))
         raw = "\n\n".join(row[1] for row in paragraphs[start:end])
         plain = plain_text(raw)
-        if len(plain) > 2100:
+        if len(plain) > limit:
             focused = plain_text(paragraphs[best][1])
             lowered = focused.lower()
             matching = [(weights.get(term, 1), lowered.find(term)) for term in terms if term in lowered]
             position = max(matching)[1] if matching else 0
             offset = plain.find(focused) + position
-            clip_start = max(0, offset - 650)
-            excerpt = ("…" if clip_start else "") + plain[clip_start:clip_start + 2100]
+            clip_start = max(0, offset - min(650, limit // 3))
+            prefix = "…" if clip_start else ""
+            excerpt = prefix + plain[clip_start:clip_start + limit - len(prefix)]
         else:
             excerpt = plain
         best_position = paragraphs[best][0]

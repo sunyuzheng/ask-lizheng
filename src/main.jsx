@@ -13,6 +13,7 @@ import {MARK_PATHS} from './mark.js';
 import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
+import {sourceAttributionLabel} from './source-attribution.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -261,6 +262,7 @@ function SourceCard({source, selected, onOpen, prefix}) {
       <time>{sourceDate(source)}</time>
     </div>
     <a className="source-title" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
+    {sourceAttributionLabel(source) && <p className="source-reason">{sourceAttributionLabel(source)}</p>}
     {member && <p className="source-access-note">{sourceAccessNote(source)}</p>}
     {member && <div className="source-access-links">
       {source.text_access === 'public' && source.public_copy_url && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noopener noreferrer">阅读公开文字稿<Ext/></a>}

@@ -1,4 +1,5 @@
 import {IN_APP} from './in-app.js';
+import {sourceAttributionLabel} from './source-attribution.js';
 
 // Access belongs to verified source metadata, never a title or an Ask account tier.
 export const YOUTUBE_MEMBERSHIP_URL = 'https://www.youtube.com/channel/UC_5lJHgnMP_lb_VpIiXV0hQ/join';
@@ -15,6 +16,7 @@ export function sourceAccessNote(source) {
 }
 export function transcriptQualityNote(source) {
   return source?.transcript_quality === 'uncorrected-asr' ? '自动识别稿，尚未校对。'
+    : source?.transcript_quality === 'ai-text-reviewed' ? '经AI文字校对及改动复核，未逐句听校。'
     : source?.transcript_quality === 'source-unverified' ? '文字稿来源尚未核实。' : '';
 }
 export function memberVideoUrl(source) {
@@ -33,7 +35,7 @@ export function memberJoinUrl(sources) {
 }
 export function sourceCopyText(source) {
   return [`${source.title}（${source.date?.slice(0, 10) || ''}）${isMemberVideo(source) ? ' · 会员视频' : ''}`,
-    sourceAccessNote(source), source.url,
+    sourceAttributionLabel(source), transcriptQualityNote(source), sourceAccessNote(source), source.url,
     ...(isMemberVideo(source) && source.text_access === 'public' && source.public_copy_url ? [`公开文字稿：${source.public_copy_url}`] : [])]
     .filter(Boolean).join('\n');
 }

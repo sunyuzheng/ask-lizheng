@@ -24,7 +24,8 @@ SHARE_FALLBACK_WORD = "question"
 ANSWER_FIELDS = {"status", "summary", "sections", "sources", "followups", "clarifying_questions", "limitations", "retryable", "failure_code"}
 SOURCE_FIELDS = {"id", "title", "url", "date", "excerpt", "author", "source_type", "reason", "attribution_note", "evidence_role", "public_copy_url", "timecode",
                  "source_visibility", "text_access", "membership_platform", "membership_url", "membership_verified_at",
-                 "transcript_source_kind", "transcript_quality", "speaker_classification"}
+                 "transcript_source_kind", "transcript_quality", "speaker_classification",
+                 "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id", "source_snapshot_sha256", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act", "content_origin", "generation_method"}
 
 
 def archived_answer(result: dict) -> dict:

@@ -5,6 +5,7 @@
 import qrcode from 'qrcode-generator';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
+import {sourceAttributionLabel} from './source-attribution.js';
 
 const SITE = 'https://ask.lizheng.ai/';
 const W = 1080;                                   // layout width; drawn at up to 2x
@@ -241,14 +242,15 @@ function sourceRow(ctx, source, number) {
   const titleLines = all.slice(0, 2);
   const access = sourceAccessNote(source);
   const type = sourceTypeLabel(source);
-  const meta = [type, source.date?.slice(0, 10) || '日期未标明', source.timecode ? `从 ${source.timecode} 开始` : ''].filter(Boolean).join(' · ');
+  const meta = [type, sourceAttributionLabel(source), source.date?.slice(0, 10) || '日期未标明', source.timecode ? `从 ${source.timecode} 开始` : ''].filter(Boolean).join(' · ');
   // An image cannot be clicked, so the address must be readable in full: when it does not fit
   // after the details (a video with a start time, say), it gets lines of its own.
   const url = plainUrl(source.url);
   ctx.font = font(400, 21);
   const urlLines = ctx.measureText(`${meta} · ${url}`).width <= INNER - 70 ? null
     : wrap(ctx, units([{text: url}], {size: 21, weight: 400, color: C.greenText}), INNER - 70);
-  const h = 24 + titleLines.length * 40 + 34 + (urlLines ? urlLines.length * 30 : 0) + 24 + (access ? 34 : 0);
+  const metaLines = urlLines ? wrap(ctx, units([{text: meta}], {size: 21, weight: 400, color: C.muted}), INNER - 70) : [];
+  const h = 24 + titleLines.length * 40 + 34 + (urlLines ? (metaLines.length - 1 + urlLines.length) * 30 : 0) + 24 + (access ? 34 : 0);
   return {h, link: source.url, draw(c, y) {
     c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2);
     c.fillStyle = C.greenTint; roundRect(c, PAD, y + 26, 44, 44, 10); c.fill();
@@ -264,7 +266,10 @@ function sourceRow(ctx, source, number) {
     });
     c.font = font(400, 21); c.fillStyle = C.muted;
     if (urlLines) {
-      c.fillText(meta, PAD + 70, ty + 17);
+      for (const [index, line] of metaLines.entries()) {
+        if (index) ty += 30;
+        drawLine(c, line, PAD + 70, ty + 17, 21);
+      }
       for (const line of urlLines) { ty += 30; drawLine(c, line, PAD + 70, ty + 17, 21); }
     } else {
       const metaText = `${meta} · `;

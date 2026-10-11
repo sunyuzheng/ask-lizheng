@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import heapq
+import importlib.util
 import json
 import math
 import re
@@ -70,7 +71,53 @@ def _plain(text: str) -> str:
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"\[\d\d:\d\d:\d\d\]", " ", text)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(r"(?m)^\s*>\s?", "", text)
     return re.sub(r"\s+", " ", text.replace("`", "")).strip()
+
+
+def _source_projection(root: Path, path: str, records: dict, cache: dict):
+    """Recompute projections with both source and parser pinned to this pack."""
+    if path in cache:
+        return cache[path]
+    try:
+        parser_path = _verified_file(root, "scripts/search.py", records)
+        source_path = _verified_file(root, path, records)
+        name = "_public_source_projection_" + sha256(str(root.resolve()).encode())[:16]
+        spec = importlib.util.spec_from_file_location(name, parser_path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+            module.ROOT = root
+            if path.startswith("corpus/dialogues/") and path.endswith(".json"):
+                documents = module.parse_raw_dialogue(source_path)
+            elif path.endswith(".md"):
+                documents = module.parse_markdown(source_path)
+            else:
+                raise SemanticIndexError("Unsupported primary source projection")
+        finally:
+            sys.modules.pop(name, None)
+        result = {doc.id: doc for doc in documents}
+        if len(result) != len(documents):
+            raise SemanticIndexError("Duplicate canonical source projection")
+        cache[path] = result
+        return result
+    except SemanticIndexError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError):
+        raise SemanticIndexError("Cannot verify the canonical public source projection") from None
+
+
+def _verify_projection(root: Path, doc, records: dict, cache: dict):
+    canonical = _source_projection(root, doc.path, records, cache).get(doc.id)
+    fields = (
+        "id", "source_id", "path", "title", "section", "text", "source_type", "source_url",
+        "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id",
+        "source_snapshot_sha256", "content_origin", "evidence_role", "yuzheng_stance_weight",
+        "speaker_classification", "author", "original_author", "generation_method", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act",
+    )
+    if canonical is None or any(getattr(doc, field, None) != getattr(canonical, field, None) for field in fields):
+        raise SemanticIndexError("Embedding text or attribution differs from the pinned public source")
 
 
 def _byte_windows(text: str, limit: int):
@@ -97,7 +144,7 @@ def embedding_inputs(doc) -> list[str]:
 
 def prepare_index(root: Path, documents) -> tuple[dict, list[str]]:
     manifest, records = verify_public_pack(root)
-    entries, inputs, paths, public_bodies = [], [], set(), {}
+    entries, inputs, paths, public_bodies, projections = [], [], set(), {}, {}
     seen = set()
     for doc in documents:
         if not _primary(doc):
@@ -109,7 +156,9 @@ def prepare_index(root: Path, documents) -> tuple[dict, list[str]]:
             if sha256(raw) != records[doc.path]["sha256"]:
                 raise SemanticIndexError("A public source changed while preparing the index")
             public_bodies[doc.path] = _plain(raw.decode("utf-8"))
-        if _plain(doc.text) not in public_bodies[doc.path]:
+        if getattr(doc, "source_snapshot_sha256", "") or doc.path.endswith(".json"):
+            _verify_projection(root, doc, records, projections)
+        elif _plain(doc.text) not in public_bodies[doc.path]:
             raise SemanticIndexError("Embedding text is not a body from the pinned public source")
         identity = (doc.path, doc.id)
         if identity in seen:

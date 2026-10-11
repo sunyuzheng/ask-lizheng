@@ -156,6 +156,7 @@ def _primary(doc) -> bool:
     method = str(getattr(doc, "generation_method", "")).lower()
     return (
         role in PRIMARY_ROLES and bool(getattr(doc, "text", "").strip())
+        and getattr(doc, "data_layer", "raw") != "derived"
         and source_type not in {"context", "video-translation"}
         and not source_type.endswith("-catalog")
         and not any(word in origin + " " + method for word in ("ai-written", "ai-synthesis", "ai-translation", "translation", "repost"))
@@ -289,8 +290,8 @@ def load(root: Path, documents) -> ContextArchitecture:
             if reference.path not in verified:
                 _verified_file(root, reference.path, manifest)
                 verified.add(reference.path)
-            candidates = by_path.get(reference.path, [])
-            if not candidates or any(not _primary(documents[index]) for index in candidates):
+            candidates = [index for index in by_path.get(reference.path, []) if _primary(documents[index])]
+            if not candidates:
                 raise CardValidationError("Reasoning card references a non-primary or missing body")
             scored = [(_focus_score(documents[index].text, reference.focus_terms), index) for index in candidates]
             score, index = max(scored, key=lambda row: (row[0], -row[1]))
