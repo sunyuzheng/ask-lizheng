@@ -79,7 +79,7 @@ def is_yuzheng_basis(doc) -> bool:
         and getattr(doc, "evidence_role", "") in {"primary-authored", "primary-speech", "published-source"}
         and (getattr(doc, "content_origin", "") != "yuzheng-spoken-source" or (
             getattr(doc, "speaker_id", "") == "yuzheng"
-            and getattr(doc, "speaker_status", "") in {"reviewed-source-attribution", "audio-anchor-reviewed"}))
+            and getattr(doc, "speaker_status", "") in {"reviewed-source-attribution", "audio-voice-match"}))
         and getattr(doc, "speech_act", "") not in {"question", "introduction", "acknowledgement", "joke", "reported-other"}
         and has_body_text(doc)
     )
@@ -163,14 +163,14 @@ class ContextIndex:
         counts["source_families"] = len({doc.source_family or doc.source_id for doc in self.documents})
         counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
         own = [doc for doc in self.documents if is_yuzheng_basis(doc)]
-        def families(types, classification=None):
+        def families(types, *classifications):
             return len({doc.source_family or doc.source_id for doc in own
-                        if doc.source_type in types and (classification is None or doc.speaker_classification == classification)})
+                        if doc.source_type in types and (not classifications or doc.speaker_classification in classifications)})
         counts.update(yuzheng_solo_transcripts=families({"video-transcript"}, "solo-yuzheng"),
                       yuzheng_articles=families({"community-post", "knowledge-bank", "blog-post"}),
                       yuzheng_comments=families({"community-comment"}),
                       yuzheng_course_lessons=families({"course-lesson"}),
-                      yuzheng_dialogue_sources=families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed"))
+                      yuzheng_dialogue_sources=families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched"))
         # Which Open Context release this service answers from, so a deploy can be checked from outside.
         commit = self.source_revision if re.fullmatch(r"[a-f0-9]{40}", self.source_revision) else ""
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,

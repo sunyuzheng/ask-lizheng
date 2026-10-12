@@ -69,6 +69,14 @@ def test_positive_attribution_is_required_even_for_a_first_party_account(index):
     assert not is_yuzheng_basis(own)
     own.speaker_status = "reviewed-source-attribution"
     assert is_yuzheng_basis(own)
+    # A voice match counts as attribution; only his statements are a basis for his views.
+    own.speaker_status = "audio-voice-match"; own.speech_act = "statement"
+    assert is_yuzheng_basis(own)
+    for act in ("question", "introduction", "acknowledgement", "joke", "reported-other"):
+        own.speech_act = act
+        assert not is_yuzheng_basis(own)
+    own.speech_act = "statement"; own.speaker_status = "audio-anchor-reviewed"
+    assert not is_yuzheng_basis(own)
 
 
 def test_source_heading_and_archive_access_note_are_not_answer_body(index):

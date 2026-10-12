@@ -19,13 +19,13 @@ flowchart LR
 
 公开原文、人物和节目关系统一在Open Context维护。`catalog/guests.json`维护人物、别名、节目及参与关系；`corpus/`保存原文与精校文本；`context/`保存回指原文的提炼。网站与本服务消费同一份公开release。原始发表提供事实依据，仓库版本固定当次使用的记录；来源中的观点保留表达者与发表时间。
 
-Raw可直接检索，Derived用于导航与组织。检索片段保留`data_layer`、`speaker_id/name/status`、`fragment_id`及源文件SHA。节目参与关系用于按人物发现资料；具体发言归属来自原文单元。字幕单元归属未知时显示“说话人待核”。相同来源的原文、译文和多个片段按source family管理。
+Raw可直接检索，Derived用于导航与组织。检索片段保留`data_layer`、`speaker_id/name/status`、`fragment_id`及源文件SHA。节目参与关系用于按人物发现资料；具体发言归属来自原文单元。字幕单元归属未知时显示“说话人待核”。对谈的每个单元可由文字核对（`reviewed-source-attribution`）或声纹比对（`audio-voice-match`，Open Context `config/audio-speaker-policy.json`记录方法、阈值与逐期hash）确定说话人；一期对谈切成两种片段：完整字幕片段不归给任何人，“某人在本期说的话”片段只汇集这位说话人被确认为陈述的句子。立正的陈述片段可作回答依据，他的提问、介绍、回应、玩笑和转述不作依据。相同来源的原文、译文和多个片段按source family管理。
 
 `data/context`是manifest列出的资料副本，`data/context-lock.json`固定上游commit和manifest hash。语料和索引都是部署产物，可从上游重建；采集缓存与本地素材库由各自项目维护。
 
 ## 增量索引
 
-同步绑定已提交的上游manifest，将经hash校验的同一份字节写入候选目录，再核对完整候选及版本记录。构建副本替换遇到可捕获错误时恢复此前语料与记录。此同步在离线构建中运行，部署加载固定副本。随后从解析器生成原始文字窗口。结构化对谈按说话人和时间切块，编者说明与原话分别索引。语义缓存按输入文字hash继承已有向量，只计算新窗口；metadata和manifest版本随本次release更新。
+同步绑定已提交的上游manifest，将经hash校验的同一份字节写入候选目录，再核对完整候选及版本记录。构建副本替换遇到可捕获错误时恢复此前语料与记录。此同步在离线构建中运行，部署加载固定副本。随后从解析器生成原始文字窗口。结构化对谈按时间切成完整字幕片段，另按说话人汇集各自的陈述句，编者说明与原话分别索引。语义缓存按输入文字hash继承已有向量，只计算新窗口；metadata和manifest版本随本次release更新。
 
 Open Context推送main后触发`update-context`：验证上游、同步、增量构建、运行测试、部署Builder，最后核验`/api/meta`的commit、release和`semantic_ready`。变更内容需在进入上游release前完成审阅；部署流程见[整体架构](ARCHITECTURE.md)。
 
