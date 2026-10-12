@@ -218,7 +218,13 @@ def test_actual_conversation_excerpts_are_his_words_and_the_conversations_are_no
     assert len({doc.source_id for doc in excerpts}) == 12
     assert all(doc.author == "Yuzheng Sun" and doc.evidence_role == "primary-speech" for doc in excerpts)
     public = [doc for doc in actual_architecture.documents if doc.source_id in {"youtube-VSX1wxueZPU", "youtube-CTcMvIZFQcw"}]
-    assert public and all(doc.yuzheng_stance_weight == "not-evidence" and doc.source_visibility == "public" for doc in public)
+    assert public and all(doc.source_visibility == "public" for doc in public)
+    # The conversation as recorded is never his; only units attributed to him as statements are.
+    assert any(doc.speaker_id == "unknown" and doc.yuzheng_stance_weight == "not-evidence" for doc in public)
+    for doc in public:
+        if doc.yuzheng_stance_weight != "not-evidence":
+            assert (doc.speaker_id, doc.speech_act) == ("yuzheng", "statement")
+            assert doc.speaker_status in {"reviewed-source-attribution", "audio-voice-match"}
 
 
 @pytest.mark.parametrize("question", ["AI是什么？", "我有几个项目。", "今年世界杯谁获胜？", "哪里有好吃的火锅？"])
