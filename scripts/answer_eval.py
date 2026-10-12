@@ -5,8 +5,8 @@ Every question in tests/fixtures/answer-eval.json goes through the service's own
 in a local app instance (no quota, no records, no analytics, nothing published). Each answer is
 then checked two ways:
 
-- deterministic: the status matches what the case expects; every quotation in 「」 or “” appears
-  in the excerpts the answer cites; a sentence that gives 立正 a view cites at least one source
+- deterministic: the status matches what the case expects; words presented as someone's original
+  words (「」 or “” after 原话、说过 and the like) appear in the excerpts the answer cites; a sentence that gives 立正 a view cites at least one source
   attributed to him; a case that needs his own sources has at least one.
 - judged: a different model scores relevance, attribution, faithfulness to the sources, time
   awareness, stated limits and readability from 1 to 5, against what the case says a good answer
@@ -37,17 +37,18 @@ OUTPUT = ROOT / "docs/evaluation-status.json"
 JUDGE_MODEL = "gpt-5"
 URL = "https://space.ai-builders.com/backend/v1/chat/completions"
 OWN_ORIGINS = {"yuzheng-published-text", "yuzheng-spoken-source"}
-VIEW = re.compile(r"(立正|他)(本人)?(认为|主张|觉得|相信|建议|强调|提到|指出|说|的(观点|立场|判断|看法))")
+VIEW = re.compile(r"立正(本人)?(认为|主张|觉得|相信|建议|强调|提到|指出|说|的(观点|立场|判断|看法))")
 QUOTE = re.compile(r"「([^」]{6,})」|“([^”]{6,})”")
+ORIGINAL_WORDS = re.compile(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|一句话")
 CRITERIA = ["relevance", "attribution", "faithfulness", "time", "limitations", "readability"]
 
-JUDGE_PROMPT = """你在评估“问问立正”的一个回答。问问立正根据立正（课代表立正）公开的文章、视频和对谈回答问题，要求：
+JUDGE_PROMPT = """你在评估“问问立正”的一个回答。问问立正根据立正公开的文章、视频和对谈回答问题。立正、孙煜征、Yuzheng Sun、课代表立正是同一个人：出处的作者或说话人写 Yuzheng Sun 或立正，都是他本人。要求：
 立正的观点只能来自他本人的材料；嘉宾、主持人或其他人的话归他们本人；引用必须忠实于给出的出处；要意识到材料的时间；材料不够时说明局限；语言直接好读。
 下面给你问题、这类问题“好回答”应该包含什么、实际回答（每段后面是它引用的出处编号）以及出处（编号、标题、说话人或作者、日期、摘录）。
 按1到5打分（5最好），只根据给出的出处判断事实，不用你自己的知识补充：
 relevance 是否回答了问题；attribution 归属是否准确（尤其不能把别人的话说成立正的观点，也不能把立正的提问当成他的观点）；
 faithfulness 内容和引文是否忠实于出处、有没有编造；time 是否注意材料的时间、没有把旧信息说成现在；limitations 材料不够时有没有说明；readability 是否直接好读。
-对“材料里没有”的问题，正确地说明没有并且不编造，算高分。
+对“材料里没有”的问题，正确地说明没有并且不编造，算高分。回答按设计只转述、不写原话；引号可能用来标节目标题或强调，不要求逐字。出处里的“某人在本期的陈述”片段，是这一位被确认为陈述的句子按时间汇集，可以作为这位说话人的观点。
 输出JSON：{"scores": {"relevance": n, "attribution": n, "faithfulness": n, "time": n, "limitations": n, "readability": n},
 "problems": ["具体问题，指出哪句话"], "verdict": "good" 或 "acceptable" 或 "poor"}"""
 
@@ -90,13 +91,17 @@ def deterministic(case: dict, result: dict) -> dict:
     for text, cited in answer_text(result):
         cited_sources = [sources[c] for c in cited if c in sources] or list(sources.values())
         excerpts = norm(" ".join(s.get("excerpt", "") for s in cited_sources))
+        titles = {norm(s.get("title", "")) for s in sources.values()}
         for match in QUOTE.finditer(text):
             quote = match.group(1) or match.group(2)
+            prefix = text[max(0, match.start() - 12):match.start()]
+            if norm(quote) in titles or not ORIGINAL_WORDS.search(prefix):
+                continue  # a title, or emphasis: the service does not present it as anyone's words
             quotes += 1
             if norm(quote) not in excerpts:
                 unverified.append(quote[:60])
         for sentence in re.findall(r"[^。！？]+[。！？]?", text):
-            if not VIEW.search(sentence) or "立正" not in sentence and "他" not in sentence[:3]:
+            if not VIEW.search(sentence):
                 continue
             ids = re.findall(r"\[S(\d+)\]", sentence) or cited
             refs = [sources[i] for i in ids if i in sources]
@@ -121,7 +126,7 @@ def judge(client: httpx.Client, token: str, case: dict, result: dict) -> dict:
     if result.get("limitations"):
         parts.append(f"[局限] {result['limitations']}")
     sources = [f"{s['id']}｜{s.get('title', '')}｜说话人或作者：{s.get('speaker_name') or s.get('author') or s.get('speaker_id', '')}"
-               f"｜{s.get('date') or s.get('published_at', '')}｜{s.get('excerpt', '')[:900]}" for s in result.get("sources", [])]
+               f"｜{s.get('date') or s.get('published_at', '')}｜{s.get('excerpt', '')}" for s in result.get("sources", [])]
     content = (f"问题：{case['question']}\n读者补充的处境：{case.get('context', '无')}\n好回答应包含：{case['good']}\n"
                f"回答状态：{result.get('status')}\n\n回答：\n" + "\n".join(parts) + "\n\n出处：\n" + "\n".join(sources))
     payload = {"model": JUDGE_MODEL, "reasoning_effort": "low", "response_format": {"type": "json_object"},

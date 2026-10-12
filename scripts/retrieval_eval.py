@@ -28,7 +28,7 @@ sys.path.insert(0, str(PROJECT))
 
 import httpx
 
-from server.retrieval import ContextIndex, is_yuzheng_basis
+from server.retrieval import ContextIndex, is_participant_statement, is_yuzheng_basis
 from server.semantic import DIMENSIONS, EMBEDDING_MODEL, MAX_BATCH, SemanticIndex, request_embeddings
 
 FIXTURE = PROJECT / "tests/fixtures/retrieval-eval.json"
@@ -87,7 +87,10 @@ def evaluate(index: ContextIndex | None = None) -> dict:
         rows.append({
             "id": item["id"],
             "passages": len(passages),
-            "all_eligible": all(is_yuzheng_basis(index.documents[p.evidence["docindex"]]) for p in passages),
+            "all_eligible": all(is_yuzheng_basis(index.documents[p.evidence["docindex"]])
+                                or (not index.names_host(item["question"])
+                                    and is_participant_statement(index.documents[p.evidence["docindex"]], index.participant_entities(item["question"])))
+                                for p in passages),
             "eligible_semantic": len(eligible),
             "card": item.get("card"),
             "card_hit": bool(paths & basis_paths.get(item["card"], set())) if item.get("card") else None,

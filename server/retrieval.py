@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import unicodedata
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,6 +105,14 @@ def is_yuzheng_basis(doc) -> bool:
     )
 
 
+def is_participant_statement(doc, participants) -> bool:
+    """A person the question names, in their own attributed statement: their view, quoted as theirs."""
+    return (bool(participants) and getattr(doc, "data_layer", "") == "raw"
+            and getattr(doc, "speaker_id", "") in participants
+            and getattr(doc, "speaker_status", "") in {"reviewed-source-attribution", "audio-voice-match"}
+            and getattr(doc, "speech_act", "") == "statement" and has_body_text(doc))
+
+
 @dataclass
 class Passage:
     source: dict
@@ -195,6 +204,21 @@ class ContextIndex:
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,
                 "context_commit": commit, "counts": counts}
 
+    @property
+    def attributed_speakers(self) -> set[str]:
+        """People with at least one attributed statement, computed once per loaded release."""
+        if getattr(self, "_attributed_speakers", None) is None or self._attributed_for is not self.documents:
+            everyone = {getattr(doc, "speaker_id", "") for doc in self.documents}
+            self._attributed_speakers = {who for who in everyone if who and who not in {"unknown", "yuzheng"}
+                                         and any(is_participant_statement(doc, {who}) for doc in self.documents if doc.speaker_id == who)}
+            self._attributed_for = self.documents
+        return self._attributed_speakers
+
+    def names_host(self, query: str) -> bool:
+        """Whether the question names him (立正, 孙煜征, Yuzheng Sun…), as the subject it asks about."""
+        folded = unicodedata.normalize("NFKC", query).casefold()
+        return any(unicodedata.normalize("NFKC", name).casefold() in folded for name in self.names.speaker_names("yuzheng") if name)
+
     def participant_entities(self, query: str) -> set[str]:
         """People the question names, from the shared name table; uncertain matches name no one."""
         return self.names.resolve(query)
@@ -221,14 +245,22 @@ class ContextIndex:
             raise ValueError("Invalid retrieval intent")
         if not self.documents:
             return []
-        eligible = {i for i, doc in enumerate(self.documents)
-                    if (is_discovery(doc) or has_body_text(doc)) and (intent == "find" or is_yuzheng_basis(doc))}
         history = history or []
         query = self.retrieval_query(question, history)
+        participants = self.participant_entities(query)
+        # An answer rests on his own sources. When the question asks about someone else's view and
+        # not his, that person may also speak for themselves, through their own attributed
+        # statements, never through anyone else's.
+        speakers = participants if not self.names_host(query) else set()
+        # A question about their view hears only them, so his words never pass for theirs; with
+        # no attributed statement of theirs, the answer rests on his sources as usual.
+        own_voice = intent != "find" and bool(speakers & self.attributed_speakers)
+        eligible = {i for i, doc in enumerate(self.documents)
+                    if (is_discovery(doc) or has_body_text(doc))
+                    and (intent == "find" or (is_participant_statement(doc, speakers) if own_voice else is_yuzheng_basis(doc)))}
         def field(item, key):
             return str(item.get(key, "")) if isinstance(item, dict) else str(getattr(item, key, ""))
         prior = " ".join(field(item, "question") + " " + field(item, "summary") for item in history[-2:])
-        participants = self.participant_entities(query)
         def participant_match(doc):
             return bool(participants.intersection(getattr(doc, "participant_entity_ids", "").split("；")))
         if intent == "find" and participants:

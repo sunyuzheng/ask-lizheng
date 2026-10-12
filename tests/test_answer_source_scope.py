@@ -26,6 +26,29 @@ def test_navigation_cannot_inject_an_outside_source(index):
     assert all(p.evidence["docindex"] != outside for p in index.retrieve("职业选择", intent="understand"))
 
 
+def test_a_named_guest_speaks_only_through_their_own_attributed_statements(context_pack):
+    p = dialogue(context_pack); data = json.loads(p.read_text())
+    data["units"][1].update(speaker_id="guest:synthetic", speaker_name="合成嘉宾")
+    data["units"].append({"id": "cue-4", "start_seconds": 10, "end_seconds": 12, "text": "归属探针，合成嘉宾提出的问题。",
+                          "speaker_id": "guest:synthetic", "speaker_name": "合成嘉宾", "speaker_status": "reviewed-source-attribution", "speech_act": "question"})
+    p.write_text(json.dumps(data, ensure_ascii=False))
+    (context_pack / "catalog").mkdir(exist_ok=True)
+    (context_pack / "catalog/guests.json").write_text(json.dumps({
+        "entities": [{"entity_id": "guest:synthetic", "entity_type": "person", "display_name": "合成嘉宾", "aliases": ["合成嘉宾"]}],
+        "sources": [{"source_id": "youtube-synthetic", "title": "合成归属探针", "url": "https://www.youtube.com/watch?v=synthetic"}],
+        "appearances": [{"entity_id": "guest:synthetic", "source_id": "youtube-synthetic"}]}, ensure_ascii=False))
+    index = ContextIndex(context_pack); index.load()
+    named = index.retrieve("合成嘉宾怎么看归属探针", intent="understand")
+    owners = {(d.speaker_id, d.speech_act) for d in (index.documents[x.evidence["docindex"]] for x in named)}
+    # Only their own attributed statements: not their questions, not the transcript, not his words.
+    assert owners == {("guest:synthetic", "statement")}
+    unnamed = index.retrieve("归属探针", intent="understand")
+    assert all(is_yuzheng_basis(index.documents[x.evidence["docindex"]]) for x in unnamed)
+    # Asking for his view in that conversation keeps the guest's words out.
+    his = index.retrieve("立正和合成嘉宾聊归属探针时自己怎么看", intent="understand")
+    assert his and all(is_yuzheng_basis(index.documents[x.evidence["docindex"]]) for x in his)
+
+
 def test_own_statements_survive_but_own_questions_and_unknown_speech_do_not(context_pack):
     p = dialogue(context_pack); data = json.loads(p.read_text())
     data["units"][0]["speech_act"] = "question"
