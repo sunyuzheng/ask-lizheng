@@ -22,6 +22,8 @@ OPS_BODY_LIMIT = 262144
 SHARE_PREFIX = "ask-share:v1:"
 SHARE_FALLBACK_WORD = "question"
 ANSWER_FIELDS = {"status", "summary", "sections", "sources", "followups", "clarifying_questions", "limitations", "retryable", "failure_code"}
+# lizheng.ai and ask-lizheng-ops each check archived answers against their own copy of these fields
+# (shared/ask-archive-answer.ts) and reject a record with any other one. Add a field there first.
 SOURCE_FIELDS = {"id", "title", "url", "date", "excerpt", "author", "source_type", "reason", "attribution_note", "evidence_role", "public_copy_url", "timecode",
                  "source_visibility", "text_access", "membership_platform", "membership_url", "membership_verified_at",
                  "transcript_source_kind", "transcript_quality", "speaker_classification",
