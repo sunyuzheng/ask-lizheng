@@ -29,9 +29,9 @@ def dialogue(root):
         "yuzheng_stance_weight": "not-evidence", "speaker_classification": "mixed-or-unresolved",
         "units": [
             {"id": "cue-1", "start_seconds": 1, "end_seconds": 3, "text": "归属探针，立正提出的问题。",
-             "speaker_id": "yuzheng", "speaker_name": "立正", "speaker_status": "reviewed-source-attribution"},
+             "speaker_id": "yuzheng", "speaker_name": "立正", "speaker_status": "reviewed-source-attribution", "speech_act": "statement"},
             {"id": "cue-2", "start_seconds": 4, "end_seconds": 6, "text": "归属探针，合成嘉宾的回答。",
-             "speaker_id": "guest-synthetic", "speaker_name": "合成嘉宾", "speaker_status": "reviewed-source-attribution"},
+             "speaker_id": "guest-synthetic", "speaker_name": "合成嘉宾", "speaker_status": "reviewed-source-attribution", "speech_act": "statement"},
             {"id": "cue-3", "start_seconds": 7, "end_seconds": 9, "text": "归属探针，这一段尚未确认说话人。",
              "speaker_id": "unknown", "speaker_name": "", "speaker_status": "unresolved"},
         ],
@@ -51,6 +51,9 @@ def test_both_speakers_and_unknown_survive_retrieval_without_merging(context_pac
     assert "立正提出" not in owners["guest-synthetic"].source["excerpt"]
     assert owners["unknown"].evidence["yuzheng_stance_weight"] == "not-evidence"
     assert owners["unknown"].source["speaker_status"] == "unresolved"
+    # Each speaker's line links to its own second, whether or not the chunk repeats the link per line.
+    assert owners["yuzheng"].source["url"].endswith("&t=1s")
+    assert owners["guest-synthetic"].source["url"].endswith("&t=4s")
     for owner, passage in owners.items():
         evidence = model_evidence(passage)
         assert evidence["data_layer"] == "raw" and evidence["speaker_id"] == owner

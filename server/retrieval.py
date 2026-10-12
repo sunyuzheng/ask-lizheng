@@ -16,7 +16,9 @@ from .names import NameIndex
 from .semantic import MIN_SIMILARITY
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
-TIMESTAMP = re.compile(r"\[(\d{2}:\d{2}:\d{2})\]\((https://www\.youtube\.com/watch\?[^)]+)\)")
+# A timed line: "[hh:mm:ss](link)" in transcripts, "[hh:mm:ss]" alone in structured dialogue chunks,
+# whose link is the chunk's source URL at that second.
+TIMESTAMP = re.compile(r"\[(\d{2}:\d{2}:\d{2})\](?:\((https://www\.youtube\.com/watch\?[^)]+)\))?")
 STOP_TERMS = set("怎么 如何 什么 为什么 一个 这个 那个 可以 我们 他们 自己 现在 时候 问题 是否 哪些 有没有 应该 需要 如果 我的 你的 以及 然后 帮我 知道 想要 还是 能够 请问 关于 了解 看看 怎么办 告诉 几个 真的 会了 是真 的学 了几 我做 出了 我是".split())
 SOURCE_ACCESS_FIELDS = (
     "source_visibility", "text_access", "membership_platform", "membership_url",
@@ -51,8 +53,20 @@ CONCEPTS = (
 )
 
 
+def timed_url(doc, anchor) -> str:
+    """The link for a timed line: its own, or the chunk's source URL at that second."""
+    if anchor is None:
+        return ""
+    if anchor.group(2):
+        return anchor.group(2)
+    h, m, s = (int(part) for part in anchor.group(1).split(":"))
+    base = str(getattr(doc, "source_url", "") or "").split("&t=", 1)[0]
+    return f"{base}&t={h * 3600 + m * 60 + s}s" if base.startswith("https://www.youtube.com/watch?") else ""
+
+
 def plain_text(text: str) -> str:
     text = LINK.sub(lambda match: match.group(1), text)
+    text = re.sub(r"(?m)^\[(\d{2}:\d{2}:\d{2})\]", r"\1", text)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = re.sub(r"(?m)^\s*[#>*]+\s*", "", text)
     return re.sub(r"\s+", " ", text.replace("`", "").replace("**", "")).strip()
@@ -448,7 +462,7 @@ class ContextIndex:
             anchor = TIMESTAMP.search(raw)
             plain = plain_text(raw)
             if len(plain) <= limit:
-                return plain, anchor.group(1) if anchor else "", anchor.group(2) if anchor else ""
+                return plain, anchor.group(1) if anchor else "", timed_url(doc, anchor)
         paragraphs = [(match.start(), match.group()) for match in re.finditer(r"\S[^\n]*(?:\n(?!\s*\n)[^\n]*)*", doc.text)]
         if not paragraphs:
             return plain_text(doc.text)[:min(1800, limit)], "", ""
@@ -481,4 +495,4 @@ class ContextIndex:
         best_position = paragraphs[best][0]
         time_matches = [match for match in TIMESTAMP.finditer(doc.text) if match.start() <= best_position + len(paragraphs[best][1])]
         anchor = time_matches[-1] if time_matches else None
-        return excerpt, anchor.group(1) if anchor else "", anchor.group(2) if anchor else ""
+        return excerpt, anchor.group(1) if anchor else "", timed_url(doc, anchor)
