@@ -1,182 +1,800 @@
 {
-  "model": "gpt-5",
-  "release_manifest_sha256": "224cf7c97a8a692b88f1f3a2b3a1c644361e8a7c5c769a38a70cf14ba468f3a5",
-  "synthetic_only": true,
-  "scope": "Local smoke examples and manual review, not a broad quality benchmark",
-  "cases": [
-    {
-      "case": "work-value-prefill",
-      "seconds": 29.18,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "media-prefill",
-      "seconds": 34.56,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "learning-prefill",
-      "seconds": 66.02,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "source-finder",
-      "seconds": 26.8,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "demo-prefill",
-      "seconds": 31.77,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "paraphrase",
-      "seconds": 30.15,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "quality-prefill",
-      "seconds": 63.92,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "scope-tension",
-      "seconds": 28.12,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "ai-judgment",
-      "seconds": 68.37,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "out-of-corpus",
-      "seconds": 17.53,
-      "observed_status": "unsupported",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "career-application",
-      "seconds": 40.91,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "acceptable for this example"
-    },
-    {
-      "case": "guest-attribution",
-      "seconds": 23.55,
-      "observed_status": "answered",
-      "semantic_ready": true,
-      "manual_review": "failed: overbroad absence claim; replaced with identity clarification guard"
-    },
-    {
-      "case": "multi-turn-final",
-      "seconds": 28.07,
-      "observed_status": "answered",
-      "routed_cards": [
-        "learning-transfer"
-      ],
-      "sections": 2,
-      "manual_review": "recovered learning goal, one proposed first action; AI application remains subject to reader verification"
-    }
-  ],
-  "post_fix": {
-    "guest-attribution": {
-      "status": "clarify",
-      "provider_called": false,
-      "verified_by": "HTTP SSE and regression test"
-    }
+ "schema_version": 2,
+ "measured_at": "2026-10-12T02:17:07+00:00",
+ "answer_model": "deepseek-v4-flash",
+ "judge_model": "gpt-5",
+ "context_commit": "c626488a4d8bcf5f203b7689520fa55eaf4f036a",
+ "context_release": "f21906c531ee088590fdd2a8ef55520e7e8c0be65bdf86349e6e29e24f12121c",
+ "fixture_sha256": "f320e5382319e84e0a2ba968671965178d37d24238d666920323bf391db481e2",
+ "method": "Local app instance on the committed context; every case through /api/ask; deterministic checks plus a rubric judged by a different model. Real model calls, not a guarantee for other questions.",
+ "summary": {
+  "cases": 24,
+  "judged": 24,
+  "average_scores": {
+   "relevance": 4.92,
+   "attribution": 4.71,
+   "faithfulness": 4.21,
+   "time": 4.71,
+   "limitations": 5.0,
+   "readability": 5.0
   },
-  "historical_configuration": {
-    "revision": "b62da6fec002df6a4c5d69d46726f1fbe7b070e2",
-    "model": "gpt-5",
-    "reasoning_effort": "provider default",
-    "note": "The original cases below precede the latency update."
+  "verdicts": {
+   "good": 17,
+   "acceptable": 6,
+   "poor": 1
   },
-  "latency_update": {
-    "model": "grok-4-fast",
-    "synthetic_only": true,
-    "scope": "Small live smoke checks, not a general quality or latency guarantee",
-    "first_sources_seconds": [
-      0.171,
-      0.194
-    ],
-    "cases": [
-      {
-        "case": "scope_tension_final",
-        "seconds": 8.139,
-        "observed_status": "answered",
-        "manual_review": "acceptable for this example"
-      },
-      {
-        "case": "unsupported_final",
-        "seconds": 3.604,
-        "observed_status": "unsupported",
-        "manual_review": "acceptable for this example"
-      },
-      {
-        "case": "learning-prefill-browser",
-        "observed_status": "answered",
-        "sections": 2,
-        "manual_review": "Explains transfer and retained judgment; one small trial, no engineering level checklist. Browser duration not instrumented."
-      }
-    ],
-    "regressions": [
-      "Sources emitted before delayed semantic lookup",
-      "Stopping cancels provider and semantic work",
-      "AnyIO persistent disconnect cancellation always returns the concurrency slot",
-      "Invalid citations never become a final answer"
-    ],
-    "gpt5_low_comparison": {
-      "seconds": 34.203,
-      "observed_status": "answered",
-      "manual_review": "schema-valid but unnecessary timed workflow and engineering framing; not selected as the default"
-    }
+  "status_mismatches": [],
+  "unverified_quotes": 0,
+  "quotes": 0,
+  "views_without_own_source": 0,
+  "missing_own_sources": [],
+  "median_seconds": 7.5
+ },
+ "cases": [
+  {
+   "id": "ai-programmers",
+   "intent": "understand",
+   "question": "AI时代程序员还有前途吗？",
+   "seconds": 8.8,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 2,
+    "views_without_own_source": [],
+    "own_sources": 5,
+    "sources": 5,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "有前途，但前途不在“会写代码”这件事上，而在能不能用 AI 把事做成、并对结果负责。只会执行局部任务、无法判断和收口的岗位会被压缩。"
   },
-  "quality_model_update": {
-    "date": "2026-09-30",
-    "model": "grok-4.5",
-    "reasoning_effort": "medium",
-    "synthetic_only": true,
-    "scope": "Three synthetic questions using the same retrieved evidence per pair. Generation and validation timing excludes retrieval; no general quality or latency guarantee.",
-    "comparison": [
-      {
-        "case": "learning",
-        "grok_4_5_seconds": 30.63,
-        "deepseek_v4_pro_seconds": 27.85
-      },
-      {
-        "case": "value",
-        "grok_4_5_seconds": 38.09,
-        "deepseek_v4_pro_seconds": 19.03
-      },
-      {
-        "case": "scope",
-        "grok_4_5_seconds": 24.33,
-        "deepseek_v4_pro_seconds": 20.73
-      }
+  {
+   "id": "work-worth",
+   "intent": "understand",
+   "question": "怎么判断一份工作值不值得做？",
+   "seconds": 6.6,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 3,
+    "sources": 3,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 4,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“判断时可以问：做好它会带来什么级别的成果，不做最坏会怎样 [S3]。”——这两条具体提问法在给出的 S3 摘录中并未出现，引用不充分；S2 摘录里也没有这句方法论，属于过度引申。"
     ],
-    "manual_review": "Grok 4.5 better retained conditions around learning vs production ownership and individual speed vs organizational outcomes. DeepSeek V4 Pro introduced an inaccurate absence disclaimer in the scope case and an overly definite inference in the value case. Selected Grok 4.5 for this product, despite higher latency.",
-    "catalog": "Live Builder Space models endpoint lists grok-4.5, deepseek-v4-pro, kimi-k2.5, gemini-3-flash-preview and gpt-5; no newer GPT or Claude ID observed. Catalog created timestamps are not release dates.",
-    "publication": "Local candidate; requires approval and production verification."
+    "verdict": "good"
+   },
+   "summary": "看它做完之后改变了什么真实结果，以及这件事在你手上的价值是否明显高于其他事；只数忙不忙、产出多少，判断不了值不值得。"
+  },
+  {
+   "id": "self-media-pitfalls",
+   "intent": "understand",
+   "question": "做自媒体最容易踩的坑是什么？",
+   "seconds": 7.9,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 2,
+    "sources": 2,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "最大的坑是没想清楚做自媒体要放大什么、成功长什么样，于是用别人的标准衡量自己，把正常的冷启动当成失败。"
+  },
+  {
+   "id": "side-hustle-view",
+   "intent": "understand",
+   "question": "立正怎么看副业？",
+   "seconds": 7.7,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 2,
+    "views_without_own_source": [],
+    "own_sources": 5,
+    "sources": 5,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "[局限] 段落称“只是把问题抛给大家，没有给出结论”。S2里他虽未系统给结论，但有“据我了解，事情并不是这样”的个人判断，回答里完全略过了这一点。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "立正把副业看成主业之外的另一种直接满足需求的方式，现在对很多人从可选项变成必选项；但开始副业要找准长板与市场缺口的交集，而不是追兴趣和热点。"
+  },
+  {
+   "id": "ds-to-pm",
+   "intent": "apply",
+   "question": "我想从数据科学转产品经理，该怎么准备？",
+   "seconds": 9.3,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 6,
+    "sources": 6,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 3,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "使用S6（2025-09-24）支持“实验带来智识诚实”的观点时，未提示其时间晚于其他材料，可能造成时间感混淆。具体位置：'[把实验能力讲成产品影响力]' 段落对S6的引用。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "把准备重心放在产品判断上：从用户和产品角度想问题、用假设驱动讲清短期长期价值，而不是继续从数据角度出发；你已有的A/B测试能力是底层工具，越往上走product sense和strategic thinking越关键。"
+  },
+  {
+   "id": "ab-small-sample",
+   "intent": "understand",
+   "question": "A/B测试样本量不够怎么办？",
+   "seconds": 8.4,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 3,
+    "sources": 3,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 3,
+     "faithfulness": 2,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“把目标从‘测出所有改动’改成‘只测值得测的改动’。”——与S3强调应尽量提高实验覆盖率、接近100%覆盖的观点相冲突，未被出处支持。",
+     "“一个务实的做法是只把实验留给那些预期影响大、或者一旦有负面影响代价高的改动。”——与S3中主张尽量让每个新功能都进实验的立场相矛盾。",
+     "“另一个方向是换更灵敏的指标：如果最终关心的转化太稀疏，可以先看更靠近改动的中间指标，但前提是这个中间指标真的能代表最终价值[S3][S1]。”——S1与S3给出的摘录中并未提到改用中间指标或更灵敏指标，此处引用不充分。"
+    ],
+    "verdict": "poor"
+   },
+   "summary": "样本量不够时，先承认你只能发现较大的效应；把目标从“测出所有改动”改成“只测值得测的改动”，并用降方差、延长时长或换更灵敏的指标来换取发现能力。"
+  },
+  {
+   "id": "find-agents",
+   "intent": "find",
+   "question": "想系统了解AI Agent，从哪读起？",
+   "seconds": 8.4,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 7,
+    "sources": 7
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "先读那篇讲 Agentic AI 第一性原理定义的文章，抓住「调用工具、多步决策、自我迭代」三个特征，再顺着六个产品层次看它怎么落地。"
+  },
+  {
+   "id": "guest-luwei-web3",
+   "intent": "understand",
+   "question": "卢蔚怎么看Web3？",
+   "seconds": 5.4,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 0,
+    "sources": 2
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“核心价值在于让用户也能拥有数据产生的价值”是总结性表述，出处未直接称为‘核心价值’。",
+     "“他对 Web3 的商业可持续性是有疑问的”是推断性总结，出处未直接下此结论。",
+     "“不是把 Web3 当成一个全新的技术物种”带有延伸解读，出处未以此表述。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "卢蔚把 Web3 看作一个开放访问、不可篡改的账本，核心价值在于让用户也能拥有数据产生的价值；但他对 gas fee 由谁承担、Web2 广告模式能否照搬到 Web3 持保留态度。"
+  },
+  {
+   "id": "guest-howie-bubble",
+   "intent": "understand",
+   "question": "硅谷徐老师怎么看AI泡沫？",
+   "seconds": 5.8,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 0,
+    "sources": 3
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 3,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "将“良性泡沫”的理由概括为‘任何技术浪潮都有泡沫、底层技术在真实成熟’时，S1引文被截断在“因为任何一个技术…”，并未在文内完整呈现该因果链，存在轻微推断成分。",
+     "“他的乐观来自技术判断，不是市场判断”的表述是对S2、S3的综合解读，原文未直接对‘市场判断’做对照陈述，存在解读性加工。",
+     "未明确点出S1为2025-12的发言时间，只在内容上综合使用了2022、2023与（未来的）2025片段，时间意识不够充分标注。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "硅谷徐老师认为AI泡沫一定会破，只是时间早晚（6个月或18个月），但他判断这是良性的泡沫，因为技术本身在真实推进。"
+  },
+  {
+   "id": "leon-vs-yuzheng",
+   "intent": "understand",
+   "question": "立正和Leon聊财富自由时，立正自己的观点是什么？",
+   "seconds": 7.5,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 5,
+    "sources": 5,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 4,
+     "attribution": 5,
+     "faithfulness": 3,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“在课程里，他把财务自由拆成被动收入覆盖支出，并用收入、支出、时间和收益率四个变量检查路径”——出处S4节选未出现“时间”这个变量，也未在引文中明确给出“被动收入覆盖支出”的定义，存在超出材料的扩写。",
+     "“这和他对‘意义’的追问并不矛盾：钱在不够的时候很重要，他抗拒的是被成功反向定义。”——这句评价性总结在给定引文中没有直接依据，属于推断。",
+     "“这句话的意思不是劝人放弃职业，而是把‘升职加薪’从默认目标降格成一个需要先检验的假设”——此为解释性延伸，S3并未明确表达这一层含义，可能超出材料。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "立正和 Leon 聊财富自由时，重点不在怎么赚更多，而在于质疑“钱和升职就是人生意义”这条默认，主张去找自己认可的意义。"
+  },
+  {
+   "id": "outside-election",
+   "intent": "understand",
+   "question": "2024年美国大选最后谁赢了？",
+   "seconds": 4.8,
+   "checks": {
+    "status": "unsupported",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 3,
+    "sources": 3
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "现有材料没有2024年美国大选的结果，无法回答谁赢了。"
+  },
+  {
+   "id": "current-job",
+   "intent": "understand",
+   "question": "立正现在在哪家公司工作？",
+   "seconds": 4.7,
+   "checks": {
+    "status": "unsupported",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 2,
+    "sources": 2
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "称“S2”为‘会员视频’没有出处支撑；应直接引用S2而不加这一限定。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "现有材料只能看出他先后在亚马逊、Facebook、腾讯和 Statsig 工作过，无法确认他「现在」在哪家公司。"
+  },
+  {
+   "id": "statsig",
+   "intent": "understand",
+   "question": "Statsig是做什么的？立正在那里做什么？",
+   "seconds": 6.9,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 4,
+    "sources": 4
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 4,
+     "faithfulness": 4,
+     "time": 3,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“立正在那里做数据科学家”可能把具体职位说得过实；S3只说他加入后也做了data scientist相关工作，并未明确职称。",
+     "“Flipkart”用名与出处转录的“flipcard”不一致，应严格按给定材料表述。",
+     "回答未在正文明确标注时间点（如2023/2024/2025），而是仅在引用编号中体现，未满足“标明时间”的要求。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "Statsig 做的是把先进的产品开发文化实体化——用实验数据支撑产品决策的平台；立正在那里做数据科学家，同时扮演实验文化的布道者。"
+  },
+  {
+   "id": "ds-interview",
+   "intent": "understand",
+   "question": "怎么准备数据科学家面试？",
+   "seconds": 6.9,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 5,
+    "sources": 5,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 4,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "未区分不同公司或面试阶段的差异，未满足“好回答应包含”的一项要求。",
+     "“面试里被追问细节时…比堆砌工具名更有说服力”这一比较性的表述，在给定出处中没有直接对应的陈述支持。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "面试考的不是你会多少工具，而是拿到一个新问题能不能给出令人信服的解法；准备的核心是把真实项目经历讲成从业务问题到数据问题的完整过程。"
+  },
+  {
+   "id": "managing-up",
+   "intent": "understand",
+   "question": "怎么正直地向上管理？",
+   "seconds": 8.6,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 7,
+    "sources": 7,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "正直的向上管理，是把和老板的关系当成共赢，用真实结果和情绪价值去换取信任与赞助，而不是靠表演动作刷存在感。"
+  },
+  {
+   "id": "first-principles-career",
+   "intent": "understand",
+   "question": "第一性原理怎么用在职业选择上？",
+   "seconds": 7.2,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 2,
+    "sources": 2,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 4,
+     "faithfulness": 3,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“具体做法是把几个选项放到五层里逐层比：道是你对机会和价值的判断，天是行业与周期，地是公司平台和所在业务，将是你跟的领导和关键同事，法是方法与执行。”——这些五层的逐一定义与对照，在给出的S2摘录里并未出现，却被标注为S2出处。",
+     "“同一家公司里，不同业务和直属领导可能是两个不同的职业世界，要分开看”——这句话在给出的S1或S2摘录里没有依据。",
+     "“所以第一性原理式的问法不是‘哪个 offer 更好’，而是……哪一层对我未来两三年的选择权影响最大。”——这种提问法的表述属于总结推演，未在S1或S2摘录中直接出现。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "立正把职业选择拆成“道天地将法”五层，第一性原理式的用法是：别只在技能和执行上使劲，先回到决定方向的几层去比较选项。"
+  },
+  {
+   "id": "jiwa",
+   "intent": "understand",
+   "question": "立正怎么看鸡娃？",
+   "seconds": 8.1,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 2,
+    "views_without_own_source": [],
+    "own_sources": 5,
+    "sources": 5,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 4,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "[陪伴的时间比钱重要] 小标题里“比钱重要”并无对应出处支持该比较。",
+     "将S4用于“替孩子选方向”的语境可能有外延，原文未明确指代孩子。",
+     "把S5的“神经回路—需要花时间陪伴”的机制直接关联为对鸡娃的评价（“这跟鸡娃的关系是……”）属于答主推论，未在出处中由立正明确提出。",
+     "局限性段落称材料多来自2023-2024，但正文也使用了2025年的S5，时间提示略不一致。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "立正认为鸡娃盯错了地方：钢琴十级、奥赛金牌这类结果不重要，重要的是孩子能不能长期坚持一件事、体验延迟满足和痛苦之后的提升。"
+  },
+  {
+   "id": "find-startup-failure",
+   "intent": "find",
+   "question": "哪些节目聊过创业失败的经历？",
+   "seconds": 8.0,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 4,
+    "sources": 6
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "将S1称作“对谈”缺少直接证据；引文只显示立正转述VJ的建议，未能从片段本身验证‘融资烧过半、砍产品、全员停薪自救’等细节，仅由标题推断。",
+     "S2/S3被总结为‘确实围绕一段创业经历展开’，虽有开场引入为Rachel的创业故事，但片段未体现失败情节，措辞应更谨慎。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "目前能确认聊到创业挫折与自救的，是那期AI连续创业团队融资烧过半、主动放弃产品、全员停薪自救的对谈；另有一期讲创业估值过亿的嘉宾故事，但失败细节未在片段中展开。"
+  },
+  {
+   "id": "third-party-wine",
+   "intent": "understand",
+   "question": "冯老师品酒课讲了什么？",
+   "seconds": 4.8,
+   "checks": {
+    "status": "unsupported",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 1,
+    "sources": 1
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "现有片段里没有冯老师品酒课的具体内容，只能确认立正提到过一位对葡萄酒和清酒有研究的冯老师，以及他频道上曾放过冯老师的视频。"
+  },
+  {
+   "id": "guest-ryo-taste",
+   "intent": "understand",
+   "question": "Ryo说的品味是什么意思？",
+   "seconds": 5.6,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 0,
+    "sources": 1
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 3,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“也就是说，品味不是天生的审美偏好，而是在反复接触经得起时间检验的作品后，慢慢长出的识别能力——你能看出它为什么好，而不只是觉得它好看”——来源未直接支持“不是天生”“能看出它为什么好”的表述，属超出引文的推断。",
+     "“这意味着有品味的人判断的不是当下流行什么，而是什么东西放几十年仍然成立。”——属于对例子的延伸解读，原文未明确作出这一对比论断。",
+     "“Ryo 把品味和老板是否在乎放在一起说，也暗示品味在组织里是一种被认可的能力，而不只是个人趣味”——‘在组织里被认可’为推断，原文只说老板在乎，未扩展到组织层面的结论。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "Ryo 说的品味，指在长期被好设计包围的环境里养成的判断力——能认出那些几十年不变、依然好用的东西好在哪。"
+  },
+  {
+   "id": "startup-decision",
+   "intent": "apply",
+   "question": "我该不该从大厂去创业公司？",
+   "seconds": 9.7,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 4,
+    "sources": 4,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 4,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“同一家公司里不同业务和领导也可能是两个世界”这句放在[S2]的出处标注后，容易被读作立正在S2中明确说过，但给出的摘录未包含该表述。",
+     "“如果新公司…那它改变的可能是你未来两三年的选择权”中的“两三年”时间尺度未见于S2摘录支持，却被标注了[S2]，有过度延伸之嫌。"
+    ],
+    "verdict": "good"
+   },
+   "summary": "没有统一答案，先看这次选择在哪一层改变你的选择权：30岁有房贷时，钱和下行风险要单独算，不能只按“该不该去创业公司”来判。"
+  },
+  {
+   "id": "make-real-things",
+   "intent": "understand",
+   "question": "“做点真东西”是什么意思？",
+   "seconds": 5.8,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 3,
+    "sources": 3,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "“做点真东西”指把工作交给一个不受自己控制、可能否定自己的反馈回路，而不是只在内部叙事里成立。"
+  },
+  {
+   "id": "long-termism",
+   "intent": "understand",
+   "question": "长期主义是不是被高估了？",
+   "seconds": 7.0,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 1,
+    "views_without_own_source": [],
+    "own_sources": 3,
+    "sources": 3,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 4,
+     "faithfulness": 4,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [
+     "“前提是方向大致正确、手艺能被市场持续付费”——材料未直接出现“市场持续付费”的表述，属推断（S1未明说，S2也未涉及“付费”）。",
+     "“判断长期主义是否值得，可以看两件事：这件事有没有真实的人在为结果付费……”——将评价标准总结为“两件事”是回答者的归纳，材料中未见立正明确提出该标准（S1、S2、S3均无）。",
+     "“不是闭眼死磕：如果一件事做了很久却始终拿不到市场反馈，问题可能出在方向或手艺本身”——关于‘市场反馈’的表述为延伸解读，材料仅谈到不知道对不对、行动-思考-求知比例（S1、S2），未直接谈‘市场反馈’。"
+    ],
+    "verdict": "acceptable"
+   },
+   "summary": "长期主义本身没被高估，被高估的是把它当成“只要熬得够久就一定有回报”的保证；真正稀缺的是方向对、能持续打磨的手艺，加上愿意接受反馈修正的坚持。"
+  },
+  {
+   "id": "questions-not-views",
+   "intent": "understand",
+   "question": "立正在对谈里是怎么问嘉宾关于AI会不会取代工作的？他自己怎么认为？",
+   "seconds": 8.5,
+   "checks": {
+    "status": "answered",
+    "status_ok": true,
+    "quotes": 0,
+    "unverified_quotes": [],
+    "yuzheng_view_sentences": 0,
+    "views_without_own_source": [],
+    "own_sources": 4,
+    "sources": 4,
+    "own_ok": true
+   },
+   "judge": {
+    "scores": {
+     "relevance": 5,
+     "attribution": 5,
+     "faithfulness": 5,
+     "time": 5,
+     "limitations": 5,
+     "readability": 5
+    },
+    "problems": [],
+    "verdict": "good"
+   },
+   "summary": "立正问嘉宾的方式是把“效率提高”推到长期后果：如果AI让效率翻倍，公司是否就不需要那么多人、工作会不会被取代。他自己的判断是：AI会替代一部分岗位，但行业和环节的替换难度不同，宏观上他相对乐观。"
   }
+ ]
 }
