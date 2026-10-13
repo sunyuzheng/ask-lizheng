@@ -21,6 +21,8 @@ const MINT = '143,212,164';
 const GOLD = '226,194,124';
 const CREAM = '248,241,228';
 const TAU = Math.PI * 2;
+// Where a number may sit around its light, and how much less it reads there.
+const AROUND = [[1, -1, 1], [-1, -1, 1.05], [1, 0, 1.1], [-1, 0, 1.15], [1, 1, 1.2], [-1, 1, 1.25], [0, -1, 1.3], [0, 1, 1.35]];
 const YOUTUBE = /(?:youtube\.com\/(?:watch\?v=|live\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
 
 function indexMap(data) {
@@ -183,7 +185,8 @@ export class AnswerMap {
     }
     const focus = items.size > 0 ? Math.min(1, Math.max(...[...items.values()].map(v => ease(v.at / 1.2)))) : 0;
     const dim = state.done ? 1 : focus;
-    const activeTopics = new Set([...items.keys()].map(i => map.g[i]));
+    // Topic names light where the candidates are, and once answered, where the cited sources are.
+    const activeTopics = new Set([...(state.done && citedItems.size ? citedItems : items).keys()].map(i => map.g[i]));
 
     // Year rings: faint, with the first and last year named along one radius.
     const [first, last] = map.years;
@@ -341,9 +344,17 @@ export class AnswerMap {
       const label = info.id.slice(1);
       const k = ease(info.at / 0.5);
       const w = Math.max(18, ctx.measureText(label).width + 10), h = 17;
-      const spots = [[6, -h - 5], [-w - 6, -h - 5], [9, -h / 2], [-w - 9, -h / 2], [6, 5], [-w - 6, 5]]
-        .map(([dx, dy]) => [p.x + dx, p.y + dy]);
-      for (let up = 1; up <= 6; up++) spots.push([p.x + 6, p.y - h - 5 - up * (h + 3)], [p.x - w - 6, p.y - h - 5 - up * (h + 3)]);
+      // Nearest clear spot, in rings around the light; above and to the right reads best.
+      const spots = [];
+      for (let ring = 0; ring < 6; ring++) {
+        const gap = 6 + ring * (h + 4);
+        AROUND.forEach(([ax, ay, cost]) => {
+          const sx = ax > 0 ? p.x + gap : ax < 0 ? p.x - gap - w : p.x - w / 2;
+          const sy = ay > 0 ? p.y + gap * 0.6 : ay < 0 ? p.y - gap * 0.6 - h : p.y - h / 2;
+          spots.push([sx, sy, Math.hypot(sx + w / 2 - p.x, sy + h / 2 - p.y) * cost]);
+        });
+      }
+      spots.sort((a, b) => a[2] - b[2]);
       let [x, y] = spots.find(([sx, sy]) => clear(sx, sy, w, h)) || spots[0];
       x = Math.max(2, Math.min(this.w - w - 2, x)); y = Math.max(2, Math.min(this.h - h - 2, y));
       taken.push({x, y, w, h});
