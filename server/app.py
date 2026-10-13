@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import hashlib
 import json
 import os
@@ -20,7 +21,7 @@ import httpx
 import anyio
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
@@ -127,6 +128,18 @@ FAILURES = {
 }
 
 
+def map_candidates(passages) -> list[dict]:
+    """Every candidate, by source id and the key of its public material (the folder and file name
+    under corpus/, without the extension), so the answer map can light it up; discovery-only
+    entries have no material and an empty key."""
+    rows = []
+    for passage in passages:
+        path = str(passage.evidence.get("source_path") or "")
+        key = re.sub(r"\.(md|json)$", "", path.removeprefix("corpus/")) if path.startswith("corpus/") else ""
+        rows.append({"id": passage.source["id"], "key": key})
+    return rows
+
+
 def answer_approach(intent: str, passages, cards: list[dict]) -> dict:
     """Public reading outline, not the model's private reasoning or a conclusion."""
     summaries = {
@@ -143,7 +156,20 @@ def answer_approach(intent: str, passages, cards: list[dict]) -> dict:
         "sources": [{"id": passage.source["id"], "title": passage.source["title"]}
                     for passage in passages if not passage.discovery][:3],
         "note": "这是结合候选材料的整理方向，尚不是完整回答或已核验的结论。",
+        # The judgment cards this answer draws on, and which candidates they rest on, for the map.
+        "cards": [{"id": card["id"], "title": card["title"],
+                   "source_ids": list(dict.fromkeys(i for row in card.get("source_roles", []) for i in row["source_ids"]))}
+                  for card in cards],
     }
+
+
+def read_answer_map(path: Path) -> tuple[bytes, bytes] | None:
+    """The answer map's lights as stored and gzipped (scripts/build_answer_map.py); None when there are none."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    return raw, gzip.compress(raw, 9, mtime=0)
 
 
 def create_app(context_root: Path | None = None, provider_transport=None, *, quota_store=None, query_record_transport=None) -> FastAPI:
@@ -161,6 +187,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         semantic = SemanticIndex(context_root or ROOT / "data" / "context", index.documents)
         await asyncio.to_thread(semantic.load)
         application.state.semantic = semantic
+        # Built with each context update, beside the context it maps.
+        application.state.answer_map = await asyncio.to_thread(read_answer_map, (context_root or ROOT / "data" / "context").parent / "answer-map.json")
         application.state.limiter = RateLimiter(int(os.getenv("ASK_RATE_PER_MINUTE", "12")))
         application.state.slots = asyncio.Semaphore(max(1, min(6, int(os.getenv("ASK_CONCURRENCY", "3")))))
         async with httpx.AsyncClient(
@@ -256,6 +284,16 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 # context_archive is false.
                 "ops_logging": {"enabled": ops_ready(), "retention": "until_deleted", "notice": "v4", "answer_archive": True,
                                 "context_archive": False, "public_display": "as_asked"}}
+
+    @application.get("/api/answer-map")
+    async def answer_map(request: Request):
+        """Every public material's light on the answer map the page draws while it answers."""
+        stored = application.state.answer_map
+        if stored is None:
+            raise HTTPException(404, "暂时没有材料地图。")
+        if "gzip" in request.headers.get("accept-encoding", "").lower():
+            return Response(stored[1], media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+        return Response(stored[0], media_type="application/json", headers={"Vary": "Accept-Encoding"})
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret
@@ -514,7 +552,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 try:
                     passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, intent=payload.intent)
                     if passages:
-                        yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
+                        yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]], "candidates": map_candidates(passages)})
                     yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"})
                     while not semantic_task.done():
                         done, _ = await asyncio.wait({semantic_task}, timeout=STREAM_HEARTBEAT_SECONDS)
@@ -527,7 +565,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     await asyncio.gather(semantic_task, return_exceptions=True)
                 if semantic_candidates:
                     passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates, intent=payload.intent)
-                yield sse("sources", {"phase": "matched", "provisional": True, "sources": [passage.source for passage in passages[:5]]})
+                yield sse("sources", {"phase": "matched", "provisional": True, "sources": [passage.source for passage in passages[:5]], "candidates": map_candidates(passages)})
                 if await request.is_disconnected():
                     return
                 if not application.state.index.documents:

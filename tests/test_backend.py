@@ -352,6 +352,13 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
         assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "approach", "progress", "progress", "result"]
         assert items[4][1]["sources"] and "尚不是完整回答" in items[4][1]["note"]
         assert items[1][1]["provisional"] and items[1][1]["sources"][0]["excerpt"]
+        # The answer map: every candidate by source id with its material key, and the chosen cards.
+        for phase in (items[1][1], items[3][1]):
+            assert phase["candidates"] and len(phase["candidates"]) >= len(phase["sources"])
+            assert [row["id"] for row in phase["candidates"]][:len(phase["sources"])] == [source["id"] for source in phase["sources"]]
+            assert all(set(row) == {"id", "key"} and not row["key"].startswith("corpus/") and not row["key"].endswith((".md", ".json")) for row in phase["candidates"])
+        assert isinstance(items[4][1]["cards"], list)
+        assert all(set(card) == {"id", "title", "source_ids"} for card in items[4][1]["cards"])
         assert items[-2][1]["stage"] == "checking"
         assert items[-1][1]["status"] == "answered"
         assert items[-1][1]["sources"][0]["url"].startswith("https://")

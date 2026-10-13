@@ -1,7 +1,7 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
-import {Check, LoaderCircle, X} from 'lucide-react';
+import {LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, discoveryDetail, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
@@ -14,6 +14,7 @@ import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
+import {AnswerMapPanel} from './answer-map-panel.jsx';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -37,8 +38,6 @@ const BACKGROUND = [
   {key: 'facts', label: '现在的情况、卡点或限制', prompt: '目前的情况与限制', placeholder: '发生了什么？你觉得卡在哪？有哪些不能忽略的条件？', max: 1000, multiline: true},
   {key: 'tried', label: '已经试过什么', prompt: '已经试过的办法', placeholder: '做过哪些尝试，得到什么反馈？', max: 700},
 ];
-const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
-const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
 // Every answer is labeled as AI-written at the top, so only the sections that differ say so:
 // a faithful paraphrase of the material, or the AI applying it (to the reader's situation when given).
 const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
@@ -309,7 +308,6 @@ function SectionBlock({section, sources, onSelect, personal}) {
 }
 
 function Working({message, elapsed, onStop, onSelect}) {
-  const step = STAGE[message.progress?.stage] ?? 0;
   const candidates = message.previewSources || [];
   const stale = message.lastActivity && Date.now() - message.lastActivity > 12000;
   return <section className="working" aria-label="回答进度">
@@ -318,11 +316,7 @@ function Working({message, elapsed, onStop, onSelect}) {
       <p role="status">{message.progress?.message || '正在查找相关公开材料…'}</p>
       <button type="button" className="ghost-button" onClick={onStop}>停止</button>
     </div>
-    <ol className="steps" aria-label="处理步骤">
-      {STEPS.map((label, index) => <li key={label} className={index < step ? 'done' : index === step ? 'current' : ''} aria-current={index === step ? 'step' : undefined}>
-        <span className="step-dot">{index < step ? <Check size={11} strokeWidth={3}/> : null}</span>{label}
-      </li>)}
-    </ol>
+    <AnswerMapPanel message={message} live onSelect={onSelect}/>
     <p className="working-note">
       <span>{message.model} · 已用{elapsed}秒</span>
       <span>{!message.lastActivity ? (elapsed >= 5 ? '问答服务闲置时会休眠，正在唤醒，通常十几秒…' : '正在连接服务…') : stale ? '有一会儿没收到新进展了，还在等。' : candidates.length ? '回答还在整理，可以先读找到的材料。' : '找到材料后，会先在这里给你看。'}</span>
@@ -1067,7 +1061,7 @@ function App() {
         if (name === 'progress') update({progress: value, ...(value.stage === 'repairing' ? {partial: undefined} : {})});
         else if (name === 'partial') update(m => ({partial: value, previewSources: [...new Map([...(m.previewSources || []), ...value.sources].map(source => [source.id, source])).values()]}));
         else if (name === 'approach') update({approach: value});
-        else if (name === 'sources') update({previewSources: value.sources || []});
+        else if (name === 'sources') update({previewSources: value.sources || [], ...(value.candidates ? {mapCandidates: value.candidates} : {})});
         else if (name === 'quota') seeQuota(value);
         else if (name === 'result') {
           received = true;
@@ -1372,6 +1366,7 @@ function App() {
                     ? <p className="answer-meta"><span>找到的材料</span></p>
                     : <p className="answer-meta"><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
+                  {sources.length > 0 && <AnswerMapPanel message={m} selected={sourceTurn === m.id ? selected : null} onSelect={select}/>}
                   {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!(m.context || m.personal)}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
                     <p>再补充一点，回答会更贴合你</p>

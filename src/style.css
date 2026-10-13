@@ -1756,52 +1756,198 @@ main {
   color: var(--ink);
 }
 
-.steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 22px;
-  margin: 14px 0 10px;
-  padding: 0;
-  list-style: none;
+/*
+ * The answer map (answer-map.js): the question at the centre of every public material. It is
+ * the conversation's one dark surface, the forest of the start screen, so the lights can glow.
+ * Mint is for what opens a source: the numbered lights. Words around it stay quiet.
+ */
+.answer-map {
+  margin: 16px 0 14px;
+  border-radius: 10px;
+  background: radial-gradient(85% 70% at 50% 44%, var(--forest-glow) 0%, var(--forest) 52%, var(--forest-2) 100%);
+  color: var(--on-forest-2);
+  overflow: hidden;
+  animation: fade 0.5s var(--ease) both;
 }
 
-.steps li {
+.answer > .answer-map {
+  margin: 26px 0 0;
+}
+
+.answer-map-stage {
+  height: clamp(270px, 48vw, 340px);
+}
+
+.answer-map-done .answer-map-stage {
+  height: clamp(230px, 40vw, 280px);
+}
+
+.answer-map canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+  font-family: var(--sans);
+}
+
+.answer-map figcaption {
+  padding: 0 18px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.answer-map figcaption > * + * {
+  margin-top: 6px;
+}
+
+.answer-map-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--on-forest-3);
+}
+
+.answer-map-steps li {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
-  color: var(--faint);
 }
 
-.step-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
+.answer-map-steps li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--rule-2);
+  box-shadow: inset 0 0 0 1px var(--on-forest-3);
 }
 
-.steps .done {
-  color: var(--ink-2);
+.answer-map-steps .done {
+  color: var(--on-forest-2);
 }
 
-.steps .done .step-dot {
-  background: var(--green-tint);
+.answer-map-steps .done::before {
+  background: var(--on-forest-2);
   box-shadow: none;
-  color: var(--green-text);
 }
 
-.steps .current {
-  color: var(--green-text);
+.answer-map-steps .current {
+  color: var(--on-forest);
   font-weight: 600;
 }
 
-.steps .current .step-dot {
-  background: var(--green);
+.answer-map-steps .current::before {
+  background: var(--mint);
   box-shadow: none;
-  animation: pulse 1.6s ease-out infinite;
+  animation: map-pulse 1.6s ease-out infinite;
+}
+
+.answer-map-lead {
+  font-size: 14px;
+  color: var(--on-forest);
+}
+
+.answer-map-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+}
+
+.answer-map-card {
+  color: #e2c27c;
+}
+
+.answer-map-card i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
+.answer-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  font-size: 12px;
+  color: var(--on-forest-3);
+}
+
+.answer-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.answer-map-legend .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.answer-map-legend .video {
+  background: var(--on-forest);
+}
+
+.answer-map-legend .text {
+  background: var(--mint);
+}
+
+.answer-map-legend .course {
+  background: #e2c27c;
+}
+
+.answer-map-legend .diamond {
+  width: 6px;
+  height: 6px;
+  margin: 0 1px;
+  background: #e2c27c;
+  transform: rotate(45deg);
+}
+
+.answer-map-axes {
+  margin-left: auto;
+}
+
+/* Without the map, the steps sit on the paper. */
+.answer-map-fallback .answer-map-steps {
+  margin: 14px 0 10px;
+  color: var(--faint);
+}
+
+.answer-map-fallback .answer-map-steps li::before {
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+
+.answer-map-fallback .answer-map-steps .done {
+  color: var(--ink-2);
+}
+
+.answer-map-fallback .answer-map-steps .done::before {
+  background: var(--ink-2);
+}
+
+.answer-map-fallback .answer-map-steps .current {
+  color: var(--ink);
+}
+
+.answer-map-fallback .answer-map-steps .current::before {
+  background: var(--green);
+}
+
+@keyframes map-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(143 212 164 / 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 6px rgb(143 212 164 / 0);
+  }
 }
 
 .working-note {
@@ -2955,6 +3101,21 @@ main {
 
   .backdrop {
     padding: 12px;
+  }
+
+  /* The map runs edge to edge, so the disc keeps its width. */
+  .answer-map,
+  .answer > .answer-map {
+    margin-inline: calc(-1 * var(--gut));
+    border-radius: 0;
+  }
+
+  .answer-map figcaption {
+    padding: 0 var(--gut) 16px;
+  }
+
+  .answer-map-axes {
+    margin-left: 0;
   }
 }
 

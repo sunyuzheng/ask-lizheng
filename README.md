@@ -29,6 +29,8 @@ python3 -m venv .venv
 
 Open Context 推到 main 就会自动上线（2026-10-04 起，立正的决定：推 main 就是批准它的内容进入问问立正）。`.github/workflows/update-context.yml` 每半小时比较一次，有新版本就运行 `scripts/update_context.py`：先跑 Open Context 自己的 release validation 和测试，再同步副本、重建语义索引、跑本仓库测试，只把 `data/` 提交到 main，用 `config/builder-deploy.json` 的线上设置部署 Builder，等线上 `/api/meta` 的 `context_release` 变成新版本、语义索引就绪，再把 `context-live` 标签移到这个提交。任何一步失败就停下，这次运行失败，GitHub 发邮件给立正；部署没完成的，下一轮会再部署。想马上更新就运行 `gh workflow run update-context.yml -R sunyuzheng/ask-lizheng`。部署令牌存在仓库的 `builder` 环境里（只有 main 上的运行能读），换令牌时要一起换。
 
+索引建好后，`scripts/build_answer_map.py` 用它和语料重排材料地图（`data/answer-map.json`，回答服务在 `/api/answer-map` 提供给页面），几秒钟、不调用模型；地图和当前资料版本对不上时测试不通过。
+
 重建索引只为新的或改过的文字窗口调用 embedding，其余向量按文字哈希原样保留；向量文件固定叫 `vectors.f32`，所以 Git 只多存变化的部分。手动做同样的事（例如排查）：
 
 ```sh

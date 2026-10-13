@@ -1,0 +1,14 @@
+{
+  "note": "Topics of the answer map, in order around it; neighbours are related. Each seed matches titles that start the topic; see scripts/build_answer_map.py. kinds: folders without embeddings that belong to a topic outright.",
+  "fallback": "ai",
+  "topics": [
+    {"key": "ai", "label": "AI认知", "seed": "AGI|OpenAI|大模型|GPT|ChatGPT|LLM|人工智能|DeepSeek|Gemini|Anthropic|Scaling|模型训练|叙事陷阱|AI泡沫|AI Bubble"},
+    {"key": "build", "label": "用AI做东西", "seed": "Claude Code|Cursor|Codex|Agent|agent|[Vv]ibe|Builder|编程|写代码|全栈|MCP|Skill|skill|工作流|自动化|做了一个|搓"},
+    {"key": "venture", "label": "创业与机会", "seed": "创业|融资|[Ss]tartup|YC|创始人|商业模式|赛道|ToB|出海"},
+    {"key": "money", "label": "赚钱与真本事", "seed": "赚钱|财富|副业|收入|第\\d+课|真本事|个人价值|理财|打工人|变现|定价|第一桶金"},
+    {"key": "media", "label": "自媒体与表达", "seed": "自媒体|UP主|Up主|博主|涨粉|个人品牌|播客|视频号|镜头|写作|内容创作"},
+    {"key": "mind", "label": "心智与人生", "seed": "人生|幸福|意义|焦虑|理性|情绪|婚姻|恋爱|自我|心态|动不了|哲学|意识|冥想|吵架|和解"},
+    {"key": "career", "label": "职场与成长", "seed": "职业|职场|求职|面试|简历|晋升|升职|[Mm]anager|管理者|沟通|跳槽|offer|Tech Lead|1:1"},
+    {"key": "data", "label": "增长与数据", "seed": "增长|留存|实验|AB|A/B|数据科学|数据分析|漏斗|指标|因果|Statsig|[Dd]ata [Ss]cien", "kinds": ["book-chapters", "blog-posts"]}
+  ]
+}

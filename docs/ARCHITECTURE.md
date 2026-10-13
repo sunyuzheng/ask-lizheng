@@ -13,7 +13,7 @@
 | 数据库 | — | 一个 Upstash Redis（Vercel 里叫 ask-lizheng-kv） | 上面三者的全部状态 | 只给问问立正用（Coffee Pass 2026-10-04 起用自己的库） |
 | 文件存储 | — | 两个私有 Vercel Blob 存储，各用自己的令牌 | 给人看的东西写成的文件：公开问答（Ops 写、主站读）和分享过的回答的副本（主站写、Ops 删），令牌 `ASK_FILES_BLOB_TOKEN`；每天的备份（只有 Ops），令牌 `ASK_BACKUP_BLOB_TOKEN` | 2026-10-04 起：数据库出事时，看的人照常能看，数据也有30天的备份 |
 
-ask.lizheng.ai 的页面文件由本仓库 `src/` 构建，再同步进主站 `client/public/ask-app/` 发布；Builder 只回答提问和 `/api/meta`。iPhone App 是这个页面的原生外壳（UA 带 `AskLizhengApp/`）。
+ask.lizheng.ai 的页面文件由本仓库 `src/` 构建，再同步进主站 `client/public/ask-app/` 发布；Builder 只回答提问、`/api/meta` 和材料地图的布局 `/api/answer-map`。iPhone App 是这个页面的原生外壳（UA 带 `AskLizhengApp/`）。
 
 数据库在 Vercel Storage 里显示「没有连接项目」，因为主站和 Ops 的连接都是手工配的；它一直在用，别删。
 
@@ -54,7 +54,7 @@ ask.lizheng.ai 的页面文件由本仓库 `src/` 构建，再同步进主站 `c
 5. **分享**：分享自己的回答 → 主站验证 Builder 的证明，给出 `ask.lizheng.ai/s/<日期>/<词>`，同时把这条回答的副本写进文件存储；分享页每次实时读存档记录（删除立刻生效，真人打开要计数），只在数据库答不上来时用副本，数据库说没有了就不用副本。分享别人的问答 → 直接分享它的公开页 `www.lizheng.ai/ask/<id>`，不写数据库。
 6. **使用统计**：页面打开时和离开时各发一次 → 主站固定脚本计数 → Ops 后台「使用情况」读。
 7. **删除**：立正在 Ops 删一条存档 → 先删它分享页的副本（删不掉就不删记录，让立正稍后再试）→ 同一个脚本里删掉记录、它的公开版本、点赞，更新排序 → 马上重写公开文件，删掉它那一条。它的分享页随即 404。
-8. **资料更新**：Open Context同时拥有原文、提炼和嘉宾结构化数据。网站嘉宾页从固定commit及manifest生成；本服务的语料和索引从同一release生成。Open Context推到main → 本仓库 GitHub 上的 `update-context` 半小时内发现，校验、同步、重建索引（只算改过的文字）、测试，把 `data/` 提交到 main，部署 Builder，等线上答到新版本为止（README「公开资料」）。
+8. **资料更新**：Open Context同时拥有原文、提炼和嘉宾结构化数据。网站嘉宾页从固定commit及manifest生成；本服务的语料和索引从同一release生成。Open Context推到main → 本仓库 GitHub 上的 `update-context` 半小时内发现，校验、同步、重建索引（只算改过的文字）和材料地图、测试，把 `data/` 提交到 main，部署 Builder，等线上答到新版本为止（README「公开资料」）。
 9. **每天的备份**：Ops 每天 03:17 UTC 把 `ask-ops:{v3}:` 下所有的键写成一份，放进只有 Ops 能读的备份存储，留30天（Ops 仓库 docs/backup.md，有恢复脚本）。v1 记录不备份（承诺30天，不延长）。
 
 ## 业务规则在哪执行

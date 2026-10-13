@@ -62,7 +62,12 @@ status 还有 clarify（缺少实质条件）、unsupported（资料不支持）
 
 语义匹配与模型等待期间，每 5 秒发送约 16KB 的标准 SSE 注释作为保活，并在整理回答阶段主动冲刷思路摘要，避免中间代理缓冲较小的数据包；注释不代表新的进度或思考。响应使用 no-store,no-transform。客户端应忽略注释，保留未完成问题与已有材料。模型故障的 sources-only 带 retryable:true 与固定 failure_code；用户明确重试后才重新发起请求。主页转发层在 100 秒期限或断流时返回 relay_timeout / upstream_stream_interrupted，客户端另设 110 秒期限并取消上游。重试在原回合进行，沿用内存中的原问题、背景、意图和历史，不自动追加或反复调用模型。
 
+sources 事件另带 `candidates`：这次交给模型的全部候选材料（sources 只列前5份），每项是编号和材料在资料库里的位置，即 `corpus/` 下去掉扩展名的路径（`{"id":"S1","key":"videos/20250211-Y20_JOyMs3k"}`）；approach 另带 `cards`：这次用到的判断卡，含 id、title 和它所依据的候选编号 `source_ids`。页面用两者在材料地图上点亮对应的材料和判断卡。它们只在流里，不进 result，也不进存档；sources 里每份来源本身的字段不变。
+
 ## 查看资料与状态
+
+`GET /api/answer-map` 返回材料地图的布局（`data/answer-map.json`，由 `scripts/build_answer_map.py` 从语料和语义索引生成，每次资料更新时重建）：`keys` 是每份材料的位置（同上），同序的 `kinds`、`t`、`r`、`g` 依次是它的形式、方向（万分之一圈）、离中心的距离（千分之一，越远越新）和主题序号；`topics` 是各主题的名字和所占角度，`years` 是最里和最外的年份，`cards` 是判断卡的方向和所依据材料的序号，`release` 是它对应的 Open Context 提交。约75KB，请求带 `Accept-Encoding: gzip` 时约27KB。
+
 
 `GET /api/search?q=...` 提供无需生成回答的词法与判断卡检索，适合找原文。`GET /api/meta` 返回公开资料版本、收录数量、model_ready、semantic_ready 和 mode；`GET /health` 在资料未就绪时返回 503。
 

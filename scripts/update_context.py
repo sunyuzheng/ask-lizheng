@@ -39,7 +39,7 @@ LOCK = "data/context-lock.json"
 LIVE_TAG = "context-live"
 META_URL = "https://ask-lizheng.ai-builders.space/api/meta"
 AUTHOR = ("Yuzheng Sun", "sunyuzheng@gmail.com")
-DATA = ("data/context", LOCK, "data/semantic")
+DATA = ("data/context", LOCK, "data/semantic", "data/answer-map.json")
 SHA = re.compile(r"[a-f0-9]{40}")
 
 
@@ -150,6 +150,8 @@ def update(token: str) -> dict | None:
         built = asyncio.run(builder.build(metadata, inputs, token, builder.reusable(PROJECT / "data/semantic")))
     except builder.SemanticIndexError as exc:
         raise UpdateError("Semantic index: " + str(exc)) from None
+    # The answer map lays out every material from the copy and its index; it parses the copy too.
+    sh(sys.executable, "scripts/build_answer_map.py", timeout=600)
     sh(sys.executable, "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider", timeout=1200)
     sh(sys.executable, "data/context/scripts/validate_release.py")
     if not commit_data(subject, commit, before, after, built):

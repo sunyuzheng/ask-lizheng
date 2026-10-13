@@ -220,7 +220,9 @@ def test_commit_holds_only_context_data_under_the_owner(tmp_path, monkeypatch):
     monkeypatch.setattr(updater, "PROJECT", repo)
     (repo / "data/context/新材料.md").write_text("公开正文")
     (repo / "data/semantic/vectors.f32").write_bytes(b"\0" * 8)
+    (repo / "data/answer-map.json").write_text("{}")
     updater.commit_data("Add essays", OLD, LOCK, NEWER, {"embedded_windows": 1, "reused_windows": 2})
+    assert "data/answer-map.json" in git(repo, "show", "--name-only", "--format=", "HEAD")
     assert git(repo, "log", "-1", "--format=%an <%ae>|%cn <%ce>").strip() == "Yuzheng Sun <sunyuzheng@gmail.com>|Yuzheng Sun <sunyuzheng@gmail.com>"
     assert "Update context to Open Context aaaaaaa" in git(repo, "log", "-1", "--format=%B")
     (repo / "README.md").write_text("changed")
@@ -264,6 +266,10 @@ def test_open_context_code_runs_only_in_credential_free_children(monkeypatch):
     plan = next(command for command in commands if "--plan-out" in command)
     assert plan[1] == "scripts/build_semantic_index.py"
     assert events == [("read_plan", "plan.json"), ("build", "SYNTHETIC_PRIVATE_SENTINEL")]
+    # The answer map is laid out from the new copy and index, in a child too, before the tests run.
+    steps = [" ".join(command) for command in commands]
+    laid_out = next(n for n, step in enumerate(steps) if "scripts/build_answer_map.py" in step)
+    assert laid_out < next(n for n, step in enumerate(steps) if "-m pytest" in step)
     # Every child process, the planner among them, starts from quiet_env().
     monkeypatch.setenv("AI_BUILDER_TOKEN", "SYNTHETIC_PRIVATE_SENTINEL")
     assert "AI_BUILDER_TOKEN" not in updater.quiet_env()
