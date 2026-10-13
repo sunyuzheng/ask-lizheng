@@ -458,7 +458,7 @@ main {
 @media (min-width: 1100px) {
   .stage-inner.with-live {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 420px;
     grid-template-areas: "hero live" "composer live" "apps live";
     column-gap: clamp(48px, 5vw, 80px);
   }
@@ -565,6 +565,26 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+/* The map of every material above 别人正在问 (AmbientMap), on the stage itself: it lights the
+   sources of the question marked below. */
+.ambient-map {
+  height: 236px;
+  margin: 6px -20px 0 -64px;
+}
+
+.ambient-map canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.live-map-note {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--on-forest-3);
+}
+
 .live ol {
   margin-top: 18px;
   padding: 0;
@@ -628,6 +648,21 @@ main {
 
 .live-more {
   margin-top: 16px;
+}
+
+/* The question the map lights: a mint line beside it, its words in full cream. */
+.with-live .live li button {
+  padding-left: 14px;
+  box-shadow: inset 2px 0 0 transparent;
+  transition: box-shadow 0.3s;
+}
+
+.with-live .live li.on button {
+  box-shadow: inset 2px 0 0 var(--mint);
+}
+
+.with-live .live li.on span {
+  color: var(--on-forest);
 }
 
 .stage .composer-area {
@@ -2294,14 +2329,73 @@ main {
   scroll-margin-top: calc(var(--header-h) + 24px);
 }
 
-/* 分享这条回答: the one action in green, since it is the one to take; its panel sits on a hairline. */
-.share-button {
+/* 分享这条回答 (ShareBar): the answer's own page, on a hairline under it. Its address is the
+   thing to read and copying it the first thing to do; the QR code opens it on a phone. */
+.share-bar {
+  margin-top: 32px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  scroll-margin-top: calc(var(--header-h) + 24px);
+}
+
+.share-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.share-bar .share-url {
+  margin-top: 2px;
+  font-size: 17px;
+}
+
+.share-bar .share-actions {
+  gap: 8px;
+}
+
+.pill-button.share-primary {
+  box-shadow: inset 0 0 0 1px var(--green);
   color: var(--green-text);
   font-weight: 600;
 }
 
-.share-button[aria-expanded="true"] {
-  background: var(--paper-2);
+.share-qr {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 14px 0 0;
+}
+
+.share-qr-code {
+  flex: none;
+  width: 136px;
+  height: 136px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.share-qr-code svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.share-qr figcaption {
+  max-width: 14em;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.share-bonus {
+  margin-top: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .share-panel {
@@ -2667,6 +2761,12 @@ main {
 
 .inline-sources > div {
   border-bottom: 1px solid var(--rule);
+}
+
+/* Right under the open list of sources, its last hairline is the share bar's. */
+.inline-sources[open] + div > .share-bar {
+  margin-top: 0;
+  border-top: 0;
 }
 
 .rail-head h2 {

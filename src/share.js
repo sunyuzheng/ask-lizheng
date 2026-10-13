@@ -1,7 +1,7 @@
 // Turns one answer into a shareable long image or an A4 PDF, drawn on canvas in
 // lizheng.ai's look: the question first, then the answer, its limits and the
-// sources, and a footer with the 立正 seal, the address and a QR code back to
-// ask.lizheng.ai. Loaded only when someone saves an answer.
+// sources, and a footer with the 立正 seal, the answer's own page and a QR code
+// to it (to ask.lizheng.ai when it has none). Loaded only when someone saves an answer.
 import qrcode from 'qrcode-generator';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
@@ -281,18 +281,19 @@ function sourceRow(ctx, source, number) {
   }};
 }
 
-function footerRow() {
+// The footer's QR code opens this answer's own page when it has one, otherwise the place to ask.
+function footerRow(link = '') {
   const h = 260;
   const qr = qrcode(0, 'M');
-  qr.addData(SITE);
+  qr.addData(link || SITE);
   qr.make();
-  return {h, link: SITE, footer: true, draw(c, y) {
+  return {h, link: link || SITE, footer: true, draw(c, y) {
     c.fillStyle = C.paper; c.fillRect(0, y, W, h);
     c.fillStyle = C.line; c.fillRect(0, y, W, 2);
     drawSeal(c, PAD, y + 56, 78, C.green);
     c.textBaseline = 'middle';
     c.fillStyle = C.ink; c.font = font(900, 32, SERIF); c.fillText('问问立正', PAD + 78 + 18, y + 76);
-    c.fillStyle = C.ink2; c.font = font(400, 25); c.fillText('在 ask.lizheng.ai 问你自己的问题', PAD, y + 138);
+    c.fillStyle = C.ink2; c.font = font(400, 25); c.fillText(link ? link.replace(/^https:\/\//, '') : '在 ask.lizheng.ai 问你自己的问题', PAD, y + 138);
     c.fillStyle = C.muted; c.font = font(400, 19);
     c.fillText('AI根据立正公开的文章和视频整理，不是本人实时回复；', PAD, y + 182);
     c.fillText('重要的判断，请回到原文核对。', PAD, y + 210);
@@ -306,7 +307,7 @@ function footerRow() {
       }
     }
     c.fillStyle = C.muted; c.font = font(500, 18); c.textAlign = 'center';
-    c.fillText('扫码提问', qx + size / 2, qy + size + 28);
+    c.fillText(link ? '扫码看这条回答' : '扫码提问', qx + size / 2, qy + size + 28);
     c.textAlign = 'left';
   }};
 }
@@ -355,7 +356,7 @@ function layout(ctx, {question, result, date, personal}) {
       rows.push(gap(12), ...joinRows.map(row => ({...row, link: join})));
     }
   }
-  rows.push(gap(56), footerRow());
+  rows.push(gap(56), footerRow(data.link));
   return rows;
 }
 

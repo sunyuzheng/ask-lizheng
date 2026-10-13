@@ -6,9 +6,11 @@
 // candidates it found, the cards it chose, and the sources an answer cites, numbered as in the
 // text. A numbered light opens its source, as a citation does.
 
+// ask.lizheng.ai reaches the service at /api/answer-map; lizheng.ai's homepage, which copies this
+// file (scripts/sync-ask-app.mjs there), at /api/ask-lizheng/answer-map.
 let loading;
-export function loadAnswerMap() {
-  loading ??= fetch('/api/answer-map', {credentials: 'omit'})
+export function loadAnswerMap(url = '/api/answer-map') {
+  loading ??= fetch(url, {credentials: 'omit'})
     .then(response => { if (!response.ok) throw new Error(`answer map: ${response.status}`); return response.json(); })
     .then(indexMap)
     .catch(error => { loading = null; throw error; });
@@ -49,17 +51,24 @@ export function sourceItem(map, source, key = '') {
 
 const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
 
+/**
+ * The map on a canvas. `ambient` is the start screen's: it turns on its own, nothing on it is
+ * pointed at, and the lights it is given (another reader's question) change with a crossfade.
+ */
 export class AnswerMap {
-  constructor(canvas, map, {onSelect, reduce = false} = {}) {
+  constructor(canvas, map, {onSelect, reduce = false, ambient = false} = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.map = map;
     this.onSelect = onSelect;
     this.reduce = reduce;
+    this.ambient = ambient;
     this.rot = -0.35;
     this.spin = reduce ? 0 : 0.045;
     this.state = {live: false, stage: '', candidates: [], cards: [], cited: [], sources: new Map(), selected: null};
     this.seen = new Map();          // when each thing first appeared: 'c:S1', 'k:card', 'n:S3'
+    this.fading = new Map();        // lights no longer lit, by when they went out (ambient)
+    this.lastDraw = 0;
     this.hits = [];
     this.hover = null;
     this.visible = true;
@@ -70,7 +79,7 @@ export class AnswerMap {
     this.turn = new Float32Array(n);
     this.radius = new Float32Array(n);
     for (let i = 0; i < n; i++) { this.turn[i] = map.t[i] / 10000; this.radius[i] = map.r[i] / 1000; }
-    this.bindPointer();
+    if (!ambient) this.bindPointer();
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
     this.seenOnScreen = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; this.wake(); });
@@ -89,6 +98,16 @@ export class AnswerMap {
   update(next) {
     const now = performance.now();
     const mark = (key, delay = 0) => { if (!this.seen.has(key)) this.seen.set(key, this.reduce ? now - 5000 : now + delay); };
+    if (this.ambient) {
+      // Another question: its lights come on one by one, the last one's go out together.
+      const lit = new Set(next.candidates.map(row => row.item).filter(item => item >= 0));
+      for (const row of this.state.candidates) {
+        if (row.item < 0 || lit.has(row.item)) continue;
+        if (!this.reduce) this.fading.set(row.item, now);
+        this.seen.delete(`c:${row.item}`);
+      }
+      lit.forEach(item => this.fading.delete(item));
+    }
     // Candidates light one after another. Numbers change between searches and again in the
     // final answer, so a light is remembered by its material, not its number.
     let stagger = 0;
@@ -108,7 +127,7 @@ export class AnswerMap {
     this.canvas.width = Math.round(box.width * dpr);
     this.canvas.height = Math.round(box.height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.narrow = box.width < 560;
+    this.narrow = box.width < 560 && !this.ambient;   // the start screen's is short and wide
     this.tilt = this.narrow ? 0.5 : 0.42;
     // Room for the topic names around the rim.
     this.R = Math.min(box.width * (this.narrow ? 0.4 : 0.41), (box.height - 34) / (2 * this.tilt * 1.18));
@@ -163,9 +182,13 @@ export class AnswerMap {
   draw(now) {
     this.frame = 0;
     if (!this.w) return;
+    // The start screen's map turns slowly; half the frames are enough for it.
+    if (this.ambient && now - this.lastDraw < 30) { this.frame = requestAnimationFrame(t => this.draw(t)); return; }
+    const dt = this.lastDraw ? Math.min(0.1, (now - this.lastDraw) / 1000) : 1 / 60;
+    this.lastDraw = now;
     const {ctx, map, state} = this;
     const live = state.live && !this.reduce;
-    if (live || now - this.lastActive < 2600) this.rot += this.spin / 60;
+    if (live || this.ambient || now - this.lastActive < 2600) this.rot += this.spin * dt;
     ctx.clearRect(0, 0, this.w, this.h);
 
     const stage = state.stage;
@@ -202,7 +225,7 @@ export class AnswerMap {
     ctx.fillStyle = `rgba(${CREAM},0.34)`;
     const words = [];              // where text is, so the numbers keep clear of it
     const ruler = Math.PI * 0.22;
-    for (const [label, r] of [[String(first), inner + 0.03], [String(last - 1), outer - 0.04]]) {
+    if (!this.ambient) for (const [label, r] of [[String(first), inner + 0.03], [String(last - 1), outer - 0.04]]) {
       const x = this.cx + Math.cos(ruler) * r * this.R, y = this.cy + Math.sin(ruler) * r * this.R * this.tilt;
       ctx.fillText(label, x, y + 4);
       words.push({x: x - 14, y: y - 6, w: 28, h: 13});
@@ -213,6 +236,7 @@ export class AnswerMap {
       const mid = (topic.a[0] + topic.a[1]) / 2;
       const p = this.point(mid, 1.1);
       const on = activeTopics.has(t);
+      if (this.ambient && !on) return;
       ctx.font = `${on ? '600 ' : ''}${this.narrow ? 11 : 12}px ${this.font}`;
       ctx.fillStyle = `rgba(${on ? MINT : CREAM},${on ? 0.95 : 0.42 * (0.7 + 0.3 * (p.z + 1) / 2)})`;
       const w = ctx.measureText(topic.l).width;
@@ -239,7 +263,7 @@ export class AnswerMap {
       const p = this.point(this.turn[i], this.radius[i]);
       const depth = 0.6 + 0.4 * (p.z + 1) / 2;
       const kind = map.kinds[i];
-      let a = (kind === 'r' ? 0.42 : 0.66) * depth * (1 - 0.55 * dim);
+      let a = (kind === 'r' ? 0.42 : 0.66) * depth * (1 - (this.ambient ? 0.35 : 0.55) * dim);
       let size = (kind === 'r' ? 1.3 : 1.85) * depth;
       if (beam !== null) {
         const d = Math.atan2(Math.sin(this.turn[i] * TAU + this.rot - beam), Math.cos(this.turn[i] * TAU + this.rot - beam));
@@ -274,9 +298,21 @@ export class AnswerMap {
       ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x, p.y + s); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.fill();
     }
 
+    // The last question's lights, going out.
+    for (const [i, gone] of this.fading) {
+      const k = 1 - (now - gone) / 700;
+      if (k <= 0) { this.fading.delete(i); continue; }
+      const p = this.point(this.turn[i], this.radius[i]);
+      const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 13);
+      halo.addColorStop(0, `rgba(${MINT},${0.45 * k})`); halo.addColorStop(1, `rgba(${MINT},0)`);
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, TAU); ctx.fill();
+    }
+
     // Candidates: lit, each with its thread to the question; while the answer is written,
-    // particles carry them in, more along the ones already cited.
-    const writing = live && (stage === 'thinking' || stage === 'drafting' || stage === 'checking' || stage === 'repairing');
+    // particles carry them in, more along the ones already cited. On the start screen one
+    // particle a thread, slowly: another reader's answer, drawn from these.
+    const writing = (live && (stage === 'thinking' || stage === 'drafting' || stage === 'checking' || stage === 'repairing'))
+      || (this.ambient && !this.reduce);
     const threads = [];
     for (const [i, info] of items) {
       const p = this.point(this.turn[i], this.radius[i]);
@@ -305,9 +341,9 @@ export class AnswerMap {
     if (writing) {
       const t = now / 1000;
       threads.forEach(({p, ctrl, cited}, j) => {
-        const count = cited ? 4 : 2;
+        const count = this.ambient ? 1 : cited ? 4 : 2;
         for (let s = 0; s < count; s++) {
-          const u = (t * (cited ? 0.7 : 0.4) + s / count + j * 0.137) % 1;
+          const u = (t * (this.ambient ? 0.22 : cited ? 0.7 : 0.4) + s / count + j * 0.137) % 1;
           ctx.fillStyle = `rgba(${MINT},${cited ? 0.95 : 0.55})`;
           ctx.beginPath();
           ctx.arc((1 - u) * (1 - u) * p.x + 2 * (1 - u) * u * ctrl.x + u * u * this.cx, (1 - u) * (1 - u) * p.y + 2 * (1 - u) * u * ctrl.y + u * u * this.cy, cited ? 1.9 : 1.4, 0, TAU);
@@ -402,7 +438,7 @@ export class AnswerMap {
       }
     }
 
-    const moving = live || now - this.lastActive < 2600 || [...this.seen.values()].some(t => now - t < 1500);
+    const moving = live || (this.ambient && !this.reduce) || now - this.lastActive < 2600 || [...this.seen.values()].some(t => now - t < 1500);
     if (moving && this.visible) this.frame = requestAnimationFrame(t => this.draw(t));
   }
 }

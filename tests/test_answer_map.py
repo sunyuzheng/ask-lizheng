@@ -53,7 +53,8 @@ def test_the_service_serves_the_map_beside_its_context(context_pack, tmp_path, m
     assert asked == [context_pack.parent / "answer-map.json"]
     assert packed.status_code == plain.status_code == 200
     assert packed.json() == plain.json() == {"v": 1, "keys": ["videos/20250211-Y20_JOyMs3k"]}
-    assert packed.headers["content-encoding"] == "gzip" and packed.headers["cache-control"] == "no-store"
+    assert packed.headers["content-encoding"] == "gzip" and "s-maxage=3600" in packed.headers["cache-control"]
+    assert "stale-while-revalidate" in plain.headers["cache-control"] and plain.headers["vary"] == "Accept-Encoding"
     assert plain.headers.get("content-encoding") is None and plain.content == stored.read_bytes()
 
 

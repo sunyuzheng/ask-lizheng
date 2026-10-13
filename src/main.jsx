@@ -14,7 +14,7 @@ import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
-import {AnswerMapPanel} from './answer-map-panel.jsx';
+import {AmbientMap, AnswerMapPanel} from './answer-map-panel.jsx';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -98,6 +98,8 @@ const DISCOVERY = {
   attribution: 'AI整理，不是立正本人回复。',
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
+  // Under the start screen's map (AmbientMap), above the questions it lights in turn.
+  liveMap: '每个光点是一份文章或视频，亮起的是下面这条回答引用的。',
   total: n => `已有${n}个公开问答`,
   similar: n => `另外${n}个类似提问`,
   feedback: '反馈或举报',
@@ -156,7 +158,6 @@ const MESSAGES = {
 // never shows inside WeChat or the iPhone app.
 const SHARE = {
   label: '分享这条回答',
-  bonusLabel: '分享这条回答，今天多问一次',
   quota: '分享上面的回答，今天多问一次',
   what: PUBLIC_QA.zh.share,
   create: '复制分享链接',
@@ -169,6 +170,10 @@ const SHARE = {
   copiedAgain: '已复制',
   failed: '这次没能生成链接，可以稍后再试。',
   wechat: '打开链接后，点右上角「···」就能发给朋友。',
+  // The bar under an answer (ShareBar): the answer's own page, ready as soon as it is written.
+  qr: '二维码',
+  qrNote: '用手机扫一扫，打开这条回答。',
+  bonusHint: '分享出去，今天多问一次。',
 };
 
 // Visits and a few clicks are counted by Vercel Web Analytics, which lizheng.ai's hosts serve;
@@ -394,6 +399,54 @@ function SharePanel({state, link, exporting, onCreate, onCopy, onSend, onExport}
         <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
       </>}
     </div>
+    {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
+  </div>;
+}
+
+// The QR code of an answer's page, drawn when asked for (qrcode-generator, as the saved image's).
+function QrCode({url}) {
+  const [svg, setSvg] = useState('');
+  useEffect(() => {
+    let alive = true;
+    import('qrcode-generator').then(({default: qrcode}) => {
+      if (!alive) return;
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      setSvg(qr.createSvgTag({cellSize: 4, margin: 2, scalable: true}));
+    }, () => {});
+    return () => { alive = false; };
+  }, [url]);
+  return <figure className="share-qr">
+    <div className="share-qr-code" aria-hidden="true" dangerouslySetInnerHTML={{__html: svg}}/>
+    <figcaption>{SHARE.qrNote}</figcaption>
+  </figure>;
+}
+
+// 分享这条回答, under every finished answer: its own page as soon as it is written, with what to
+// do with it. An answer to a question with the situation gets its page only when asked for, after
+// saying what the page shows; so does one whose page could not be made at once.
+function ShareBar({state = {}, link, bonus, exporting, onCreate, onCopy, onSend, onQr, onExport}) {
+  const ready = link && state.phase === 'ready';
+  return <div className="share-bar">
+    <p className="share-label">{SHARE.label}</p>
+    {ready ? <a className="share-url" href={state.url} target="_blank" rel="noopener">{shareDisplay(state.url)}<Ext/></a>
+      : link && state.phase !== 'working' && <p className="share-note">{SHARE.what}</p>}
+    {state.error && <p className="share-error" role="alert">{state.error}</p>}
+    <div className="share-actions">
+      {ready ? <>
+        <button type="button" className="pill-button share-primary" onClick={onCopy}>{state.copied ? SHARE.copiedAgain : SHARE.copy}</button>
+        <button type="button" className="pill-button" aria-expanded={!!state.qr} onClick={onQr}>{SHARE.qr}</button>
+        {typeof navigator.share === 'function' && <button type="button" className="pill-button" onClick={onSend}>{SHARE.send}</button>}
+      </> : link && <button type="button" className="pill-button share-primary" disabled={state.phase === 'working'} onClick={onCreate}>{state.phase === 'working' ? SHARE.creating : SHARE.create}</button>}
+      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('png')}>{exporting === 'png' ? '正在生成…' : '保存图片'}</button>
+      <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
+    </div>
+    {ready && (state.copied === false || state.copied || state.bonus === 'granted') && <p className="share-status" role="status">
+      {state.copied ? SHARE.copied : state.copied === false ? SHARE.select : ''}{state.bonus === 'granted' && <b>{SHARE.bonus}</b>}
+    </p>}
+    {ready && bonus && state.bonus !== 'granted' && <p className="share-bonus">{SHARE.bonusHint}</p>}
+    {ready && state.qr && <QrCode url={state.url}/>}
     {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
   </div>;
 }
@@ -680,6 +733,38 @@ function App() {
   const [openSimilar, setOpenSimilar] = useState(() => new Set());
   const [openNested, setOpenNested] = useState('');
   const [cardDetails, setCardDetails] = useState({});
+  // 别人正在问 on a wide screen: the map above it lights one of these answers' sources at a time,
+  // each in turn, or the one pointed at. Their answers are read once, as an opened card's are.
+  const [wideStage, setWideStage] = useState(() => !!window.matchMedia?.('(min-width: 1100px)').matches);
+  const [liveIndex, setLiveIndex] = useState(0);
+  const livePaused = useRef(false);
+  const liveRead = useRef(new Set());
+  useEffect(() => {
+    const query = window.matchMedia?.('(min-width: 1100px)');
+    if (!query) return undefined;
+    const change = () => setWideStage(query.matches);
+    query.addEventListener('change', change);
+    return () => query.removeEventListener('change', change);
+  }, []);
+  useEffect(() => {
+    if (!wideStage) return;
+    for (const card of liveCards) {
+      if (liveRead.current.has(card.public_id)) continue;
+      liveRead.current.add(card.public_id);
+      void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => (
+        prev[card.public_id] && prev[card.public_id] !== 'loading' ? prev : {...prev, [card.public_id]: detail || 'failed'})));
+    }
+  }, [wideStage, liveCards]);
+  useEffect(() => {
+    if (!wideStage || liveCards.length < 2 || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = setInterval(() => {
+      if (!livePaused.current && document.visibilityState === 'visible') setLiveIndex(index => (index + 1) % liveCards.length);
+    }, 5200);
+    return () => clearInterval(timer);
+  }, [wideStage, liveCards.length]);
+  const liveDetail = cardDetails[liveCards[liveIndex % Math.max(1, liveCards.length)]?.public_id];
+  const liveSources = liveDetail && typeof liveDetail === 'object' ? liveDetail.answer.sources : null;
+  const pointLive = index => { livePaused.current = true; setLiveIndex(index); };
   // Likes: what this browser liked (kept on this device), and the votes on their way, shown at once.
   const [likes, setLikes] = useState(readLikes);
   const [voting, setVoting] = useState({});
@@ -1113,7 +1198,8 @@ function App() {
     setExporting(`${m.id}-${kind}`);
     try {
       const {exportAnswer} = await import('./share.js');
-      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!(m.context || m.personal)});
+      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!(m.context || m.personal),
+        link: shares[m.id]?.phase === 'ready' ? shares[m.id].url : ''});
       const file = new File([blob], name, {type});
       if (kind === 'png' && window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({files: [file]})) {
         try { await navigator.share({files: [file], title: '问问立正'}); return; }
@@ -1133,36 +1219,64 @@ function App() {
   const bonusOffer = !IN_APP && !IN_WECHAT && !!account?.enabled && !account.unavailable && !account.founding
     && account.share_bonus === true && (account.remaining ?? 3) < 3;
   const setShare = (id, patch) => setShares(prev => ({...prev, [id]: {...prev[id], ...patch}}));
-  const toggleShare = m => {
-    const open = !shares[m.id]?.open;
-    setShare(m.id, {open, ...(!shares[m.id] ? {phase: 'confirm', error: ''} : {})});
-    if (open) track('Ask Share', {surface: SURFACE, action: 'open'});
-  };
   const openShare = m => {
-    setShare(m.id, {open: true, ...(shares[m.id]?.phase === 'ready' ? {} : {phase: 'confirm', error: ''})});
     requestAnimationFrame(() => document.getElementById(`share-${m.id}`)?.scrollIntoView({behavior: scrollBehavior(), block: 'center'}));
   };
+  const tookBonus = value => {
+    if (value.bonus === 'granted' || value.bonus === 'claimed')
+      setAccount(prev => (prev ? {...prev, share_bonus: false, ...(Number.isFinite(value.remaining) ? {remaining: value.remaining} : {})} : prev));
+  };
+  // Every finished answer gets its page at once (`auto`, not counted as a share), except one to a
+  // question with the situation: its page waits until the asker makes it. Reopened answers too.
+  const autoShared = useRef(new Set());
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.result?.status !== 'answered' || !m.result.share || m.context || m.personal || autoShared.current.has(m.id)) continue;
+      autoShared.current.add(m.id);
+      setShare(m.id, {phase: 'working', error: ''});
+      createShareLink(m.result.share, {surface: SURFACE, bonus: false, auto: true})
+        .then(value => setShare(m.id, {phase: 'ready', url: value.url}), () => setShare(m.id, {phase: 'confirm'}));
+    }
+  }, [messages]);
+  // Copying, sending or showing the QR code is the share: the first one counts it, and may give
+  // back one of today's questions.
+  function markShared(m, action) {
+    track('Ask Share', {surface: SURFACE, action});
+    if (shares[m.id]?.counted) return;
+    setShare(m.id, {counted: true});
+    createShareLink(m.result.share, {surface: SURFACE, bonus: bonusOffer, auto: false}).then(value => {
+      tookBonus(value);
+      if (value.bonus === 'granted') setShare(m.id, {bonus: 'granted'});
+    }, () => setShare(m.id, {counted: false}));
+  }
+  // The page made on request (with the situation, or when it could not be made at once): made,
+  // copied and counted together.
   async function createShare(m) {
     setShare(m.id, {phase: 'working', error: ''});
-    const link = createShareLink(m.result.share, {surface: SURFACE, bonus: bonusOffer});
+    const link = createShareLink(m.result.share, {surface: SURFACE, bonus: bonusOffer, auto: false});
     const copiedLink = copyWhenReady(link.then(value => value.url));
     try {
       const value = await link;
-      if (value.bonus === 'granted' || value.bonus === 'claimed')
-        setAccount(prev => (prev ? {...prev, share_bonus: false, ...(Number.isFinite(value.remaining) ? {remaining: value.remaining} : {})} : prev));
-      setShare(m.id, {phase: 'ready', url: value.url, bonus: value.bonus, copied: await copiedLink});
+      tookBonus(value);
+      setShare(m.id, {phase: 'ready', url: value.url, bonus: value.bonus, counted: true, copied: await copiedLink});
       track('Ask Share', {surface: SURFACE, action: value.bonus === 'granted' ? 'bonus' : 'link'});
     } catch {
       setShare(m.id, {phase: 'confirm', error: SHARE.failed});
     }
   }
   async function copyShare(m) {
-    const done = await copyWhenReady(shares[m.id].url);
-    setShare(m.id, {copied: done});
+    const done = copyWhenReady(shares[m.id].url);
+    markShared(m, 'copy');
+    setShare(m.id, {copied: await done});
   }
   async function sendShare(m) {
-    track('Ask Share', {surface: SURFACE, action: 'send'});
+    markShared(m, 'send');
     try { await navigator.share({title: m.question, url: shares[m.id].url}); } catch { /* Closed, or not allowed here. */ }
+  }
+  function toggleQr(m) {
+    const open = !shares[m.id]?.qr;
+    setShare(m.id, {qr: open});
+    if (open) markShared(m, 'qr');
   }
   // The answer above that the count line offers to share once the day's questions are used.
   const shareable = bonusOffer ? messages.filter(m => m.result?.share).at(-1) : undefined;
@@ -1294,8 +1408,12 @@ function App() {
         {discoveryState !== 'none' && <aside className="live" aria-labelledby="live-title" aria-busy={!questionLists}>
           <h2 id="live-title">{DISCOVERY.live}</h2>
           {publicTotal && <p className="live-count">{DISCOVERY.total(publicTotal)}</p>}
+          {wideStage && <AmbientMap sources={liveSources}/>}
+          {wideStage && <p className="live-map-note">{DISCOVERY.liveMap}</p>}
           <ol>{!questionLists ? [0, 1, 2].map(i => <li key={i} className="live-placeholder" aria-hidden="true"><i/><b/></li>)
-            : liveCards.map(card => <li key={card.public_id}><button type="button" onClick={() => openFromLive(card)}>
+            : liveCards.map((card, index) => <li key={card.public_id} className={wideStage && index === liveIndex ? 'on' : undefined}>
+              <button type="button" onClick={() => openFromLive(card)} onMouseEnter={() => pointLive(index)} onFocus={() => pointLive(index)}
+                onMouseLeave={() => { livePaused.current = false; }} onBlur={() => { livePaused.current = false; }}>
               <time dateTime={card.asked_at} className={Date.now() - Date.parse(card.asked_at) < 3600000 ? 'fresh' : ''}>{askedAgo(card.asked_at)}</time>
               <span>{card.question}</span>
             </button></li>)}</ol>
@@ -1382,13 +1500,12 @@ function App() {
                     <summary>回到{sources.length}份原文<Chev/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
-                  <div className="answer-actions" id={`share-${m.id}`}>
-                    {m.result.status === 'answered' && <button type="button" className="ghost-button share-button" aria-expanded={!!shares[m.id]?.open} onClick={() => toggleShare(m)}>{bonusOffer && m.result.share ? SHARE.bonusLabel : SHARE.label}</button>}
+                  {m.result.status === 'answered' && <div id={`share-${m.id}`}><ShareBar state={shares[m.id]} link={!!m.result.share} bonus={bonusOffer}
+                    exporting={exporting === `${m.id}-png` ? 'png' : exporting === `${m.id}-pdf` ? 'pdf' : exporting ? 'other' : ''}
+                    onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onQr={() => toggleQr(m)} onExport={kind => exportTurn(kind, m)}/></div>}
+                  <div className="answer-actions">
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
                   </div>
-                  {m.result.status === 'answered' && shares[m.id]?.open && <SharePanel state={shares[m.id]} link={!!m.result.share}
-                    exporting={exporting === `${m.id}-png` ? 'png' : exporting === `${m.id}-pdf` ? 'pdf' : exporting ? 'other' : ''}
-                    onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onExport={kind => exportTurn(kind, m)}/>}
                   {last && m.result.followups?.length > 0 && <div className="followups">
                     <p>可以接着问<span>点一下放进输入框，改好再发</span></p>
                     {m.result.followups.map(item => <button type="button" key={item} onClick={() => prefill(item)}>{item}</button>)}

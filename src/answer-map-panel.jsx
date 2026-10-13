@@ -88,3 +88,34 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
     </figcaption>
   </figure>;
 }
+
+/**
+ * The start screen's map: every material, turning slowly, with the sources of one recent public
+ * answer lit (`sources`, null while it loads). Not pointed at; the list beside it chooses.
+ */
+export function AmbientMap({sources}) {
+  const canvas = useRef(null);
+  const view = useRef(null);
+  const [map, setMap] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadAnswerMap().then(data => { if (alive) setMap(data); }, () => {});
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!map || !canvas.current) return undefined;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    view.current = new AnswerMap(canvas.current, map, {ambient: true, reduce});
+    return () => { view.current?.destroy(); view.current = null; };
+  }, [map]);
+
+  useEffect(() => {
+    if (!map || !view.current) return;
+    const candidates = (sources || []).map(source => ({id: source.id, item: sourceItem(map, source)}));
+    view.current.update({live: false, done: false, stage: 'ambient', candidates, cards: [], cited: [], sources: new Map(), selected: null});
+  }, [map, sources]);
+
+  return <div className="ambient-map"><canvas ref={canvas} aria-hidden="true"/></div>;
+}

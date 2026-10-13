@@ -254,7 +254,9 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        if request.url.path.startswith("/api/"):
+        # The answer map is public and the same for everyone: the edge keeps it, so the start
+        # screen draws it at once even while this service sleeps (see answer_map).
+        if request.url.path.startswith("/api/") and request.url.path != "/api/answer-map":
             response.headers["Cache-Control"] = (
                 "no-store, no-transform"
                 if response.headers.get("content-type", "").startswith("text/event-stream")
@@ -287,13 +289,16 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
 
     @application.get("/api/answer-map")
     async def answer_map(request: Request):
-        """Every public material's light on the answer map the page draws while it answers."""
+        """Every public material's light on the answer map the page draws while it answers. Kept
+        an hour at the edge and served stale while this service wakes; a context update shows
+        within the hour."""
         stored = application.state.answer_map
         if stored is None:
-            raise HTTPException(404, "暂时没有材料地图。")
+            return JSONResponse(status_code=404, content={"message": "暂时没有材料地图。", "code": "unavailable"}, headers={"Cache-Control": "no-store"})
+        headers = {"Vary": "Accept-Encoding", "Cache-Control": "public, max-age=600, s-maxage=3600, stale-while-revalidate=604800"}
         if "gzip" in request.headers.get("accept-encoding", "").lower():
-            return Response(stored[1], media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
-        return Response(stored[0], media_type="application/json", headers={"Vary": "Accept-Encoding"})
+            return Response(stored[1], media_type="application/json", headers={**headers, "Content-Encoding": "gzip"})
+        return Response(stored[0], media_type="application/json", headers=headers)
 
     def ops_ready():
         return bool(application.state.ops_records.enabled and application.state.ops_records.secret and application.state.query_records.secret

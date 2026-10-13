@@ -13,9 +13,10 @@ async function post(path, body) {
   return value;
 }
 
-/** Makes (or finds) the answer's page; `bonus` asks for today's question back. */
-export async function createShareLink(share, {surface, bonus}) {
-  const value = await post('/api/ask-lizheng/share', {record_id: share.record_id, word: share.word, proof: share.proof, surface, bonus});
+/** Makes (or finds) the answer's page; `bonus` asks for today's question back. `auto` is the page
+ * made as the answer arrives, before anyone shares it: lizheng.ai does not count it as a share. */
+export async function createShareLink(share, {surface, bonus, auto = false}) {
+  const value = await post('/api/ask-lizheng/share', {record_id: share.record_id, word: share.word, proof: share.proof, surface, bonus, auto});
   if (typeof value.url !== 'string' || !value.url.startsWith('https://ask.lizheng.ai/s/')) throw new Error('share failed');
   return value;
 }
