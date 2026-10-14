@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Lay out every public material as a light on the answer map (data/answer-map.json).
+"""Lay out every public material on the answer map (data/answer-map.json).
 
-The map is what a reader watches while an answer is found: the question at the centre, the
-judgment cards on the ring around it, and around them every material the answers draw from,
-one light each. Distance from the centre is when it was published (2020 inside, the latest
-year outside); the angle is its topic, so a question lights up the part of the map it is about.
+The map is what a reader watches while an answer is found: since 2026-10-13 a timeline, a row a
+topic (g), each material a stroke on the day it was published (d, days since the first year
+began), the question at the right end. The older layout of a disc stays in the file for pages
+opened before that day: distance from the centre is when a material was published (r, 2020
+inside), the angle its topic and its place among its neighbours (t), the judgment cards on a ring.
 
 Topics come from config/answer-map-topics.json: each names words that pick a handful of seed
 materials. Their mean embeddings start a few rounds of k-means over the materials that are
