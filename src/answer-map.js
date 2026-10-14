@@ -52,6 +52,16 @@ export function sourceItem(map, source, key = '') {
 
 const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
 
+/** The address a light opens: the source's own, https only. */
+export function openableUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * The map on a canvas. `ambient` is the start screen's: it turns on its own, nothing on it is
  * pointed at, and the lights it is given (another reader's question) change with a crossfade.
@@ -171,7 +181,8 @@ export class AnswerMap {
         if (h) {
           this.onSelect?.(h.id);
           const source = this.state.sources.get(h.id);
-          if (source?.url) { window.open(source.url, '_blank', 'noopener,noreferrer'); this.onOpen?.(source); }
+          const url = openableUrl(source?.url);
+          if (url) { window.open(url, '_blank', 'noopener,noreferrer'); this.onOpen?.(source); }
         }
       }
       down = null;
@@ -433,7 +444,7 @@ export class AnswerMap {
     if (this.hover) {
       const source = state.sources.get(this.hover.id);
       if (source?.title) {
-        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${source.title} ↗`;
+        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${source.title}${openableUrl(source.url) ? ' ↗' : ''}`;
         ctx.font = `12px ${this.font}`;
         const maxW = Math.min(this.w - 16, 320);
         let shown = text;

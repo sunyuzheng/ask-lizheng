@@ -5,7 +5,7 @@
 // and a QR code to it (to ask.lizheng.ai when it has none). Loaded only when
 // someone saves an answer.
 import qrcode from 'qrcode-generator';
-import {loadAnswerMap, paintAnswerMap, sourceItem} from './answer-map.js';
+import {loadAnswerMap, paintAnswerMap, sourceItem, openableUrl} from './answer-map.js';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
@@ -296,7 +296,7 @@ function mapRow(map, result, kind) {
   const art = document.createElement('canvas');
   const hits = paintAnswerMap(art, map, {live: false, done: true, stage: 'done', candidates: cited, cards: [], cited,
     sources: new Map(sources.map(source => [source.id, source])), selected: null}, {width: MAP_W, height: MAP_H, scale: scale * 2, font: SANS});
-  const url = new Map(sources.map(source => [source.id, source.url]));
+  const url = new Map(sources.map(source => [source.id, openableUrl(source.url)]).filter(([, value]) => value));
   const links = kind === 'pdf' ? hits.filter(hit => url.has(hit.id))
     .map(hit => ({x: PAD + hit.x * scale, y: hit.y * scale, w: hit.w * scale, h: hit.h * scale, url: url.get(hit.id)})) : [];
   const what = result.status === 'sources-only' ? '找到' : '回答引用';
