@@ -1079,14 +1079,25 @@ function App() {
       target?.scrollIntoView({behavior: scrollBehavior(), block: 'center'});
     });
   };
-  const newChat = () => {
-    if (busy) return;
+  const startOver = () => {
     setMessages([]); setQuestion(''); setBackground({goal: '', facts: '', tried: ''}); setPersonal(false); setEditingSituation(false);
     questionFrom.current = 'typed';
     setSelected(''); setSourceTurn(null); setError('');
     conversationId.current = null;
     window.scrollTo({top: 0, behavior: scrollBehavior()});
+  };
+  const newChat = () => {
+    if (busy) return;
+    startOver();
     focusInput();
+  };
+  // 问问立正 at the top left is the way home (2026-10-14, the owner): from an answer, one's own or a
+  // shared one, back to the start page (the address follows); on the start page, to its top. While an
+  // answer is being written, only to the top. No keyboard pops up on a phone, unlike 新问题.
+  const goHome = event => {
+    event.preventDefault();
+    if (conversation && !busy) startOver();
+    else window.scrollTo({top: 0, behavior: scrollBehavior()});
   };
   // A question from 我的提问 opens as the conversation, its answer as it came; it can be followed up.
   function openAsked(item) {
@@ -1419,9 +1430,9 @@ function App() {
     <a className="skip-link" href="#main-content">跳到提问与回答</a>
     <header className="header">
       <div className="header-inner">
-        <button type="button" className="brand" onClick={() => window.scrollTo({top: 0, behavior: scrollBehavior()})} aria-label="问问立正，回到页面顶部">
+        <a className="brand" href="/" onClick={goHome} aria-label="问问立正首页">
           <Mark/><span>问问立正</span>
-        </button>
+        </a>
         <nav className="header-nav" aria-label="页面">
           {conversation && <button type="button" className="header-link new-chat" onClick={newChat} disabled={busy}>新问题</button>}
           {askedHere.length > 0 && <button type="button" className="header-link" aria-haspopup="dialog" onClick={() => setHistoryOpen(true)}>{HISTORY.title}</button>}
