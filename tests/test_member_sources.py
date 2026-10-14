@@ -125,13 +125,23 @@ def test_browser_source_helpers_and_discovery_keep_metadata_without_account_gati
     # Node imports production JS modules; no DOM, model, login or real network.
     code = r'''
 import assert from 'node:assert/strict';
-import {isMemberVideo,memberJoinUrl,memberVideoUrl,sourceAccessNote,sourceCopyText,sourceTypeLabel,transcriptQualityNote,YOUTUBE_MEMBERSHIP_URL} from './src/source-access.js';
+import {isMembersOnly,isMemberVideo,memberJoinUrl,memberVideoUrl,sourceAccessNote,sourceCopyText,sourceTypeLabel,transcriptQualityNote,YOUTUBE_MEMBERSHIP_URL} from './src/source-access.js';
+import {membersOnly} from './src/answer-map.js';
 import {discoveryDetail} from './src/discovery.js';
 const source={id:'S1',title:'Synthetic member video',source_type:'video-transcript',date:'2026-10-02',url:'https://www.youtube.com/watch?v=synthetic&t=900s',public_copy_url:'https://example.test/transcript',
  source_visibility:'members-only',text_access:'public',membership_platform:'youtube',membership_url:YOUTUBE_MEMBERSHIP_URL,membership_verified_at:'2026-10-02',transcript_source_kind:'previously-included-transcript',transcript_quality:'uncorrected-asr',speaker_classification:'mixed-or-unresolved'};
 assert.equal(sourceTypeLabel(source),'会员视频');
 assert.equal(sourceTypeLabel({source_type:'video-transcript',title:'会员视频'}),'视频');
 assert.equal(isMemberVideo({source_type:'community-post',source_visibility:'members-only'}),false);
+// A post or reply in the community's members' area is members' content too: gold, with its own label.
+const post={source_type:'community-post',source_visibility:'members-only'};
+assert.equal(isMembersOnly(post),true);
+assert.equal(membersOnly(post),true);
+assert.equal(sourceTypeLabel(post),'会员帖子');
+assert.equal(sourceTypeLabel({...post,source_type:'community-comment'}),'会员区回复');
+assert.match(sourceAccessNote(post),/会员区/);
+assert.equal(isMembersOnly({source_type:'community-post',source_visibility:'public'}),false);
+assert.equal(sourceTypeLabel({source_type:'community-post',source_visibility:'public'}),'文章');
 assert.equal(memberJoinUrl([source, {...source,id:'S2'}]),YOUTUBE_MEMBERSHIP_URL);
 assert.equal(memberJoinUrl([{...source,source_visibility:'public'}]),null);
 assert.equal(memberJoinUrl([{...source,membership_url:'https://attacker.test/join'}]),null);

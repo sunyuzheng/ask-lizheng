@@ -18,8 +18,10 @@ export function loadAnswerMap(url = '/api/answer-map') {
   return loading;
 }
 
+// Form: videos and talks cream, writing mint, courses and the book sky. Gold is kept for the numbers
+// of members' content, so judgment cards are cream diamonds.
 const GROUP = {v: 0, d: 0, w: 1, r: 1, x: 1, c: 2, b: 2};
-const COLOR = [[248, 241, 228], [143, 212, 164], [226, 194, 124]];
+const COLOR = [[248, 241, 228], [143, 212, 164], [150, 196, 232]];
 const MINT = '143,212,164';
 const GOLD = '226,194,124';
 const CREAM = '248,241,228';
@@ -51,6 +53,9 @@ export function sourceItem(map, source, key = '') {
 }
 
 const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+
+/** Only members open its original (a member video, course, post or reply): its number is gold. */
+export const membersOnly = source => source?.source_visibility === 'members-only';
 
 /** The address a light opens: the source's own, https only. */
 export function openableUrl(value) {
@@ -301,20 +306,20 @@ export class AnswerMap {
       if (!card) continue;
       const p = this.point(card.t / 10000, cardRing);
       const k = ease(since(`k:${card.id}`) / 0.8);
-      ctx.strokeStyle = `rgba(${GOLD},${0.32 * k})`; ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${CREAM},${0.32 * k})`; ctx.lineWidth = 1;
       for (const i of card.src) {
         const q = this.point(this.turn[i], this.radius[i]);
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-        ctx.fillStyle = `rgba(${GOLD},${0.85 * k})`;
+        ctx.fillStyle = `rgba(${CREAM},${0.85 * k})`;
         ctx.beginPath(); ctx.arc(q.x, q.y, 2.2, 0, TAU); ctx.fill();
       }
-      ctx.strokeStyle = `rgba(${GOLD},${0.6 * k})`;
+      ctx.strokeStyle = `rgba(${CREAM},${0.6 * k})`;
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(this.cx, this.cy); ctx.stroke();
       const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 12);
-      glow.addColorStop(0, `rgba(${GOLD},${0.45 * k})`); glow.addColorStop(1, `rgba(${GOLD},0)`);
+      glow.addColorStop(0, `rgba(${CREAM},${0.45 * k})`); glow.addColorStop(1, `rgba(${CREAM},0)`);
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, TAU); ctx.fill();
       const s = 3 + 2.5 * k;
-      ctx.fillStyle = `rgba(${GOLD},${0.4 + 0.6 * k})`;
+      ctx.fillStyle = `rgba(${CREAM},${0.4 + 0.6 * k})`;
       ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x, p.y + s); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.fill();
     }
 
@@ -338,10 +343,11 @@ export class AnswerMap {
       const p = this.point(this.turn[i], this.radius[i]);
       const k = ease(info.at / 0.9);
       const cited = citedItems.has(i);
+      const tone = cited && membersOnly(state.sources.get(info.id)) ? GOLD : MINT;
       const lift = Math.min(p.y, this.cy) - Math.abs(p.x - this.cx) * 0.16 - 16;
       const ctrl = {x: (p.x + this.cx) / 2, y: lift};
       const quiet = state.done && !cited;
-      ctx.strokeStyle = `rgba(${MINT},${(quiet ? 0.12 : cited ? 0.7 : 0.32) * k})`;
+      ctx.strokeStyle = `rgba(${tone},${(quiet ? 0.12 : cited ? 0.7 : 0.32) * k})`;
       ctx.lineWidth = cited ? 1.4 : 1;
       ctx.beginPath(); ctx.moveTo(p.x, p.y);
       const steps = 22, upto = Math.round(steps * k);
@@ -352,7 +358,7 @@ export class AnswerMap {
       ctx.stroke();
       threads.push({p, ctrl, cited});
       const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 13);
-      halo.addColorStop(0, `rgba(${MINT},${(quiet ? 0.15 : 0.5) * k})`); halo.addColorStop(1, `rgba(${MINT},0)`);
+      halo.addColorStop(0, `rgba(${tone},${(quiet ? 0.15 : 0.5) * k})`); halo.addColorStop(1, `rgba(${tone},0)`);
       ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, TAU); ctx.fill();
       const [r, g, b] = COLOR[GROUP[map.kinds[i]] ?? 1];
       ctx.fillStyle = `rgba(${r},${g},${b},${quiet ? 0.45 : 1})`;
@@ -398,6 +404,7 @@ export class AnswerMap {
       && !taken.some(o => x < o.x + o.w + 2 && x + w + 2 > o.x && y < o.y + o.h + 2 && y + h + 2 > o.y);
     for (const {info, p} of cited) {
       const label = info.id.slice(1);
+      const tone = membersOnly(state.sources.get(info.id)) ? GOLD : MINT;
       const k = ease(info.at / 0.5);
       const w = Math.max(18, ctx.measureText(label).width + 10), h = 17;
       // Nearest clear spot, in rings around the light; above and to the right reads best.
@@ -417,7 +424,7 @@ export class AnswerMap {
       const nx = Math.max(x, Math.min(p.x, x + w)), ny = Math.max(y, Math.min(p.y, y + h));
       ctx.globalAlpha = k;
       if (Math.hypot(nx - p.x, ny - p.y) > 10) {
-        ctx.strokeStyle = `rgba(${MINT},0.55)`; ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(${tone},0.55)`; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny); ctx.stroke();
       }
       const open = state.selected === info.id;
@@ -425,7 +432,7 @@ export class AnswerMap {
         ctx.strokeStyle = `rgba(${CREAM},0.9)`; ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, TAU); ctx.stroke();
       }
-      ctx.fillStyle = open || this.hover?.id === info.id ? `rgb(${CREAM})` : `rgb(${MINT})`;
+      ctx.fillStyle = open || this.hover?.id === info.id ? `rgb(${CREAM})` : `rgb(${tone})`;
       roundRect(ctx, x, y, w, h, 5); ctx.fill();
       ctx.fillStyle = '#0b2f1b';
       ctx.fillText(label, x + w / 2, y + 12.5);
@@ -444,7 +451,7 @@ export class AnswerMap {
     if (this.hover) {
       const source = state.sources.get(this.hover.id);
       if (source?.title) {
-        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${source.title}${openableUrl(source.url) ? ' ↗' : ''}`;
+        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${membersOnly(source) ? '会员 · ' : ''}${source.title}${openableUrl(source.url) ? ' ↗' : ''}`;
         ctx.font = `12px ${this.font}`;
         const maxW = Math.min(this.w - 16, 320);
         let shown = text;

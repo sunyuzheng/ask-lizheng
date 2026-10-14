@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {AnswerMap, loadAnswerMap, sourceItem} from './answer-map.js';
+import {AnswerMap, loadAnswerMap, membersOnly, sourceItem} from './answer-map.js';
 
 const STEPS = ['查找原文', '匹配材料', '整理回答', '核对出处'];
 const STAGE = {retrieving: 0, matching: 1, thinking: 2, drafting: 2, checking: 3, repairing: 3};
@@ -70,6 +70,7 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
   const found = state?.candidates.filter(row => row.item >= 0).length || 0;
   const cards = state?.cards || [];
   const numbered = message.result?.sources?.length || 0;
+  const members = (message.result?.sources || []).some(membersOnly);
 
   return <figure className={`answer-map ${live ? 'answer-map-live' : 'answer-map-done'}`}>
     <div className="answer-map-stage">
@@ -78,6 +79,7 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
     <figcaption>
       {live ? steps : numbered > 0 && <p className="answer-map-lead">
         图上标号的是{message.result.status === 'sources-only' ? '找到' : '回答引用'}的{numbered}份材料，点编号打开原视频或原帖。
+        {members && <span className="answer-map-member">金色的是会员内容，打开需要会员。</span>}
       </p>}
       {((live && found > 0) || cards.length > 0) && <p className="answer-map-counts">
         {live && found > 0 && <span>{found}份候选材料</span>}

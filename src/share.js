@@ -7,7 +7,7 @@
 import qrcode from 'qrcode-generator';
 import {loadAnswerMap, paintAnswerMap, sourceItem, openableUrl} from './answer-map.js';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
-import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
+import {isMembersOnly, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
 
 const SITE = 'https://ask.lizheng.ai/';
@@ -20,6 +20,7 @@ const C = {
   ink: '#121613', ink2: '#343a35', muted: '#6c7069', faint: '#8d9088', line: '#e2ddd1',
   ivory: '#f8f5ee', paper: '#fcfbf7', sand: '#efe9dc', green: '#238343', greenText: '#1c6b37',
   greenTint: '#e4efe3', forest: '#0f3d23', onForest: '#f8f1e4', amber: '#7a5512', amberTint: '#f5ead3',
+  member: '#79603f', memberTint: '#f3ead8',
 };
 const SERIF = '"Noto Serif SC", "Songti SC", "STSong", serif';
 const SANS = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -256,8 +257,10 @@ function sourceRow(ctx, source, number) {
   const h = 24 + titleLines.length * 40 + 34 + (urlLines ? (metaLines.length - 1 + urlLines.length) * 30 : 0) + 24 + (access ? 34 : 0);
   return {h, link: source.url, draw(c, y) {
     c.fillStyle = C.line; c.fillRect(PAD, y, INNER, 2);
-    c.fillStyle = C.greenTint; roundRect(c, PAD, y + 26, 44, 44, 10); c.fill();
-    c.fillStyle = C.greenText; c.font = font(700, 22); c.textAlign = 'center'; c.textBaseline = 'middle';
+    // Members' content is gold, as on the page and the map.
+    const member = isMembersOnly(source);
+    c.fillStyle = member ? C.memberTint : C.greenTint; roundRect(c, PAD, y + 26, 44, 44, 10); c.fill();
+    c.fillStyle = member ? C.member : C.greenText; c.font = font(700, 22); c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(number, PAD + 22, y + 49);
     c.textAlign = 'left';
     let ty = y + 24;
@@ -300,6 +303,7 @@ function mapRow(map, result, kind) {
   const links = kind === 'pdf' ? hits.filter(hit => url.has(hit.id))
     .map(hit => ({x: PAD + hit.x * scale, y: hit.y * scale, w: hit.w * scale, h: hit.h * scale, url: url.get(hit.id)})) : [];
   const what = result.status === 'sources-only' ? '找到' : '回答引用';
+  const members = sources.some(isMembersOnly);
   const lead = kind === 'pdf' ? `图上标号的是${what}的${sources.length}份材料，点编号打开原视频或原帖。` : `图上标号的是${what}的${sources.length}份材料，编号和正文、出处一致。`;
   return {h, links, draw(c, y) {
     const glow = c.createRadialGradient(W / 2, y + mapH * 0.44, 0, W / 2, y + mapH * 0.44, INNER * 0.62);
@@ -312,10 +316,14 @@ function mapRow(map, result, kind) {
     c.font = font(400, 18);
     let x = PAD + 28;
     const ly = y + mapH + 78;
-    for (const [color, label] of [['#f8f1e4', '视频与对谈'], ['#8fd4a4', '文字'], ['#e2c27c', '课程与书']]) {
+    for (const [color, label] of [['#f8f1e4', '视频与对谈'], ['#8fd4a4', '文字'], ['#96c4e8', '课程与书']]) {
       c.fillStyle = color; c.beginPath(); c.arc(x + 5, ly, 5, 0, Math.PI * 2); c.fill();
       c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText(label, x + 17, ly);
       x += 17 + c.measureText(label).width + 26;
+    }
+    if (members) {
+      c.fillStyle = '#e2c27c'; roundRect(c, x, ly - 7, 18, 14, 4); c.fill();
+      c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText('会员内容', x + 26, ly);
     }
     c.textAlign = 'right'; c.fillText('越往外越新，方向是主题', PAD + INNER - 28, ly); c.textAlign = 'left';
   }};
@@ -387,7 +395,7 @@ function layout(ctx, {question, result, date, personal, link, map, kind}) {
     }}, gap(10));
     result.sources.forEach((source, i) => {
       rows.push(sourceRow(ctx, source, String(i + 1)));
-      if ((isMemberVideo(source) || isMemberCourse(source)) && source.text_access === 'public' && source.public_copy_url) {
+      if (isMembersOnly(source) && source.text_access === 'public' && source.public_copy_url) {
         const copyRows = textRows(ctx, [{text: `公开文字稿：${plainUrl(source.public_copy_url)}`}], {size: 19, lh: 1.5, weight: 400, color: C.greenText}, {indent: 70});
         rows.push(...copyRows.map(row => ({...row, link: source.public_copy_url})), gap(14));
       }

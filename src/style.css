@@ -30,6 +30,7 @@
   --amber: #7a5512;
   --amber-tint: #f6ecd6;
   --member-ink: #79603f;
+  --member-tint: #f3ead8;
   --member-line: #d9cfbb;
   --red: #8b3b25;
   --red-tint: #f7e6df;
@@ -1893,6 +1894,11 @@ main {
 }
 
 .answer-map-card {
+  color: var(--on-forest);
+}
+
+.answer-map-member {
+  margin-left: 0.3em;
   color: #e2c27c;
 }
 
@@ -1935,14 +1941,14 @@ main {
 }
 
 .answer-map-legend .course {
-  background: #e2c27c;
+  background: #96c4e8;
 }
 
 .answer-map-legend .diamond {
   width: 6px;
   height: 6px;
   margin: 0 1px;
-  background: #e2c27c;
+  background: var(--on-forest);
   transform: rotate(45deg);
 }
 
@@ -2591,11 +2597,28 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+/* Members' content is gold wherever it shows: its label, its number here, in the text and on the
+   map (the map's gold), so a wall after clicking is no surprise. */
 .member-video-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--member-tint);
   color: var(--member-ink);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
+}
+
+.source-num.member,
+.cite.member,
+.section-sources button.member {
+  color: var(--member-ink);
+}
+
+.cite.member:hover,
+.section-sources button.member:hover {
+  background: var(--member-ink);
+  color: #fff;
 }
 
 .candidate > .member-video-badge {

@@ -12,7 +12,7 @@ import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
-import {isMemberCourse, isMemberVideo, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
+import {isMembersOnly, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
 import {AmbientMap, AnswerMapPanel} from './answer-map-panel.jsx';
 
@@ -251,10 +251,10 @@ const sourceLabel = sourceTypeLabel;
 const sourceDate = source => source.date?.slice(0, 10) || '日期未标明';
 
 function SourceCard({source, selected, onOpen, prefix}) {
-  const member = isMemberVideo(source) || isMemberCourse(source);
+  const member = isMembersOnly(source);
   return <article id={`${prefix}-source-${source.id}`} className={`source ${member ? 'source-member' : ''} ${selected ? 'selected' : ''}`}>
     <div className="source-meta">
-      <span className="source-num">{source.id.slice(1)}</span>
+      <span className={`source-num ${member ? 'member' : ''}`}>{source.id.slice(1)}</span>
       <span className={member ? 'member-video-badge' : undefined}>{sourceLabel(source)}</span>
       <time>{sourceDate(source)}</time>
     </div>
@@ -277,7 +277,7 @@ function SourceCard({source, selected, onOpen, prefix}) {
       {source.excerpt && <p className="excerpt">{source.excerpt}</p>}
       <p className="attribution">{source.author && `${source.author} · `}{source.attribution_note}</p>
       {transcriptQualityNote(source) && <p className="source-quality-note">{transcriptQualityNote(source)}</p>}
-      {source.public_copy_url && !((isMemberVideo(source) || isMemberCourse(source)) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
+      {source.public_copy_url && !(isMembersOnly(source) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
     </details>
   </article>;
 }
@@ -287,9 +287,10 @@ function Markdown({text, sources, onSelect}) {
   return <ReactMarkdown components={{a: ({href, children}) => {
     if (href?.startsWith('#cite-')) {
       const id = href.slice(6);
-      return sources.some(source => source.id === id)
+      const source = sources.find(item => item.id === id);
+      return source
         // A footnote mark: an inline link (a button would sit apart in the line), joined to the word it marks.
-        ? <>{'\u2060'}<a className="cite" href={`#source-${id}`} onClick={event => { event.preventDefault(); onSelect(id); }} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</a></>
+        ? <>{'\u2060'}<a className={`cite ${isMembersOnly(source) ? 'member' : ''}`} href={`#source-${id}`} onClick={event => { event.preventDefault(); onSelect(id); }} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</a></>
         : null;
     }
     return <span>{children}</span>;
@@ -308,7 +309,7 @@ function SectionBlock({section, sources, onSelect, personal}) {
     <Markdown text={section.body} sources={sources} onSelect={onSelect}/>
     {section.source_ids?.length > 0 && !/\[S\d+\]/.test(section.body) && <div className="section-sources">
       <span>出处</span>
-      {section.source_ids.map(id => <button type="button" key={id} onClick={() => onSelect(id)} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</button>)}
+      {section.source_ids.map(id => <button type="button" key={id} className={isMembersOnly(sources.find(item => item.id === id)) ? 'member' : undefined} onClick={() => onSelect(id)} aria-label={`查看出处${id.slice(1)}`}>{id.slice(1)}</button>)}
     </div>}
   </section>;
 }
@@ -347,10 +348,10 @@ function Candidates({sources, turnId, onSelect}) {
   return <div className="candidates">
     <div className="candidates-head"><h3>已找到的材料</h3><span>候选，不一定都会用上</span></div>
     {sources.slice(0, 2).map(source => <article className="candidate" key={`${source.id}-${source.url}`}>
-      {(isMemberVideo(source) || isMemberCourse(source)) && <span className="member-video-badge">{sourceLabel(source)}</span>}
+      {isMembersOnly(source) && <span className="member-video-badge">{sourceLabel(source)}</span>}
       <a href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>{source.title}<Ext/></a>
       <time>{sourceDate(source)}</time>
-      {(isMemberVideo(source) || isMemberCourse(source)) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
+      {isMembersOnly(source) && <p className="source-access-note">{sourceAccessNote(source)}</p>}
       <p>{source.excerpt?.slice(0, 150)}{source.excerpt?.length > 150 ? '…' : ''}</p>
     </article>)}
     {sources.length > 2 && <details className="candidates-all">
@@ -758,6 +759,17 @@ function App() {
   const [openSimilar, setOpenSimilar] = useState(() => new Set());
   const [openNested, setOpenNested] = useState('');
   const [cardDetails, setCardDetails] = useState({});
+  // Only one question is open at a time, so opening one below an open one folds the one above:
+  // the question tapped stays where it was on screen, its answer starting under the finger, not
+  // the page scrolled to its end (2026-10-13, the owner's recording).
+  const keptHead = useRef(null);
+  useLayoutEffect(() => {
+    const kept = keptHead.current;
+    keptHead.current = null;
+    if (!kept?.head.isConnected) return;
+    const moved = kept.head.getBoundingClientRect().top - kept.top;
+    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+  }, [openCard, openNested]);
   // 别人正在问 on a wide screen: the map above it lights one of these answers' sources at a time,
   // each in turn, or the one pointed at. Their answers are read once, as an opened card's are.
   const [wideStage, setWideStage] = useState(() => !!window.matchMedia?.('(min-width: 1100px)').matches);
@@ -996,8 +1008,9 @@ function App() {
     questionFrom.current = from;
     setQuestion(value); setError(''); focusInput();
   };
-  const toggleCard = (card, from = view, nested = false) => {
+  const toggleCard = (card, from = view, nested = false, head = null) => {
     const [shown, show] = nested ? [openNested, setOpenNested] : [openCard, setOpenCard];
+    if (head) keptHead.current = {head, top: head.getBoundingClientRect().top};
     if (shown === card.public_id) { show(''); return; }
     show(card.public_id);
     markUsage('d_open');
@@ -1401,7 +1414,7 @@ function App() {
   // own like and answer.
   const questionCard = (card, nested = false) => <QuestionCard key={card.public_id} card={card} nested={nested}
     open={(nested ? openNested : openCard) === card.public_id} detail={cardDetails[card.public_id]} like={likeOf(card)} share={cardShares[card.public_id]}
-    feedback={cardFeedback[card.public_id]} selected={cardSource} onToggle={() => toggleCard(card, view, nested)}
+    feedback={cardFeedback[card.public_id]} selected={cardSource} onToggle={event => toggleCard(card, view, nested, event.currentTarget)}
     onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
     onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource} onFeedback={() => feedbackCard(card)}>
     {!nested && card.role === 'common' && card.similar?.length > 0 && <div className="qcard-similar">
