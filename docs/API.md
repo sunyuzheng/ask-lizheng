@@ -66,7 +66,7 @@ sources 事件另带 `candidates`：这次交给模型的全部候选材料（so
 
 ## 查看资料与状态
 
-`GET /api/answer-map` 返回材料地图的布局（`data/answer-map.json`，由 `scripts/build_answer_map.py` 从语料和语义索引生成，每次资料更新时重建）：`keys` 是每份材料的位置（同上），同序的 `kinds`、`t`、`r`、`g` 依次是它的形式、方向（万分之一圈）、离中心的距离（千分之一，越远越新）和主题序号；`topics` 是各主题的名字和所占角度，`years` 是最里和最外的年份，`cards` 是判断卡的方向和所依据材料的序号，`release` 是它对应的 Open Context 提交。约75KB，请求带 `Accept-Encoding: gzip` 时约27KB。它对所有人都一样：`Cache-Control: public, max-age=600, s-maxage=3600, stale-while-revalidate=604800`，网络边缘保存一小时，服务睡着时先给旧的（ask.lizheng.ai 的 `/api/answer-map` 和 lizheng.ai 的 `/api/ask-lizheng/answer-map` 都按它缓存），资料更新后一小时内换新。
+`GET /api/answer-map` 返回材料地图的布局（`data/answer-map.json`，由 `scripts/build_answer_map.py` 从语料和语义索引生成，每次资料更新时重建）：`keys` 是每份材料的位置（同上），同序的 `kinds`、`t`、`r`、`g` 依次是它的形式、方向（万分之一圈）、离中心的距离（千分之一，越远越新）和主题序号；`topics` 是各主题的名字和所占角度，`years` 是最里和最外的年份，`cards` 是判断卡的方向和所依据材料的序号，`release` 是它对应的 Open Context 提交。约75KB，请求带 `Accept-Encoding: gzip` 时约27KB。它对所有人都一样：`Cache-Control: public, max-age=600, s-maxage=3600, stale-while-revalidate=604800`，网络边缘保存一小时，服务睡着时先给旧的，资料更新后一小时内换新。页面不直接连这里：ask.lizheng.ai 的 `/api/answer-map` 和 lizheng.ai 的 `/api/ask-lizheng/answer-map` 都由 lizheng.ai 的函数 `api/ask-lizheng-answer-map.ts` 来取、按同样的设置缓存（直接把请求转给这里时 Vercel 不缓存，2026-10-13 上线时试过）。
 
 
 `GET /api/search?q=...` 提供无需生成回答的词法与判断卡检索，适合找原文。`GET /api/meta` 返回公开资料版本、收录数量、model_ready、semantic_ready 和 mode；`GET /health` 在资料未就绪时返回 503。
