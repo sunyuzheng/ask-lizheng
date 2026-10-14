@@ -16,11 +16,17 @@ from .admission import AdmissionError, Principal, QUOTA_STORE_PURPOSE, derived_s
 from .query_records import QUERY_STORE_HEADER, QUERY_STORE_URL, STATUSES, WRITE_SECONDS
 
 OPS_BODY_LIMIT = 262144
-# The asker may share an answered v4 record at ask.lizheng.ai/s/<date>/<word>. lizheng.ai checks
-# this proof (same key) before it marks the record shared, so the page that received the answer is
-# the only one that can, and the word in the address is the one the answer was given.
+# Every answered v4 question has its own page, ask.lizheng.ai/s/<date>/<word> (2026-10-14, the owner:
+# the page exists once the question is answered). The finish record carries the word; lizheng.ai
+# makes the page as it archives the answer, unless the question was about the asker's own situation,
+# and its reply names the page, which goes out with the answer. The asker's page also gets a proof
+# (same key) to make the page of an answer about their situation when they choose to, and to report
+# a share: lizheng.ai checks it, so only that page can, and only under the word the answer was given.
 SHARE_PREFIX = "ask-share:v1:"
 SHARE_FALLBACK_WORD = "question"
+PAGE_ORIGIN = "https://ask.lizheng.ai/s/"
+# <day>/<slug>, as lizheng.ai names a page in its reply.
+PAGE_PATH = re.compile(r"\d{4}-\d{2}-\d{2}/[a-z0-9]{1,40}(?:-[a-z0-9]{1,40}){0,4}")
 ANSWER_FIELDS = {"status", "summary", "sections", "sources", "followups", "clarifying_questions", "limitations", "retryable", "failure_code"}
 # lizheng.ai and ask-lizheng-ops each check archived answers against their own copy of these fields
 # (shared/ask-archive-answer.ts) and reject a record with any other one. Add a field there first.
@@ -73,12 +79,13 @@ class OpsRecorder:
                            "context": ""})
         return record
 
-    async def _write(self, record: dict) -> bool:
+    async def _write(self, record: dict) -> dict | None:
+        """The acknowledgement, or None: {"ok": true}, with "share" when a page was made or found."""
         # Reuse exactly the same UUID/body across lost-response retries. No
         # background queue: start must be acknowledged before any model call.
         body = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if not self.secret or len(body) > OPS_BODY_LIMIT:
-            return False
+            return None
         for attempt in range(2):
             expiry = int(self.clock()) + 45
             message = f"ask-ops-store:v3:{expiry}:{hashlib.sha256(body).hexdigest()}"
@@ -93,30 +100,38 @@ class OpsRecorder:
                             async for chunk in response.aiter_bytes():
                                 raw.extend(chunk)
                                 if len(raw) > 4096:
-                                    return False
+                                    return None
                             ack = json.loads(raw)
-                            return isinstance(ack, dict) and set(ack) == {"ok"} and ack["ok"] is True
+                            if (isinstance(ack, dict) and ack.get("ok") is True and set(ack) <= {"ok", "share"}
+                                    and ("share" not in ack or (isinstance(ack["share"], str) and PAGE_PATH.fullmatch(ack["share"])))):
+                                return ack
+                            return None
                         if response.status_code < 500:
-                            return False
+                            return None
             except Exception:
                 if attempt:
-                    return False
-        return False
+                    return None
+        return None
 
     async def start(self, record: dict) -> None:
         if not await self._write(record):
             raise AdmissionError("ops_storage_unavailable", 503)
 
-    def share(self, record_id: str, slug: str = "") -> dict:
-        """What the asker's page needs to share this answer: the record, its address word and a proof."""
+    def share(self, record_id: str, slug: str = "", page: str | None = None) -> dict:
+        """What the asker's page gets with the answer: the record, its address word and a proof, and
+        the answer's own page once it has one."""
         word = share_word(slug)
         proof = hmac.new(self.secret.encode("utf-8"), f"{SHARE_PREFIX}{record_id}:{word}".encode("utf-8"), hashlib.sha256).hexdigest()
-        return {"record_id": record_id, "word": word, "proof": proof}
+        return {"record_id": record_id, "word": word, "proof": proof, **({"url": PAGE_ORIGIN + page} if page else {})}
 
     async def finish(self, record_id: str, status: str, duration_ms: int, *, answer: dict | None = None,
-                     error_code: str | None = None) -> bool:
+                     error_code: str | None = None, page_word: str | None = None) -> dict | None:
+        """The acknowledgement, or None. With page_word (an answered v4 question), lizheng.ai makes
+        the answer's page as it archives it, and "share" names it."""
         if status not in STATUSES or (answer is None and status not in {"error", "cancelled"}):
-            return False
-        return await self._write({"v": 3, "event": "finish", "record_id": record_id,
-                                 "status": status, "duration_ms": min(600_000, max(0, duration_ms)),
-                                 "answer": answer, "error_code": error_code})
+            return None
+        record = {"v": 3, "event": "finish", "record_id": record_id, "status": status,
+                  "duration_ms": min(600_000, max(0, duration_ms)), "answer": answer, "error_code": error_code}
+        if page_word and status == "answered":
+            record["share_word"] = page_word
+        return await self._write(record)

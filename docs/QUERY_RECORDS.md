@@ -33,6 +33,16 @@
 - 「结合我的处境」不再保存：v4开始记录照旧带 `has_background`，`context` 一律为空字符串（个人站writer本来就接受空处境）；`/api/meta` 的 `ops_logging.context_archive` 为 false。页面（主页和本仓库）对v4同时接受 true 和 false，false 时在处境输入处写明「这里填的内容只用来生成这次回答，我们不保存。」。之前已存的处境照旧只给所有者看。
 - 接口、存储和奖励见个人站仓库 docs/ask-lizheng.md「分享这条回答」。
 
+## 每个回答问完就有网页（2026-10-14）
+
+立正：「问完 这个页面就生成了 url就固定了 就可以直接分享了……不需要点分享才能分享……提问人其实只是贡献了一个问题 剩下都是我们的」。
+
+- v4、answered 的 finish 多带 `share_word`（和 result 里 `share.word` 同一个词）：`{v:3,event:'finish',record_id,status,duration_ms,answer,error_code,share_word}`。个人站存档这条回答时，同一个脚本给它建网页（记录的 day、第一个空着的 word、word-2……，和分享接口同一段 Lua），写 `share_slug`、`shared_at`，进站点地图；问的是「结合我的处境」（intent=apply）的不建。重试时找到已经建好的那个。
+- 带了 `share_word` 的 finish，ACK 是 `{"ok":true,"share":"<day>/<slug>"}`（没建网页时仍是 `{"ok":true}`）；不带的仍严格是 `{"ok":true}`，所以旧的回答服务照常。回答服务只接受这两种形状，`share` 必须是 `日期/词`。
+- 回答服务把网址放进 result：`share: {record_id, word, proof, url}`，`url` 是 `https://ask.lizheng.ai/s/<day>/<slug>`。页面直接显示它；没有 `url`（旧的回答服务、带处境的回答）时才用 proof 去 `/api/ask-lizheng/share` 要或建。
+- 读者在回答写完、发出之前离开时，cleanup 里的 finish 同样带 `share_word`，这条回答照样有网页。
+- 「别人在问什么」只公开有网页的提问，卡片和公开问答带 `share_url`，就是这个网页（Ops 仓库 `docs/public-discovery.md`）。
+
 ## v3私人问答归档候选
 
 2026-10-02页面文案：输入框下面写匿名与用途——「提问是匿名的。问答会保存下来，用来改进回答；请勿填写私密信息。」；「说明」与v4一样分四段（为什么保存、保存什么、你的隐私、另外），写明记录只有立正能看到；「你的隐私」讲提问匿名（不关联邮箱、账号或IP，我们不知道是谁问的）、登录只核验Founding身份且不和提问记在一起，以及回答可能提到「结合我的处境」里填的内容。不写「不追踪」：页面访问和点击有匿名计数，记录里有匿名使用标识；登录状态加密保存12小时，所以不写「验证后立刻忘掉」。「站点所有者手动删除」、旧v1的30天、登录窗口草稿这类实现细节不写给用户；保存与删除的行为不变。
@@ -41,7 +51,7 @@
 
 新页面先从meta确认`ops_logging.enabled=true,notice="v3",answer_archive=true,retention="until_deleted"`，显示问答保存提示后提交`query_log_notice:"v3"`及canonical UUID `conversation_id`。同一页面连续提问、重试沿用会话UUID，新对话重置。relay仅为v3签入匿名`visitor`和`entrypoint`；服务端再次HMAC为存档标识，不保存邮箱、账号、IP或独立的人数统计。
 
-固定端点仍为个人站query-storage。证明为`X-Ask-Query-Proof: v3.<expiry>.<hex>`，45秒有效；HMAC域`ask-ops-store:v3:<expiry>:<sha256(compact UTF-8 body)>`。正文上限262144字节，Content-Type为application/octet-stream。start正文为`{v:3,event:'start',record_id,question,created_at,model,visitor_id,conversation_id,intent,entrypoint}`；finish正文为`{v:3,event:'finish',record_id,status,duration_ms,answer,error_code}`。ACK必须严格为`{"ok":true}`。
+固定端点仍为个人站query-storage。证明为`X-Ask-Query-Proof: v3.<expiry>.<hex>`，45秒有效；HMAC域`ask-ops-store:v3:<expiry>:<sha256(compact UTF-8 body)>`。正文上限262144字节，Content-Type为application/octet-stream。start正文为`{v:3,event:'start',record_id,question,created_at,model,visitor_id,conversation_id,intent,entrypoint}`；finish正文为`{v:3,event:'finish',record_id,status,duration_ms,answer,error_code}`（2026-10-14起v4的answered另带`share_word`，见下面「每个回答问完就有网页」）。ACK必须严格为`{"ok":true}`，带`share_word`的finish可以是`{"ok":true,"share":"<day>/<slug>"}`。
 
 start在准入/额度预留后、模型调用前确认。final answer从服务端已核验的最终result捕获，字段仅status、summary、sections、sources、followups、clarifying_questions、limitations和可选retryable/failure_code；来源保留当时的标题、链接、作者、日期、片段、归属说明与时间点。排除quota、账号、原始provider JSON、partial和内部推理。不单独保存提交的背景/历史；回答可能引用背景，提交前明确提示。
 

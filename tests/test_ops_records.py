@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 from uuid import UUID, uuid4
 
 import anyio
@@ -109,7 +110,8 @@ def test_exact_signing_stable_begin_retry_and_identity_domain_separation(ops):
 
 @pytest.mark.parametrize("response", [httpx.Response(307, headers={"Location": "https://untrusted.example"}),
     httpx.Response(200, json={"ok": False}), httpx.Response(200, json={"ok": 1}), httpx.Response(200, json={"ok": True, "extra": 1}),
-    httpx.Response(200, content=b"x" * 4097)])
+    httpx.Response(200, json={"ok": True, "share": "https://untrusted.example/x"}), httpx.Response(200, json={"ok": True, "share": 7}),
+    httpx.Response(200, json={"ok": True, "share": "2026-10-14/Career"}), httpx.Response(200, content=b"x" * 4097)])
 def test_redirect_or_invalid_ack_is_not_confirmation(ops, response):
     seen = []
     async def run():
@@ -444,7 +446,9 @@ def test_v4_start_marks_notice_and_background_but_keeps_no_situation(context_pac
         assert events(response)[-1][1]["status"] == "answered"
     start, finish = stored
     assert (start["notice_version"], start["has_background"], start["context"]) == ("v4", background, context)
-    assert set(finish) == {"v", "event", "record_id", "status", "duration_ms", "answer", "error_code"}
+    # An answered v4 question carries its page's word; lizheng.ai decides whether it gets the page.
+    assert set(finish) == {"v", "event", "record_id", "status", "duration_ms", "answer", "error_code", "share_word"}
+    assert re.fullmatch(r"[a-z0-9]{1,40}(?:-[a-z0-9]{1,40}){0,3}", finish["share_word"])
     # Neither history nor the situation is stored, only counted as background.
     assert "synthetic earlier" not in json.dumps(stored, ensure_ascii=False)
     assert "synthetic处境" not in json.dumps(stored, ensure_ascii=False)
@@ -506,3 +510,51 @@ def test_only_answered_v4_results_carry_a_share_proof(context_pack, enabled, ops
 def test_share_word_is_a_short_lowercase_english_address_word(slug, word):
     from server.ops_records import share_word
     assert share_word(slug) == word
+
+
+@pytest.mark.parametrize("ack,page", [
+    ({"ok": True, "share": "2026-10-14/career-choice-2"}, "https://ask.lizheng.ai/s/2026-10-14/career-choice-2"),
+    ({"ok": True}, None),
+])
+def test_an_answered_question_goes_out_with_its_page(context_pack, enabled, ops, monkeypatch, ack, page):
+    # 2026-10-14, the owner: the page exists once the question is answered, without anyone sharing it.
+    stored = []
+    async def generate(*args, **kwargs):
+        answer = answer_for()
+        answer.slug = "Career Choice"
+        return answer
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    def transport(request):
+        record = json.loads(request.content)
+        stored.append(record)
+        return httpx.Response(200, json=ack if record["event"] == "finish" else {"ok": True})
+    app = create_app(context_pack, quota_store=MemoryQuotaStore(), query_record_transport=httpx.MockTransport(transport))
+    with TestClient(app) as client:
+        final = events(post(client, payload(query_log_notice="v4", intent="understand"), **identity()))[-1][1]
+    assert stored[-1]["share_word"] == "career-choice" and final["share"]["word"] == "career-choice"
+    assert final["share"].get("url") == page
+    if page is None:
+        assert "url" not in final["share"]
+
+
+def test_a_reader_who_left_still_leaves_a_page_behind(context_pack, enabled, ops, monkeypatch):
+    # The answer was written but the reader had gone: the cleanup archives it, with its page's word.
+    stored = []
+    async def generate(*args, **kwargs):
+        answer = answer_for()
+        answer.slug = "career-choice"
+        return answer
+    monkeypatch.setattr("server.app.generate_answer", generate)
+    checks = []
+    async def gone(self):
+        # Still there while the sources are found; gone by the time the answer is written.
+        checks.append(1)
+        return len(checks) > 1
+    def transport(request): stored.append(json.loads(request.content)); return httpx.Response(200, json={"ok": True})
+    app = create_app(context_pack, quota_store=MemoryQuotaStore(), query_record_transport=httpx.MockTransport(transport))
+    monkeypatch.setattr("starlette.requests.Request.is_disconnected", gone)
+    with TestClient(app) as client:
+        response = post(client, payload(query_log_notice="v4", intent="understand"), **identity())
+    assert "event: result" not in response.text and len(checks) == 2
+    assert [r["event"] for r in stored] == ["start", "finish"]
+    assert stored[1]["status"] == "answered" and stored[1]["share_word"] == "career-choice"

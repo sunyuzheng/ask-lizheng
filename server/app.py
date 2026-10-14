@@ -30,7 +30,7 @@ from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
-from .ops_records import OpsRecorder, archived_answer
+from .ops_records import OpsRecorder, archived_answer, share_word
 from .curate import CURATE_BODY_LIMIT, CURATE_HEADER, CurateRequest, SeedRequest, ThemesRequest, curate_question, generic_themes, verify_curate_proof
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -424,8 +424,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         record_error_code = "request_cancelled"
         record_duration_ms = None
         archive_confirmed = False
-        # The topic words the model gave the answer, for its share address only.
+        # The topic words the model gave the answer, for its page's address only.
         answer_slug = ""
+        # The answer's own page (<day>/<slug>), made as it was archived.
+        record_page = None
 
         def release_slot():
             nonlocal slot_released
@@ -434,20 +436,25 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 application.state.slots.release()
 
         async def finish_archive():
-            nonlocal record_duration_ms, archive_confirmed
+            nonlocal record_duration_ms, archive_confirmed, record_page
             if ops_record_id is None or archive_confirmed:
                 return True
             if record_duration_ms is None:
                 record_duration_ms = max(0, int((time.monotonic() - record_started) * 1000))
             # Keep this body stable across both the initial final write and
             # cancellation cleanup. A lost ACK must never become null/error.
+            # An answered v4 question gets its page as it is archived, even
+            # when the reader has already gone.
+            page_word = share_word(answer_slug) if payload.query_log_notice == "v4" and record_status == "answered" else None
             try:
-                confirmed = await application.state.ops_records.finish(ops_record_id, record_status,
-                    record_duration_ms, answer=record_answer, error_code=record_error_code)
+                ack = await application.state.ops_records.finish(ops_record_id, record_status,
+                    record_duration_ms, answer=record_answer, error_code=record_error_code, page_word=page_word)
             except Exception:
-                confirmed = False
-            archive_confirmed = confirmed
-            return confirmed
+                ack = None
+            archive_confirmed = ack is not None
+            if ack:
+                record_page = ack.get("share")
+            return archive_confirmed
 
         def capture_answer(result):
             nonlocal record_answer, record_status, record_error_code
@@ -535,9 +542,9 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 quota_finished = True
                 record_status = result["status"]
                 final = {**result, "quota": quota} if quota is not None else result
-                # An answer kept under the v4 notice may be shared by the person who asked.
+                # An answer kept under the v4 notice: its page, and what the asking page needs to share it.
                 if ops_record_id is not None and payload.query_log_notice == "v4" and result["status"] == "answered":
-                    final = {**final, "share": application.state.ops_records.share(ops_record_id, answer_slug)}
+                    final = {**final, "share": application.state.ops_records.share(ops_record_id, answer_slug, record_page)}
                 return final
             try:
                 if initial_quota is not None:

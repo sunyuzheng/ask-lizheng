@@ -7,7 +7,7 @@ import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, 
 import {askedAgo, discoveryDetail, discoveryLink, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
 import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
 import {IN_APP} from './in-app.js';
-import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
+import {answerPage, copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import playLogo from './badges/google-play-logo.png';
@@ -1094,15 +1094,17 @@ function App() {
   // an answer here, under its map (2026-10-14, the owner: once opened, it should be shareable): the
   // page's link to copy, send or scan, and the answer as an image or a PDF.
   const setCardShare = (id, next) => setCardShares(prev => ({...prev, [id]: {...prev[id], ...next}}));
-  const cardShare = card => ({phase: 'ready', url: discoveryLink(card.public_id), ...cardShares[card.public_id]});
+  // Its own page, as its answer (or, before that is read, its card) gives it.
+  const cardLink = card => discoveryLink(card.public_id, cardDetails[card.public_id]?.share_url || card.share_url);
+  const cardShare = card => ({phase: 'ready', url: cardLink(card), ...cardShares[card.public_id]});
   const sharedCard = (card, action) => { markUsage('d_share'); track('Ask Discovery Share', {surface: SURFACE, view, action}); };
   const copyCard = async card => {
     sharedCard(card, 'copy');
-    setCardShare(card.public_id, {copied: await copyWhenReady(discoveryLink(card.public_id))});
+    setCardShare(card.public_id, {copied: await copyWhenReady(cardLink(card))});
   };
   const sendCard = async card => {
     sharedCard(card, 'send');
-    try { await navigator.share({title: card.question, url: discoveryLink(card.public_id)}); } catch { /* Closed, or not allowed here. */ }
+    try { await navigator.share({title: card.question, url: cardLink(card)}); } catch { /* Closed, or not allowed here. */ }
   };
   const qrCard = card => {
     const open = !cardShares[card.public_id]?.qr;
@@ -1112,7 +1114,7 @@ function App() {
   const exportCard = (kind, card, answer) => {
     sharedCard(card, kind);
     return deliver(kind, `q-${card.public_id}`, {question: card.question, result: {...answer, status: 'answered'},
-      date: card.asked_at ? new Date(card.asked_at) : new Date(), personal: false, other: true, link: discoveryLink(card.public_id)});
+      date: card.asked_at ? new Date(card.asked_at) : new Date(), personal: false, other: true, link: cardLink(card)});
   };
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
@@ -1310,12 +1312,21 @@ function App() {
     if (value.bonus === 'granted' || value.bonus === 'claimed')
       setAccount(prev => (prev ? {...prev, share_bonus: false, ...(Number.isFinite(value.remaining) ? {remaining: value.remaining} : {})} : prev));
   };
-  // Every finished answer gets its page at once (`auto`, not counted as a share), except one to a
-  // question with the situation: its page waits until the asker makes it. Reopened answers too.
+  // Every answered question has its page from the moment it was archived, and Builder sends its
+  // address with the answer (2026-10-14). From an older Builder, and for reopened answers kept from
+  // before, the page asks for it (`auto`, not counted as a share). An answer about the asker's own
+  // situation gets a page only when its asker makes one.
   const autoShared = useRef(new Set());
   useEffect(() => {
     for (const m of messages) {
-      if (m.result?.status !== 'answered' || !m.result.share || m.context || m.personal || autoShared.current.has(m.id)) continue;
+      if (m.result?.status !== 'answered' || !m.result.share || autoShared.current.has(m.id)) continue;
+      const page = answerPage(m.result.share);
+      if (page) {
+        autoShared.current.add(m.id);
+        setShare(m.id, {phase: 'ready', url: page});
+        continue;
+      }
+      if (m.context || m.personal || m.intent === 'apply') continue;
       autoShared.current.add(m.id);
       setShare(m.id, {phase: 'working', error: ''});
       createShareLink(m.result.share, {surface: SURFACE, bonus: false, auto: true})

@@ -1,14 +1,15 @@
 // Questions people asked, published as asked, chosen in the separate Ops service and
 // served by lizheng.ai on this host. Anywhere else the reads fail quietly and the page keeps its examples.
+import {isAnswerPage} from './share-link.js';
 
 // 最近问 and 最常问: two short lists, the same for every reader, so the CDN can serve them.
 // How many questions each holds (Ops' DISCOVERY_LIST_SIZE).
 export const DISCOVERY_LIST_SIZE = 30;
 // Every published question has its own public page on www.lizheng.ai, the one search engines read.
 export const discoveryPage = id => `https://www.lizheng.ai/ask/${id}`;
-// The link that shares it: this page with the answer in it, as the asker's own shared answers open
-// (lizheng.ai renders it; its canonical is the www page above).
-export const discoveryLink = id => `https://ask.lizheng.ai/q/${id}`;
+// The link that shares it: its own page, ask.lizheng.ai/s/<day>/<word>, the same page its asker got
+// (2026-10-14). /q/<id> is for one Ops has not given its page yet: it opens the page, or the answer.
+export const discoveryLink = (id, page) => (isAnswerPage(page) ? page : `https://ask.lizheng.ai/q/${id}`);
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const text = value => typeof value === 'string' && value.trim().length > 0;
 const count = value => Number.isInteger(value) && value >= 0;
@@ -19,7 +20,8 @@ const card = value => !!value && typeof value === 'object' && ID.test(value.publ
 // row shows, and what a like needs.
 const similarRow = value => !!value && typeof value === 'object' && ID.test(value.public_id) && count(value.revision) && text(value.question)
   && typeof value.published_at === 'string' && (value.asked_at === undefined || typeof value.asked_at === 'string') && count(value.likes);
-const row = ({public_id, revision, question, published_at, asked_at, likes}) => ({public_id, revision, question, published_at, likes, ...(asked_at ? {asked_at} : {})});
+const row = ({public_id, revision, question, published_at, asked_at, likes, share_url}) => ({public_id, revision, question, published_at, likes,
+  ...(asked_at ? {asked_at} : {}), ...(isAnswerPage(share_url) ? {share_url} : {})});
 // The answer renders with the conversation's own components, so only the fields they read, as strings.
 const SOURCE_FIELDS = ['id', 'title', 'url', 'date', 'source_type', 'excerpt', 'reason', 'timecode', 'author', 'attribution_note', 'public_copy_url',
   'source_visibility', 'text_access', 'membership_platform', 'membership_url', 'membership_verified_at', 'transcript_source_kind', 'transcript_quality', 'speaker_classification',
@@ -163,7 +165,7 @@ export async function discoveryDetail(id, signal) {
     const value = await response.json();
     const answer = value?.answer;
     if (!text(value?.question) || !answer || typeof answer.summary !== 'string' || !Array.isArray(answer.sections) || !Array.isArray(answer.sources)) return null;
-    return {question: value.question, answer: {
+    return {question: value.question, ...(isAnswerPage(value.share_url) ? {share_url: value.share_url} : {}), answer: {
       summary: answer.summary,
       sections: answer.sections.map(section).filter(Boolean),
       sources: answer.sources.map(source).filter(Boolean),

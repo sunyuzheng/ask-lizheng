@@ -1,5 +1,9 @@
 # 更新记录
 
+## 2026-10-14 每个回答问完就有网址，「别人在问什么」用同一个
+
+存档完成的记录带上网址的词（`share_word`），lizheng.ai 存档时就建好这条回答的网页，回复里告诉回答服务；回答服务把网址放进结果（`share.url`），读者中途离开也照样建。页面直接用这个网址，只有旧的回答服务没给时才去 `/api/ask-lizheng/share` 要（`auto`）；「结合我的处境」（apply）的回答仍然点了才建。「别人在问什么」的分享链接是这条问答自己的网页（Ops 给的 `share_url`，`discoveryLink(id, page)`），旧的 `/q/<编号>` 跳过去。见 [PRODUCT.md](docs/PRODUCT.md)「每个回答一个网址，问完就有」和 [QUERY_RECORDS.md](docs/QUERY_RECORDS.md)「每个回答问完就有网页」。
+
 ## 2026-10-14 公开问答的分享链接打开就是本页
 
 「别人在问什么」分享栏的链接改成 `ask.lizheng.ai/q/<编号>`（`discovery.js` 的 `discoveryLink`），打开是本页带着这条问答，和 `/s/` 分享页一样能接着问；本页的 `#ask-shared` 认 `/s/` 和 `/q/` 两种网址，`shareDisplay` 把两种长编号都缩短显示。见 [PRODUCT.md](docs/PRODUCT.md)「「别人在问什么」打开就能分享」。
