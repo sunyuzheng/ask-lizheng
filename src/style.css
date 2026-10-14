@@ -1832,6 +1832,7 @@ main {
   padding: 0 18px 16px;
   font-size: 13px;
   line-height: 1.7;
+  text-wrap: pretty;   /* no lone character on a caption's last line */
 }
 
 .answer-map figcaption > * + * {
