@@ -312,7 +312,7 @@ function footerRow(link = '') {
   }};
 }
 
-function layout(ctx, {question, result, date, personal}) {
+function layout(ctx, {question, result, date, personal, link}) {
   // Number sources 1..n in the shared file; the answer's ids skip sources it did not use.
   const cites = new Map((result.sources || []).map((s, i) => [s.id, String(i + 1)]));
   const rows = [header(), gap(62)];
@@ -356,7 +356,7 @@ function layout(ctx, {question, result, date, personal}) {
       rows.push(gap(12), ...joinRows.map(row => ({...row, link: join})));
     }
   }
-  rows.push(gap(56), footerRow(data.link));
+  rows.push(gap(56), footerRow(link));
   return rows;
 }
 
