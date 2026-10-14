@@ -2366,15 +2366,6 @@ main {
   color: var(--ink);
 }
 
-.share-panel {
-  margin-top: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule);
-  font-size: 14.5px;
-  line-height: 1.7;
-  color: var(--ink-2);
-}
-
 .share-url {
   display: inline-block;
   max-width: 100%;

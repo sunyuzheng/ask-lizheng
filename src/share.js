@@ -359,11 +359,12 @@ function footerRow(link = '') {
   }};
 }
 
-function layout(ctx, {question, result, date, personal, link, map, kind}) {
+function layout(ctx, {question, result, date, personal, link, map, kind, other}) {
   // Number sources 1..n in the shared file; the answer's ids skip sources it did not use.
   const cites = new Map((result.sources || []).map((s, i) => [s.id, String(i + 1)]));
   const rows = [header(), gap(62)];
-  rows.push(...textRows(ctx, [{text: '你的问题'}], {size: 23, lh: 1.6, weight: 600, color: C.greenText, keep: true}), gap(6));
+  // Someone else's question (別人在问什么, or an answer someone shared) is not the reader's own.
+  rows.push(...textRows(ctx, [{text: other ? '有人问' : '你的问题'}], {size: 23, lh: 1.6, weight: 600, color: C.greenText, keep: true}), gap(6));
   rows.push(...textRows(ctx, [{text: question}], {size: 44, lh: 1.5, weight: 700, family: SERIF, color: C.ink}));
   const day = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   const meta = result.status === 'sources-only' ? `找到的公开材料 · ${day}` : `AI根据立正公开的文章和视频整理 · ${day}`;

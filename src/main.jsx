@@ -379,32 +379,6 @@ function AccountLine({account, waking, busy, step, foundingOpen, onToggleFoundin
   </p>;
 }
 
-// Sharing one answer: its own page (what that page shows, then its link and how to send it), a long
-// image or a PDF. `link` is false for an answer that cannot have a page; the image and PDF remain.
-// Sharing an answer: its page, a long image or a PDF. A question others asked already has its
-// page: only its link and how to send it (no onExport).
-function SharePanel({state, link, exporting, onCreate, onCopy, onSend, onExport}) {
-  const ready = link && state.phase === 'ready';
-  return <div className="share-panel">
-    {ready ? <>
-      <a className="share-url" href={state.url} target="_blank" rel="noopener">{shareDisplay(state.url)}<Ext/></a>
-      <p className="share-status" role="status">{state.copied ? SHARE.copied : SHARE.select}{state.bonus === 'granted' && <b>{SHARE.bonus}</b>}</p>
-    </> : link && <p>{SHARE.what}</p>}
-    {state.error && <p className="share-error" role="alert">{state.error}</p>}
-    <div className="share-actions">
-      {ready ? <>
-        {typeof navigator.share === 'function' && <button type="button" className="pill-button" onClick={onSend}>{SHARE.send}</button>}
-        <button type="button" className="pill-button" onClick={onCopy}>{state.copied ? SHARE.copiedAgain : SHARE.copy}</button>
-      </> : link && <button type="button" className="pill-button" disabled={state.phase === 'working'} onClick={onCreate}>{state.phase === 'working' ? SHARE.creating : SHARE.create}</button>}
-      {onExport && <>
-        <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('png')}>{exporting === 'png' ? '正在生成…' : '保存图片'}</button>
-        <button type="button" className="pill-button" disabled={!!exporting} onClick={() => onExport('pdf')}>{exporting === 'pdf' ? '正在生成…' : '下载PDF'}</button>
-      </>}
-    </div>
-    {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
-  </div>;
-}
-
 // The QR code of an answer's page, drawn when asked for (qrcode-generator, as the saved image's).
 function QrCode({url}) {
   const [svg, setSvg] = useState('');
@@ -483,7 +457,7 @@ function Upvote({like, nested, onLike}) {
   </button>;
 }
 
-function QuestionCard({card, open, detail, like, share, feedback, selected, nested, children, onToggle, onSimilar, onLike, onShare, onCopy, onSend, onSelect, onFeedback}) {
+function QuestionCard({card, open, detail, like, share, exporting, feedback, selected, nested, children, onToggle, onSimilar, onLike, onQr, onExport, onCopy, onSend, onSelect, onFeedback}) {
   const prefix = `q-${card.public_id}`;
   const similar = card.similar_count ?? card.topic_question_count;
   const often = card.role === 'common' && similar >= 2;
@@ -511,6 +485,9 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
         <div className="summary"><Markdown text={answer.summary} sources={answer.sources} onSelect={select}/></div>
         {answer.sources.length > 0 && <AnswerMapPanel message={mapMessage} onSelect={select} onOpen={source => trackSource(source.url)}
           selected={selected?.startsWith(`${prefix}:`) ? selected.slice(prefix.length + 1) : null}/>}
+        {/* Opened, it can be shared at once: under its map, as under an answer here. */}
+        <ShareBar state={share} link bonus={false} exporting={exporting} onCopy={onCopy} onSend={onSend} onQr={onQr}
+          onExport={kind => onExport(kind, answer)}/>
         {answer.sections.map((section, index) => <SectionBlock key={index} section={section} sources={answer.sources} onSelect={select}/>)}
         {answer.limitations && <Limits text={answer.limitations} sources={answer.sources} onSelect={select}/>}
         {answer.sources.length > 0 && <details className="inline-sources">
@@ -525,12 +502,10 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
           <span className="upvote-arrow" aria-hidden="true"/>有帮助{like.likes > 0 && <span className="qcard-like-count">{like.likes}</span>}
         </button>
         <button type="button" className="pill-button" onClick={onSimilar}>问个类似的</button>
-        <button type="button" className="pill-button" aria-expanded={!!share?.open} onClick={onShare}>分享</button>
         {/* Feedback and reports go to the community post, with this answer's link on the clipboard. */}
         <a className="qcard-feedback" href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={onFeedback}>{DISCOVERY.feedback}<Ext/></a>
       </div>
       {feedback && <p className="qcard-feedback-note" role="status">{DISCOVERY.feedbackCopied}</p>}
-      {share?.open && <SharePanel state={share} link onCopy={onCopy} onSend={onSend}/>}
     </div>}
     {children}
   </article>;
@@ -1070,20 +1045,29 @@ function App() {
     markUsage('d_more');
     track('Ask Discovery More', {surface: SURFACE, view});
   }
-  // A question others asked already has its public page: sharing copies its link at once, and a
-  // phone can also send it on.
+  // A question others asked already has its public page. Opened, it shows the same 分享这条回答 as
+  // an answer here, under its map (2026-10-14, the owner: once opened, it should be shareable): the
+  // page's link to copy, send or scan, and the answer as an image or a PDF.
   const setCardShare = (id, next) => setCardShares(prev => ({...prev, [id]: {...prev[id], ...next}}));
-  async function shareCard(card) {
-    if (cardShares[card.public_id]?.open) { setCardShare(card.public_id, {open: false}); return; }
-    const url = discoveryPage(card.public_id);
-    setCardShare(card.public_id, {open: true, phase: 'ready', url});
-    markUsage('d_share');
-    track('Ask Discovery Share', {surface: SURFACE, view});
-    setCardShare(card.public_id, {copied: await copyWhenReady(url)});
-  }
-  const copyCard = async card => setCardShare(card.public_id, {copied: await copyWhenReady(discoveryPage(card.public_id))});
+  const cardShare = card => ({phase: 'ready', url: discoveryPage(card.public_id), ...cardShares[card.public_id]});
+  const sharedCard = (card, action) => { markUsage('d_share'); track('Ask Discovery Share', {surface: SURFACE, view, action}); };
+  const copyCard = async card => {
+    sharedCard(card, 'copy');
+    setCardShare(card.public_id, {copied: await copyWhenReady(discoveryPage(card.public_id))});
+  };
   const sendCard = async card => {
+    sharedCard(card, 'send');
     try { await navigator.share({title: card.question, url: discoveryPage(card.public_id)}); } catch { /* Closed, or not allowed here. */ }
+  };
+  const qrCard = card => {
+    const open = !cardShares[card.public_id]?.qr;
+    setCardShare(card.public_id, {qr: open});
+    if (open) sharedCard(card, 'qr');
+  };
+  const exportCard = (kind, card, answer) => {
+    sharedCard(card, kind);
+    return deliver(kind, `q-${card.public_id}`, {question: card.question, result: {...answer, status: 'answered'},
+      date: card.asked_at ? new Date(card.asked_at) : new Date(), personal: false, other: true, link: discoveryPage(card.public_id)});
   };
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);
@@ -1231,14 +1215,14 @@ function App() {
     }
   }
 
-  // A long image shares well in chat apps; the PDF keeps the source links clickable.
-  async function exportTurn(kind, m) {
+  // A long image shares well in chat apps; the PDF keeps the source links clickable. On a phone the
+  // image goes to the share sheet; otherwise either is downloaded.
+  async function deliver(kind, key, data) {
     markUsage('export');
-    setExporting(`${m.id}-${kind}`);
+    setExporting(`${key}-${kind}`);
     try {
       const {exportAnswer} = await import('./share.js');
-      const {blob, name, type} = await exportAnswer(kind, {question: m.question, result: m.result, date: new Date(), personal: !!(m.context || m.personal),
-        link: shares[m.id]?.phase === 'ready' ? shares[m.id].url : ''});
+      const {blob, name, type} = await exportAnswer(kind, data);
       const file = new File([blob], name, {type});
       if (kind === 'png' && window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({files: [file]})) {
         try { await navigator.share({files: [file], title: '问问立正'}); return; }
@@ -1253,6 +1237,8 @@ function App() {
     } catch { setError(MESSAGES.export); }
     finally { setExporting(''); }
   }
+  const exportTurn = (kind, m) => deliver(kind, m.id, {question: m.question, result: m.result, date: new Date(), personal: !!(m.context || m.personal),
+    other: !!m.shared, link: shares[m.id]?.phase === 'ready' ? shares[m.id].url : ''});
 
   // 分享这条回答. Sharing may give back one of today's questions, once a day, after one was used.
   const bonusOffer = !IN_APP && !IN_WECHAT && !!account?.enabled && !account.unavailable && !account.founding
@@ -1413,9 +1399,11 @@ function App() {
   // One question others asked; in 最常问, the topic's other questions open under it, each with its
   // own like and answer.
   const questionCard = (card, nested = false) => <QuestionCard key={card.public_id} card={card} nested={nested}
-    open={(nested ? openNested : openCard) === card.public_id} detail={cardDetails[card.public_id]} like={likeOf(card)} share={cardShares[card.public_id]}
+    open={(nested ? openNested : openCard) === card.public_id} detail={cardDetails[card.public_id]} like={likeOf(card)} share={cardShare(card)}
+    exporting={exporting.startsWith(`q-${card.public_id}-`) ? exporting.slice(-3) : exporting ? 'other' : ''}
     feedback={cardFeedback[card.public_id]} selected={cardSource} onToggle={event => toggleCard(card, view, nested, event.currentTarget)}
-    onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onShare={() => void shareCard(card)}
+    onSimilar={() => askSimilar(card)} onLike={() => void likeCard(card)} onQr={() => qrCard(card)}
+    onExport={(kind, answer) => void exportCard(kind, card, answer)}
     onCopy={() => void copyCard(card)} onSend={() => void sendCard(card)} onSelect={selectCardSource} onFeedback={() => feedbackCard(card)}>
     {!nested && card.role === 'common' && card.similar?.length > 0 && <div className="qcard-similar">
       <button type="button" className="qcard-similar-toggle" aria-expanded={openSimilar.has(card.public_id)} onClick={() => toggleSimilar(card)}>
