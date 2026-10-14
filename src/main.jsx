@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
-import {askedAgo, discoveryDetail, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
+import {askedAgo, discoveryDetail, discoveryLink, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
 import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
 import {IN_APP} from './in-app.js';
 import {copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
@@ -514,12 +514,14 @@ function QuestionCard({card, open, detail, like, share, exporting, feedback, sel
 // A shared answer's page (ask.lizheng.ai/s/<date>/<word>, made by lizheng.ai's shared/ask-share-page.ts)
 // is this page with that answer in it (#ask-shared): it opens as the conversation, as its asker saw
 // it, and can be followed up. Since 2026-10-13 (the owner: the link should show what the asker sees).
+// So is a public question's shared link, ask.lizheng.ai/q/<id> (2026-10-14: 别人在问什么's links look
+// like this page too).
 const SHARED = (() => {
   try {
     const value = JSON.parse(document.getElementById('ask-shared')?.textContent || 'null');
     const answer = value?.answer;
     if (!value || typeof value.question !== 'string' || !value.question.trim() || typeof value.url !== 'string'
-      || !value.url.startsWith('https://ask.lizheng.ai/s/') || answer?.status !== 'answered' || typeof answer.summary !== 'string'
+      || !/^https:\/\/ask\.lizheng\.ai\/[sq]\//.test(value.url) || answer?.status !== 'answered' || typeof answer.summary !== 'string'
       || !Array.isArray(answer.sections) || !Array.isArray(answer.sources)) return null;
     return value;
   } catch { return null; }
@@ -1049,15 +1051,15 @@ function App() {
   // an answer here, under its map (2026-10-14, the owner: once opened, it should be shareable): the
   // page's link to copy, send or scan, and the answer as an image or a PDF.
   const setCardShare = (id, next) => setCardShares(prev => ({...prev, [id]: {...prev[id], ...next}}));
-  const cardShare = card => ({phase: 'ready', url: discoveryPage(card.public_id), ...cardShares[card.public_id]});
+  const cardShare = card => ({phase: 'ready', url: discoveryLink(card.public_id), ...cardShares[card.public_id]});
   const sharedCard = (card, action) => { markUsage('d_share'); track('Ask Discovery Share', {surface: SURFACE, view, action}); };
   const copyCard = async card => {
     sharedCard(card, 'copy');
-    setCardShare(card.public_id, {copied: await copyWhenReady(discoveryPage(card.public_id))});
+    setCardShare(card.public_id, {copied: await copyWhenReady(discoveryLink(card.public_id))});
   };
   const sendCard = async card => {
     sharedCard(card, 'send');
-    try { await navigator.share({title: card.question, url: discoveryPage(card.public_id)}); } catch { /* Closed, or not allowed here. */ }
+    try { await navigator.share({title: card.question, url: discoveryLink(card.public_id)}); } catch { /* Closed, or not allowed here. */ }
   };
   const qrCard = card => {
     const open = !cardShares[card.public_id]?.qr;
@@ -1067,7 +1069,7 @@ function App() {
   const exportCard = (kind, card, answer) => {
     sharedCard(card, kind);
     return deliver(kind, `q-${card.public_id}`, {question: card.question, result: {...answer, status: 'answered'},
-      date: card.asked_at ? new Date(card.asked_at) : new Date(), personal: false, other: true, link: discoveryPage(card.public_id)});
+      date: card.asked_at ? new Date(card.asked_at) : new Date(), personal: false, other: true, link: discoveryLink(card.public_id)});
   };
   const selectCardSource = (prefix, id) => {
     setCardSource(`${prefix}:${id}`);

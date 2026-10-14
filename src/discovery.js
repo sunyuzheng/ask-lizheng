@@ -4,8 +4,11 @@
 // 最近问 and 最常问: two short lists, the same for every reader, so the CDN can serve them.
 // How many questions each holds (Ops' DISCOVERY_LIST_SIZE).
 export const DISCOVERY_LIST_SIZE = 30;
-// Every published question has its own public page, which is what sharing one sends.
+// Every published question has its own public page on www.lizheng.ai, the one search engines read.
 export const discoveryPage = id => `https://www.lizheng.ai/ask/${id}`;
+// The link that shares it: this page with the answer in it, as the asker's own shared answers open
+// (lizheng.ai renders it; its canonical is the www page above).
+export const discoveryLink = id => `https://ask.lizheng.ai/q/${id}`;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const text = value => typeof value === 'string' && value.trim().length > 0;
 const count = value => Number.isInteger(value) && value >= 0;
