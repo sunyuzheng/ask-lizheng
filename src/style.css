@@ -567,10 +567,11 @@ main {
 }
 
 /* The map of every material above 别人正在问 (AmbientMap), on the stage itself: it lights the
-   sources of the question marked below. */
+   sources of the question marked below. Its topic names start at the column's edge, like the
+   words above and below it; the question at its right end may reach into the margin. */
 .ambient-map {
   height: 236px;
-  margin: 6px -20px 0 -64px;
+  margin: 6px -20px 0 0;
 }
 
 .ambient-map canvas {
@@ -1812,11 +1813,11 @@ main {
 }
 
 .answer-map-stage {
-  height: clamp(272px, 46vw, 320px);
+  height: clamp(282px, 46vw, 324px);
 }
 
 .answer-map-done .answer-map-stage {
-  height: clamp(250px, 42vw, 290px);
+  height: clamp(266px, 42vw, 296px);
 }
 
 .answer-map canvas {
@@ -3195,6 +3196,10 @@ main {
 
   .answer-map figcaption {
     padding: 0 var(--gut) 16px;
+  }
+
+  .answer-map-lead {
+    font-size: 13.5px;
   }
 }
 

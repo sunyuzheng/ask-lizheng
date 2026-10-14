@@ -165,23 +165,30 @@ export class AnswerMap {
     this.wake();
   }
 
-  /** Rows for the topics, named at the left; the years along the bottom; the question at the right. */
+  /**
+   * Rows for the topics, named at the left; the years along the bottom; the question at the right.
+   * The names start where the caption under the map does (its padding), so the panel reads as one
+   * column; a phone gets a little smaller type than a wide screen, never below 10.5px.
+   */
   layout(w, h) {
     const {ctx, map} = this;
     this.w = w; this.h = h;
-    this.narrow = w < 560;
-    this.labelSize = this.narrow ? 10.5 : 12;
+    // The start screen's map is short and wide: full sizes, whatever its width.
+    this.narrow = w < 560 && !this.ambient;
+    this.labelSize = this.narrow ? 11.5 : 12;
+    this.smallSize = this.narrow ? 10.5 : 11;
     ctx.font = `600 ${this.labelSize}px ${this.font}`;
     const widest = Math.max(...map.topics.map(topic => ctx.measureText(topic.l).width));
-    this.left = Math.ceil(widest) + (this.narrow ? 14 : 20);
-    this.right = this.ambient ? 44 : this.narrow ? 54 : 76;
-    this.top = this.ambient ? 16 : this.narrow ? 26 : 30;
-    this.bottom = this.narrow ? 24 : 28;
+    this.gap = this.narrow ? 9 : 12;
+    this.left = (this.ambient ? 0 : this.narrow ? 20 : 18) + Math.ceil(widest) + this.gap;
+    this.right = this.ambient ? 44 : this.narrow ? 64 : 80;
+    this.top = this.ambient ? 16 : this.narrow ? 30 : 32;
+    this.bottom = this.narrow ? 26 : 28;
     this.laneH = (h - this.top - this.bottom) / map.topics.length;
     const today = map.years[0] + (Date.now() - Date.UTC(map.years[0], 0, 1)) / YEAR_MS;
     this.t0 = map.years[0];
     this.t1 = Math.max(map.latest, today) + 0.03;
-    this.nodeX = w - this.right * 0.46;
+    this.nodeX = w - this.right * 0.48;
     this.nodeY = this.top + (h - this.top - this.bottom) / 2;
   }
 
@@ -280,17 +287,18 @@ export class AnswerMap {
     const span = this.laneH * 0.3;
     const bottomY = this.h - this.bottom;
 
-    // Years: a faint line where each begins, its name in the middle of its span.
+    // Years: a faint line where each begins, its name in the middle of its span; on a phone, where
+    // the spans are narrow and this year's is short, under the line itself.
     ctx.lineWidth = 1;
-    ctx.font = `${this.narrow ? 10 : 11}px ${this.font}`;
+    ctx.font = `${this.smallSize}px ${this.font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     for (let year = Math.ceil(this.t0); year < this.t1; year++) {
       const x = Math.round(this.x(year)) + 0.5, end = this.x(Math.min(this.t1, year + 1));
       ctx.strokeStyle = `rgba(${CREAM},0.07)`;
       ctx.beginPath(); ctx.moveTo(x, this.top - 6); ctx.lineTo(x, bottomY + 3); ctx.stroke();
-      if (end - x > 26) {
+      if (this.narrow || end - x > 26) {
         ctx.fillStyle = `rgba(${CREAM},${this.ambient ? 0.3 : 0.4})`;
-        ctx.fillText(String(year), (x + end) / 2, bottomY + 17);
+        ctx.fillText(String(year), this.narrow ? x : (x + end) / 2, bottomY + 17);
       }
     }
 
@@ -300,7 +308,7 @@ export class AnswerMap {
       const y = this.laneY(g), on = activeLanes.has(g);
       ctx.font = `${on ? 600 : 400} ${this.labelSize}px ${this.font}`;
       ctx.fillStyle = on ? `rgba(${MINT},0.95)` : `rgba(${CREAM},${this.ambient ? 0.34 : 0.48})`;
-      ctx.fillText(topic.l, this.left - (this.narrow ? 8 : 12), y);
+      ctx.fillText(topic.l, this.left - this.gap, y);
       ctx.strokeStyle = `rgba(${CREAM},0.045)`;
       ctx.beginPath(); ctx.moveTo(this.left, Math.round(y) + 0.5); ctx.lineTo(this.w - this.right + 4, Math.round(y) + 0.5); ctx.stroke();
     });
@@ -421,9 +429,9 @@ export class AnswerMap {
       ctx.beginPath(); ctx.arc(this.nodeX, this.nodeY, 12.5, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
     }
     if (!this.ambient) {
-      ctx.font = `${this.narrow ? 10 : 11}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.font = `${this.narrow ? 11 : 11.5}px ${this.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = `rgba(${CREAM},0.6)`;
-      ctx.fillText(this.words.question, this.nodeX, this.nodeY + (this.narrow ? 27 : 30));
+      ctx.fillText(this.words.question, this.nodeX, this.nodeY + (this.narrow ? 28 : 31));
     }
     for (const {card, k, x, y} of cards) {
       const glow = ctx.createRadialGradient(x, y, 0, x, y, 11);
