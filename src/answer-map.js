@@ -4,7 +4,8 @@
 // judgment cards. The service serves the layout (/api/answer-map, rebuilt with each context
 // update by scripts/build_answer_map.py). The stream lights up what it actually used: the
 // candidates it found, the cards it chose, and the sources an answer cites, numbered as in the
-// text. A numbered light opens its source, as a citation does.
+// text. A numbered light opens the original material, the video at the cited moment or the post
+// (2026-10-13, the owner), and marks its source beside the answer, as a citation does.
 
 // ask.lizheng.ai reaches the service at /api/answer-map; lizheng.ai's homepage, which copies this
 // file (scripts/sync-ask-app.mjs there), at /api/ask-lizheng/answer-map.
@@ -56,11 +57,12 @@ const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
  * pointed at, and the lights it is given (another reader's question) change with a crossfade.
  */
 export class AnswerMap {
-  constructor(canvas, map, {onSelect, reduce = false, ambient = false} = {}) {
+  constructor(canvas, map, {onSelect, onOpen, reduce = false, ambient = false} = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.map = map;
     this.onSelect = onSelect;
+    this.onOpen = onOpen;
     this.reduce = reduce;
     this.ambient = ambient;
     this.rot = -0.35;
@@ -164,7 +166,14 @@ export class AnswerMap {
       c.style.cursor = h ? 'pointer' : 'grab';
     };
     const onUp = event => {
-      if (down && !down.moved) { const h = hit(at(event)); if (h) this.onSelect?.(h.id); }
+      if (down && !down.moved) {
+        const h = hit(at(event));
+        if (h) {
+          this.onSelect?.(h.id);
+          const source = this.state.sources.get(h.id);
+          if (source?.url) { window.open(source.url, '_blank', 'noopener,noreferrer'); this.onOpen?.(source); }
+        }
+      }
       down = null;
     };
     const onLeave = () => { if (this.hover) { this.hover = null; this.wake(); } };
@@ -424,7 +433,7 @@ export class AnswerMap {
     if (this.hover) {
       const source = state.sources.get(this.hover.id);
       if (source?.title) {
-        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${source.title}`;
+        const text = `${this.hover.id.slice(1)} · ${(source.date || '').slice(0, 7).replace('-', '.')} · ${source.title} ↗`;
         ctx.font = `12px ${this.font}`;
         const maxW = Math.min(this.w - 16, 320);
         let shown = text;
@@ -441,6 +450,32 @@ export class AnswerMap {
     const moving = live || (this.ambient && !this.reduce) || now - this.lastActive < 2600 || [...this.seen.values()].some(t => now - t < 1500);
     if (moving && this.visible) this.frame = requestAnimationFrame(t => this.draw(t));
   }
+}
+
+/**
+ * One finished frame of the map, drawn once into `canvas` at `width`×`height` (scaled by `scale`):
+ * what a saved image or PDF shows, numbers and all, with no observers and no animation. Returns
+ * where each numbered light and its number landed, so a PDF can link them to their sources.
+ */
+export function paintAnswerMap(canvas, map, state, {width, height, scale = 1, font = 'system-ui, sans-serif'}) {
+  const view = Object.create(AnswerMap.prototype);
+  Object.assign(view, {
+    canvas, ctx: canvas.getContext('2d'), map, reduce: true, ambient: false, rot: -0.35, spin: 0,
+    state: {live: false, stage: '', candidates: [], cards: [], cited: [], sources: new Map(), selected: null},
+    seen: new Map(), fading: new Map(), hits: [], hover: null, visible: false, frame: 0, lastActive: 0, lastDraw: 0, font,
+    turn: Float32Array.from(map.t, t => t / 10000), radius: Float32Array.from(map.r, r => r / 1000),
+  });
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  view.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  view.w = width; view.h = height;
+  view.narrow = width < 560;
+  view.tilt = view.narrow ? 0.5 : 0.42;
+  view.R = Math.min(width * (view.narrow ? 0.4 : 0.41), (height - 34) / (2 * view.tilt * 1.18));
+  view.cx = width / 2; view.cy = height / 2 + 4;
+  view.update(state);             // with reduce, everything has already arrived
+  view.draw(performance.now());
+  return view.hits;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

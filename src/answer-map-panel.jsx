@@ -34,11 +34,13 @@ export function answerMapState(map, message, live, selected = null) {
  * number, like a citation in the text, opens its source. `selected` is the source open beside
  * the answer, whichever way it was opened; its light is marked.
  */
-export function AnswerMapPanel({message, live = false, selected = null, onSelect}) {
+export function AnswerMapPanel({message, live = false, selected = null, onSelect, onOpen}) {
   const canvas = useRef(null);
   const view = useRef(null);
   const select = useRef(onSelect);
   select.current = onSelect;
+  const opened = useRef(onOpen);
+  opened.current = onOpen;
   const [map, setMap] = useState(null);
   const [failed, setFailed] = useState(false);
 
@@ -51,7 +53,7 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
   useEffect(() => {
     if (!map || !canvas.current) return undefined;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    view.current = new AnswerMap(canvas.current, map, {onSelect: id => select.current?.(id), reduce});
+    view.current = new AnswerMap(canvas.current, map, {onSelect: id => select.current?.(id), onOpen: source => opened.current?.(source), reduce});
     return () => { view.current?.destroy(); view.current = null; };
   }, [map]);
 
@@ -75,7 +77,7 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
     </div>
     <figcaption>
       {live ? steps : numbered > 0 && <p className="answer-map-lead">
-        图上标号的是{message.result.status === 'sources-only' ? '找到' : '回答引用'}的{numbered}份材料，点编号看原文。
+        图上标号的是{message.result.status === 'sources-only' ? '找到' : '回答引用'}的{numbered}份材料，点编号打开原视频或原帖。
       </p>}
       {((live && found > 0) || cards.length > 0) && <p className="answer-map-counts">
         {live && found > 0 && <span>{found}份候选材料</span>}

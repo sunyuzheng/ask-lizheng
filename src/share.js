@@ -1,8 +1,11 @@
 // Turns one answer into a shareable long image or an A4 PDF, drawn on canvas in
-// lizheng.ai's look: the question first, then the answer, its limits and the
-// sources, and a footer with the 立正 seal, the answer's own page and a QR code
-// to it (to ask.lizheng.ai when it has none). Loaded only when someone saves an answer.
+// lizheng.ai's look: the question first, then the answer with its map (the cited
+// sources numbered as in the text; in a PDF each number opens its source), its
+// limits and the sources, and a footer with the 立正 seal, the answer's own page
+// and a QR code to it (to ask.lizheng.ai when it has none). Loaded only when
+// someone saves an answer.
 import qrcode from 'qrcode-generator';
+import {loadAnswerMap, paintAnswerMap, sourceItem} from './answer-map.js';
 import {MARK_PATHS, MARK_TRANSFORM, MARK_VIEWBOX} from './mark.js';
 import {isMemberCourse, isMemberVideo, memberJoinUrl, sourceAccessNote, sourceTypeLabel} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
@@ -281,6 +284,43 @@ function sourceRow(ctx, source, number) {
   }};
 }
 
+// The answer map after the summary, as on the page, drawn at the page's proportions and scaled
+// to the image's width. In a PDF each numbered light opens its source; an image cannot be
+// clicked, so it says the numbers are the text's (its QR code opens the map that can be).
+const MAP_W = 600, MAP_H = 300;
+function mapRow(map, result, kind) {
+  const sources = result.sources || [];
+  const cited = sources.map(source => ({id: source.id, item: sourceItem(map, source)}));
+  if (!cited.some(row => row.item >= 0)) return null;
+  const scale = INNER / MAP_W, mapH = Math.round(MAP_H * scale), h = mapH + 116;
+  const art = document.createElement('canvas');
+  const hits = paintAnswerMap(art, map, {live: false, done: true, stage: 'done', candidates: cited, cards: [], cited,
+    sources: new Map(sources.map(source => [source.id, source])), selected: null}, {width: MAP_W, height: MAP_H, scale: scale * 2, font: SANS});
+  const url = new Map(sources.map(source => [source.id, source.url]));
+  const links = kind === 'pdf' ? hits.filter(hit => url.has(hit.id))
+    .map(hit => ({x: PAD + hit.x * scale, y: hit.y * scale, w: hit.w * scale, h: hit.h * scale, url: url.get(hit.id)})) : [];
+  const what = result.status === 'sources-only' ? '找到' : '回答引用';
+  const lead = kind === 'pdf' ? `图上标号的是${what}的${sources.length}份材料，点编号打开原视频或原帖。` : `图上标号的是${what}的${sources.length}份材料，编号和正文、出处一致。`;
+  return {h, links, draw(c, y) {
+    const glow = c.createRadialGradient(W / 2, y + mapH * 0.44, 0, W / 2, y + mapH * 0.44, INNER * 0.62);
+    glow.addColorStop(0, '#1a5132'); glow.addColorStop(0.55, C.forest); glow.addColorStop(1, '#0b2f1b');
+    c.fillStyle = glow; roundRect(c, PAD, y, INNER, h, 18); c.fill();
+    c.drawImage(art, PAD, y, INNER, mapH);
+    c.textBaseline = 'middle'; c.textAlign = 'left';
+    c.fillStyle = C.onForest; c.font = font(400, 22);
+    c.fillText(lead, PAD + 28, y + mapH + 32);
+    c.font = font(400, 18);
+    let x = PAD + 28;
+    const ly = y + mapH + 78;
+    for (const [color, label] of [['#f8f1e4', '视频与对谈'], ['#8fd4a4', '文字'], ['#e2c27c', '课程与书']]) {
+      c.fillStyle = color; c.beginPath(); c.arc(x + 5, ly, 5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText(label, x + 17, ly);
+      x += 17 + c.measureText(label).width + 26;
+    }
+    c.textAlign = 'right'; c.fillText('越往外越新，方向是主题', PAD + INNER - 28, ly); c.textAlign = 'left';
+  }};
+}
+
 // The footer's QR code opens this answer's own page when it has one, otherwise the place to ask.
 function footerRow(link = '') {
   const h = 260;
@@ -312,7 +352,7 @@ function footerRow(link = '') {
   }};
 }
 
-function layout(ctx, {question, result, date, personal, link}) {
+function layout(ctx, {question, result, date, personal, link, map, kind}) {
   // Number sources 1..n in the shared file; the answer's ids skip sources it did not use.
   const cites = new Map((result.sources || []).map((s, i) => [s.id, String(i + 1)]));
   const rows = [header(), gap(62)];
@@ -325,6 +365,8 @@ function layout(ctx, {question, result, date, personal, link}) {
   for (const block of markdownBlocks(result.summary)) {
     rows.push(...textRows(ctx, inlineRuns(block.text, cites), {size: 32, lh: 1.75, weight: 600, color: C.ink, strong: C.ink}));
   }
+  const mapped = map && mapRow(map, result, kind);
+  if (mapped) rows.push(gap(40), mapped);
   for (const section of result.sections || []) {
     const kind = section.kind === 'application' && personal ? 'personal' : section.kind;
     rows.push(gap(46), ...headingRows(ctx, section.heading, kind), gap(8));
@@ -415,6 +457,7 @@ function renderPages(rows, question) {
     for (const {row, y} of items) {
       row.draw(c, y);
       if (row.link) links.push(row.footer ? {x: 0, y, w: W, h: row.h, url: row.link} : {x: PAD, y, w: INNER, h: row.h, url: row.link});
+      for (const link of row.links || []) links.push({...link, y: y + link.y});
     }
     c.textBaseline = 'middle'; c.font = font(400, 18); c.fillStyle = C.faint;
     if (index) c.fillText(fitEllipsis(c, `问问立正 · ${question}`, INNER - 160), PAD, 46);
@@ -494,8 +537,10 @@ async function ensureFonts({question, result}) {
 
 export async function exportAnswer(kind, data) {
   await ensureFonts(data);
+  // The page drew the map already; without its layout the file is the same, without the map.
+  const map = await loadAnswerMap().catch(() => null);
   const ctx = document.createElement('canvas').getContext('2d');
-  const rows = layout(ctx, data);
+  const rows = layout(ctx, {...data, map, kind});
   const base = `问问立正-${data.question.replace(/[\\/:*?"<>|\s]+/g, '').slice(0, 18) || '回答'}`;
   if (kind === 'png') return {blob: await toBlob(renderLong(rows), 'image/png'), name: `${base}.png`, type: 'image/png'};
   const pages = renderPages(rows, data.question);

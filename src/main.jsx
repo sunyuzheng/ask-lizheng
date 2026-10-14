@@ -322,7 +322,7 @@ function Working({message, elapsed, onStop, onSelect}) {
       <p role="status">{message.progress?.message || '正在查找相关公开材料…'}</p>
       <button type="button" className="ghost-button" onClick={onStop}>停止</button>
     </div>
-    <AnswerMapPanel message={message} live onSelect={onSelect}/>
+    <AnswerMapPanel message={message} live onSelect={onSelect} onOpen={source => trackSource(source.url)}/>
     <p className="working-note">
       <span>{message.model} · 已用{elapsed}秒</span>
       <span>{!message.lastActivity ? (elapsed >= 5 ? '问答服务闲置时会休眠，正在唤醒，通常十几秒…' : '正在连接服务…') : stale ? '有一会儿没收到新进展了，还在等。' : candidates.length ? '回答还在整理，可以先读找到的材料。' : '找到材料后，会先在这里给你看。'}</span>
@@ -489,6 +489,8 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
   const meta = !often && similar >= 2 ? `${similar}次类似提问` : '';
   const select = id => onSelect(prefix, id);
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
+  // Its map, as under an answer here (2026-10-13, the owner: it shows how much stands behind it).
+  const mapMessage = useMemo(() => (answer ? {id: card.public_id, result: {...answer, status: 'answered'}} : null), [answer, card.public_id]);
   return <article className={`qcard ${open ? 'open' : ''} ${nested ? 'nested' : ''}`} id={nested ? undefined : `qcard-${card.public_id}`}>
     <div className="qcard-row">
       <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
@@ -506,6 +508,8 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
     {open && <div className="qcard-body">
       {answer ? <div className="answer">
         <div className="summary"><Markdown text={answer.summary} sources={answer.sources} onSelect={select}/></div>
+        {answer.sources.length > 0 && <AnswerMapPanel message={mapMessage} onSelect={select} onOpen={source => trackSource(source.url)}
+          selected={selected?.startsWith(`${prefix}:`) ? selected.slice(prefix.length + 1) : null}/>}
         {answer.sections.map((section, index) => <SectionBlock key={index} section={section} sources={answer.sources} onSelect={select}/>)}
         {answer.limitations && <Limits text={answer.limitations} sources={answer.sources} onSelect={select}/>}
         {answer.sources.length > 0 && <details className="inline-sources">
@@ -1518,7 +1522,7 @@ function App() {
                     ? <p className="answer-meta"><span>找到的材料</span></p>
                     : <p className="answer-meta"><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
-                  {sources.length > 0 && <AnswerMapPanel message={m} selected={sourceTurn === m.id ? selected : null} onSelect={select}/>}
+                  {sources.length > 0 && <AnswerMapPanel message={m} selected={sourceTurn === m.id ? selected : null} onSelect={select} onOpen={source => trackSource(source.url)}/>}
                   {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={m.shared && m.personal ? 'asker' : !!(m.context || m.personal)}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
                     <p>再补充一点，回答会更贴合你</p>
