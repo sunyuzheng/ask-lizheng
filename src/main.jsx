@@ -41,7 +41,7 @@ const BACKGROUND = [
 // Every answer is labeled as AI-written at the top, so only the sections that differ say so:
 // a faithful paraphrase of the material, or the AI applying it (to the reader's situation when given).
 const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
-  : kind === 'application' ? (personal ? '结合你的处境' : 'AI推演') : '';
+  : kind === 'application' ? (personal === 'asker' ? '结合提问者的处境' : personal ? '结合你的处境' : 'AI推演') : '';
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
 // v4, public Q&A: the notice, 说明 and the situation note come from public-qa.js, shared with
 // lizheng.ai. The situation is not kept since 2026-10-04 (/api/meta says context_archive: false).
@@ -272,8 +272,9 @@ function SourceCard({source, selected, onOpen, prefix}) {
     {source.timecode && <a className="source-time" href={source.url} target="_blank" rel="noreferrer" onClick={() => trackSource(source.url)}>从 {source.timecode} 开始看</a>}
     {source.reason && <p className="source-reason">{source.reason}</p>}
     <details onToggle={event => { if (event.currentTarget.open) onOpen?.(source.id); }}>
-      <summary>看片段<Chev/></summary>
-      <p className="excerpt">{source.excerpt}</p>
+      {/* A shared answer's page carries no excerpts (pages search engines read never do): its note only. */}
+      <summary>{source.excerpt ? '看片段' : '看说明'}<Chev/></summary>
+      {source.excerpt && <p className="excerpt">{source.excerpt}</p>}
       <p className="attribution">{source.author && `${source.author} · `}{source.attribution_note}</p>
       {transcriptQualityNote(source) && <p className="source-quality-note">{transcriptQualityNote(source)}</p>}
       {source.public_copy_url && !((isMemberVideo(source) || isMemberCourse(source)) && source.text_access === 'public') && <a className="public-copy" href={source.public_copy_url} target="_blank" rel="noreferrer">阅读公开资料副本<Ext/></a>}
@@ -530,6 +531,23 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
   </article>;
 }
 
+// A shared answer's page (ask.lizheng.ai/s/<date>/<word>, made by lizheng.ai's shared/ask-share-page.ts)
+// is this page with that answer in it (#ask-shared): it opens as the conversation, as its asker saw
+// it, and can be followed up. Since 2026-10-13 (the owner: the link should show what the asker sees).
+const SHARED = (() => {
+  try {
+    const value = JSON.parse(document.getElementById('ask-shared')?.textContent || 'null');
+    const answer = value?.answer;
+    if (!value || typeof value.question !== 'string' || !value.question.trim() || typeof value.url !== 'string'
+      || !value.url.startsWith('https://ask.lizheng.ai/s/') || answer?.status !== 'answered' || typeof answer.summary !== 'string'
+      || !Array.isArray(answer.sections) || !Array.isArray(answer.sources)) return null;
+    return value;
+  } catch { return null; }
+})();
+// The address bar follows the conversation's latest answer: its own page once it has one, else the
+// start. Only where /s/… is this page (ask.lizheng.ai, the app, a local build).
+const SHARE_PATHS = location.hostname === 'ask.lizheng.ai' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
 // When a question on this device was asked: 今天 14:32, 10月3日 9:05, then the year when it is not this one.
 function askedOn(iso, now = new Date()) {
   const date = new Date(iso);
@@ -687,7 +705,8 @@ function App() {
   const [personal, setPersonal] = useState(false);
   const [editingSituation, setEditingSituation] = useState(false);
   const [background, setBackground] = useState({goal: '', facts: '', tried: ''});
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => (SHARED ? [{id: 1, question: SHARED.question.trim(), intent: SHARED.intent || 'understand',
+    context: '', personal: SHARED.intent === 'apply', shared: true, model: '', result: SHARED.answer, askedAt: SHARED.created_at || ''}] : []));
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
@@ -699,7 +718,7 @@ function App() {
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
   // Each answer's share, by turn: whether its panel is open, and how far it got.
-  const [shares, setShares] = useState({});
+  const [shares, setShares] = useState(() => (SHARED ? {1: {phase: 'ready', url: SHARED.url}} : {}));
   const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
@@ -712,7 +731,9 @@ function App() {
   const [discoveryState, setDiscoveryState] = useState('loading');
   // Anonymous usage of this page view for the owner's dashboard (usage.js): reading time, scroll
   // depth, whether the list of questions others asked was seen, and what was used.
-  useEffect(() => startUsage(IN_APP ? 'app' : 'ask'), []);
+  // A shared answer's readers are counted by lizheng.ai as share views; one who asks from it is counted here then.
+  const usageStarted = useRef(!SHARED);
+  useEffect(() => (SHARED ? undefined : startUsage(IN_APP ? 'app' : 'ask')), []);
   // Which list shows (最近问 unless only common questions exist yet), its first four or all of it.
   const [view, setView] = useState('recent');
   const [expanded, setExpanded] = useState(false);
@@ -1097,6 +1118,7 @@ function App() {
     const payload = {...(retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})}),
       ...(IN_APP ? {ai_consent_model: meta?.model || 'AI'} : {})};
+    if (!usageStarted.current) { usageStarted.current = true; startUsage(IN_APP ? 'app' : 'ask'); }
     if (!retry) { markUsage('ask'); track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
@@ -1238,11 +1260,21 @@ function App() {
         .then(value => setShare(m.id, {phase: 'ready', url: value.url}), () => setShare(m.id, {phase: 'confirm'}));
     }
   }, [messages]);
+  // The address bar shows the latest answer's own page once it has one, and the start otherwise:
+  // refreshing keeps the answer, and the address is the link to share.
+  useEffect(() => {
+    if (!SHARE_PATHS) return;
+    const last = messages.at(-1);
+    const page = last && shares[last.id]?.phase === 'ready' ? shares[last.id].url : '';
+    const path = page ? new URL(page).pathname : '/';
+    if (location.pathname !== path) window.history.replaceState(window.history.state, '', path === '/' ? `/${location.search}` : path);
+  }, [messages, shares]);
   // Copying, sending or showing the QR code is the share: the first one counts it, and may give
   // back one of today's questions.
   function markShared(m, action) {
     track('Ask Share', {surface: SURFACE, action});
-    if (shares[m.id]?.counted) return;
+    // Only the asker's page holds the proof that counts a share; a shared page's reader just shares.
+    if (shares[m.id]?.counted || !m.result.share) return;
     setShare(m.id, {counted: true});
     createShareLink(m.result.share, {surface: SURFACE, bonus: bonusOffer, auto: false}).then(value => {
       tookBonus(value);
@@ -1473,7 +1505,9 @@ function App() {
                 <header className="question">
                   <span className="sr-only">你的问题</span>
                   <h2><Phrases text={m.question}/></h2>
-                  {m.askedAt && <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt)}</time>问的，保存在这台设备上</p>}
+                  {m.askedAt && (m.shared
+                    ? <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt).replace(/ .*$/, '')}</time>提问</p>
+                    : <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt)}</time>问的，保存在这台设备上</p>)}
                   {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
                 {!m.result && (working || m.previewSources?.length > 0) && (working
@@ -1485,7 +1519,7 @@ function App() {
                     : <p className="answer-meta"><span>AI根据公开材料整理</span><small>{m.model}{m.elapsed ? ` · ${m.elapsed}秒` : ''}</small></p>}
                   <div className="summary"><Markdown text={m.result.summary} sources={sources} onSelect={select}/></div>
                   {sources.length > 0 && <AnswerMapPanel message={m} selected={sourceTurn === m.id ? selected : null} onSelect={select}/>}
-                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={!!(m.context || m.personal)}/>)}
+                  {(m.result.sections || []).map((section, i) => <SectionBlock key={i} section={section} sources={sources} onSelect={select} personal={m.shared && m.personal ? 'asker' : !!(m.context || m.personal)}/>)}
                   {m.result.clarifying_questions?.length > 0 && <div className="clarify">
                     <p>再补充一点，回答会更贴合你</p>
                     {m.result.clarifying_questions.map(item => <button type="button" key={item} onClick={() => {
@@ -1500,7 +1534,7 @@ function App() {
                     <summary>回到{sources.length}份原文<Chev/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
-                  {m.result.status === 'answered' && <div id={`share-${m.id}`}><ShareBar state={shares[m.id]} link={!!m.result.share} bonus={bonusOffer}
+                  {m.result.status === 'answered' && <div id={`share-${m.id}`}><ShareBar state={shares[m.id]} link={!!(m.result.share || shares[m.id]?.url)} bonus={bonusOffer && !!m.result.share}
                     exporting={exporting === `${m.id}-png` ? 'png' : exporting === `${m.id}-pdf` ? 'pdf' : exporting ? 'other' : ''}
                     onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onQr={() => toggleQr(m)} onExport={kind => exportTurn(kind, m)}/></div>}
                   <div className="answer-actions">
