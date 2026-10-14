@@ -28,7 +28,10 @@ def test_the_map_lays_out_the_current_context():
     lock = json.loads((PROJECT / "data" / "context-lock.json").read_text())
     assert layout["release"] == lock["source_commit"]
     count = len(layout["keys"])
-    assert len(layout["kinds"]) == len(layout["t"]) == len(layout["r"]) == len(layout["g"]) == count
+    assert len(layout["kinds"]) == len(layout["t"]) == len(layout["r"]) == len(layout["g"]) == len(layout["d"]) == count
+    # The timeline places each material on its own day, within the years the layout names.
+    first, last = layout["years"]
+    assert all(0 <= d <= (last - first) * 366 for d in layout["d"])
     assert layout["keys"] == sorted(set(layout["keys"]))
     # Every material the answers can cite has its light, and every light is a material.
     assert layout["keys"] == [row["key"] for row in builder().load_materials()]

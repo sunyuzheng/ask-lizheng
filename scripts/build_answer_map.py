@@ -71,6 +71,14 @@ def when(value: str) -> float:
     return y + (date(y, m, d).toordinal() - start) / (date(y + 1, 1, 1).toordinal() - start)
 
 
+def days(value: str) -> int:
+    """Days from the first year's first day to the date, for the timeline (before it: 0)."""
+    match = re.match(r"(\d{4})-(\d{2})-(\d{2})", value or "")
+    if not match:
+        return -1
+    return max(0, date(*map(int, match.groups())).toordinal() - date(FIRST_YEAR, 1, 1).toordinal())
+
+
 def dot(a, b) -> float:
     return sum(map(mul, a, b))
 
@@ -116,10 +124,13 @@ def load_materials() -> list[dict]:
         if len(parts) < 3 or parts[0] != "corpus" or parts[1] in SKIP or parts[1] not in KINDS:
             continue
         key = material_key(doc.path)
-        moment = when(doc.original_published_at or doc.published_at)
-        row = materials.setdefault(key, {"key": key, "path": doc.path, "kind": KINDS[parts[1]], "title": doc.title, "when": moment})
+        published = doc.original_published_at or doc.published_at
+        moment = when(published)
+        row = materials.setdefault(key, {"key": key, "path": doc.path, "kind": KINDS[parts[1]], "title": doc.title, "when": moment,
+                                         "days": days(published)})
         if math.isnan(row["when"]) and not math.isnan(moment):
             row["when"] = moment
+            row["days"] = days(published)
     rows = [materials[k] for k in sorted(materials)]
     missing = [r["key"] for r in rows if math.isnan(r["when"])]
     if missing:
@@ -243,6 +254,8 @@ def main() -> None:
         "t": [round(x % 1 * 10000) for x in turn],
         "r": [round(x * 1000) for x in radius],
         "g": topic_of,
+        # The timeline's places: each material's own date, in days since the first year began.
+        "d": [row["days"] for row in rows],
         "keys": [row["key"] for row in rows],
         "cards": [{"id": c["id"], "title": c["title"], "t": round(c["t"] * 10000), "src": c["src"]} for c in cards],
     }

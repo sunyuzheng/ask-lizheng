@@ -302,30 +302,29 @@ function mapRow(map, result, kind) {
   const url = new Map(sources.map(source => [source.id, openableUrl(source.url)]).filter(([, value]) => value));
   const links = kind === 'pdf' ? hits.filter(hit => url.has(hit.id))
     .map(hit => ({x: PAD + hit.x * scale, y: hit.y * scale, w: hit.w * scale, h: hit.h * scale, url: url.get(hit.id)})) : [];
-  const what = result.status === 'sources-only' ? '找到' : '回答引用';
+  const what = result.status === 'sources-only' ? '找到的材料' : '这条回答引用的';
   const members = sources.some(isMembersOnly);
-  const lead = kind === 'pdf' ? `图上标号的是${what}的${sources.length}份材料，点编号打开原视频或原帖。` : `图上标号的是${what}的${sources.length}份材料，编号和正文、出处一致。`;
+  const years = sources.map(source => Number(source.date?.slice(0, 4))).filter(Boolean);
+  const reach = !years.length ? '' : Math.min(...years) === Math.max(...years) ? `，都在${years[0]}年` : `，从${Math.min(...years)}年到${Math.max(...years)}年`;
+  const lead = `亮着的${sources.length}份是${what}${reach}${kind === 'pdf' ? '。点编号打开原视频或原帖。' : '，编号和正文、出处一致。'}`;
   return {h, links, draw(c, y) {
-    const glow = c.createRadialGradient(W / 2, y + mapH * 0.44, 0, W / 2, y + mapH * 0.44, INNER * 0.62);
-    glow.addColorStop(0, '#1a5132'); glow.addColorStop(0.55, C.forest); glow.addColorStop(1, '#0b2f1b');
+    // The forest, a little lighter towards today, as on the page.
+    const glow = c.createLinearGradient(PAD, 0, PAD + INNER, 0);
+    glow.addColorStop(0, '#0b2f1b'); glow.addColorStop(0.62, C.forest); glow.addColorStop(1, '#1a5132');
     c.fillStyle = glow; roundRect(c, PAD, y, INNER, h, 18); c.fill();
     c.drawImage(art, PAD, y, INNER, mapH);
     c.textBaseline = 'middle'; c.textAlign = 'left';
     c.fillStyle = C.onForest; c.font = font(400, 22);
     c.fillText(lead, PAD + 28, y + mapH + 32);
     c.font = font(400, 18);
-    let x = PAD + 28;
     const ly = y + mapH + 78;
-    for (const [color, label] of [['#f8f1e4', '视频与对谈'], ['#8fd4a4', '文字'], ['#96c4e8', '课程与书']]) {
-      c.fillStyle = color; c.beginPath(); c.arc(x + 5, ly, 5, 0, Math.PI * 2); c.fill();
-      c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText(label, x + 17, ly);
-      x += 17 + c.measureText(label).width + 26;
-    }
+    const legend = '每一道细线是一份材料：按主题分行，越往右越新。';
+    c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText(legend, PAD + 28, ly);
     if (members) {
+      const x = PAD + 28 + c.measureText(legend).width + 26;
       c.fillStyle = '#e2c27c'; roundRect(c, x, ly - 7, 18, 14, 4); c.fill();
       c.fillStyle = 'rgba(248,241,228,0.6)'; c.fillText('会员内容', x + 26, ly);
     }
-    c.textAlign = 'right'; c.fillText('越往外越新，方向是主题', PAD + INNER - 28, ly); c.textAlign = 'left';
   }};
 }
 

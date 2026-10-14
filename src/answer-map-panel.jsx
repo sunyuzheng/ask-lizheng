@@ -53,7 +53,9 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
   useEffect(() => {
     if (!map || !canvas.current) return undefined;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    view.current = new AnswerMap(canvas.current, map, {onSelect: id => select.current?.(id), onOpen: source => opened.current?.(source), reduce});
+    // The question at the timeline's right end: the reader's own, or someone else's (a shared or a public answer).
+    const words = {question: message.shared || message.public ? '这个问题' : '你的问题'};
+    view.current = new AnswerMap(canvas.current, map, {onSelect: id => select.current?.(id), onOpen: source => opened.current?.(source), reduce, words});
     return () => { view.current?.destroy(); view.current = null; };
   }, [map]);
 
@@ -71,6 +73,9 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
   const cards = state?.cards || [];
   const numbered = message.result?.sources?.length || 0;
   const members = (message.result?.sources || []).some(membersOnly);
+  // How far back the answer reaches: the years of the sources it cites.
+  const years = (message.result?.sources || []).map(source => Number(source.date?.slice(0, 4))).filter(Boolean);
+  const reach = !years.length ? '' : Math.min(...years) === Math.max(...years) ? `，都在${years[0]}年` : `，从${Math.min(...years)}年到${Math.max(...years)}年`;
 
   return <figure className={`answer-map ${live ? 'answer-map-live' : 'answer-map-done'}`}>
     <div className="answer-map-stage">
@@ -78,17 +83,14 @@ export function AnswerMapPanel({message, live = false, selected = null, onSelect
     </div>
     <figcaption>
       {live ? steps : numbered > 0 && <p className="answer-map-lead">
-        图上标号的是{message.result.status === 'sources-only' ? '找到' : '回答引用'}的{numbered}份材料，点编号打开原视频或原帖。
+        亮着的{numbered}份是{message.result.status === 'sources-only' ? '找到的材料' : '这条回答引用的'}{reach}。点编号打开原视频或原帖。
         {members && <span className="answer-map-member">金色的是会员内容，打开需要会员。</span>}
       </p>}
       {((live && found > 0) || cards.length > 0) && <p className="answer-map-counts">
         {live && found > 0 && <span>{found}份候选材料</span>}
         {cards.map(card => <span key={card.id} className="answer-map-card"><i aria-hidden="true"/>判断卡：{card.title}</span>)}
       </p>}
-      <p className="answer-map-legend">
-        <span><i className="dot video"/>视频与对谈</span><span><i className="dot text"/>文字</span><span><i className="dot course"/>课程与书</span><span><i className="diamond"/>判断卡</span>
-        <span className="answer-map-axes">越往外越新，方向是主题</span>
-      </p>
+      <p className="answer-map-legend">每一道细线是一份材料：按主题分行，越往右越新。</p>
     </figcaption>
   </figure>;
 }

@@ -99,7 +99,7 @@ const DISCOVERY = {
   live: '别人正在问',
   liveMore: '看看他们得到的回答',
   // Under the start screen's map (AmbientMap), above the questions it lights in turn.
-  liveMap: '每个光点是一份文章或视频，亮起的是下面这条回答引用的。',
+  liveMap: '每一道细线是一份文章或视频，按主题分行、越往右越新；亮起的是下面这条回答引用的。',
   total: n => `已有${n}个公开问答`,
   similar: n => `另外${n}个类似提问`,
   feedback: '反馈或举报',
@@ -491,7 +491,7 @@ function QuestionCard({card, open, detail, like, share, feedback, selected, nest
   const select = id => onSelect(prefix, id);
   const answer = detail && typeof detail === 'object' ? detail.answer : null;
   // Its map, as under an answer here (2026-10-13, the owner: it shows how much stands behind it).
-  const mapMessage = useMemo(() => (answer ? {id: card.public_id, result: {...answer, status: 'answered'}} : null), [answer, card.public_id]);
+  const mapMessage = useMemo(() => (answer ? {id: card.public_id, public: true, result: {...answer, status: 'answered'}} : null), [answer, card.public_id]);
   return <article className={`qcard ${open ? 'open' : ''} ${nested ? 'nested' : ''}`} id={nested ? undefined : `qcard-${card.public_id}`}>
     <div className="qcard-row">
       <button type="button" className="qcard-head" aria-expanded={open} onClick={onToggle}>
