@@ -793,6 +793,49 @@ function App() {
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
   const [accountWaking, setAccountWaking] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
+  // Back and Forward (2026-10-14, the owner: after 问问立正 at the top left there was no way back).
+  // A conversation and the start page are each a page of their own in the tab's history: asking from
+  // the start, opening a question from 我的提问, 新问题 and 问问立正 each add one, and Back and
+  // Forward move between them, a conversation coming back as it was left, scrolled where it was. The
+  // address of a conversation's page still follows its latest answer (it replaces, it never adds).
+  // A conversation being written when Back is pressed stops, as with 停止. Pages are kept in memory;
+  // after a reload, an answer's own address loads it again from lizheng.ai.
+  const pageKey = useRef(Math.random().toString(36).slice(2));
+  const pages = useRef(new Map());
+  const messagesNow = useRef(messages);
+  messagesNow.current = messages;
+  const leavePage = () => {
+    const stopping = !!abort.current;
+    if (stopping) abort.current.abort();
+    pages.current.set(pageKey.current, {
+      scrollY: window.scrollY,
+      messages: messagesNow.current.map(m => (stopping && !m.result && !m.error ? {...m, error: MESSAGES.stopped, errorCode: 'stopped'} : m)),
+    });
+  };
+  const enterPage = view => {
+    leavePage();
+    pageKey.current = Math.random().toString(36).slice(2);
+    window.history.pushState({ask: {key: pageKey.current, view}}, '', view === 'start' ? '/' : location.pathname + location.search);
+  };
+  useEffect(() => {
+    window.history.scrollRestoration = 'manual';
+    window.history.replaceState({...window.history.state, ask: {key: pageKey.current, view: SHARED ? 'thread' : 'start'}}, '');
+    const onPop = event => {
+      const page = event.state?.ask;
+      if (!page) return;   // an entry the page did not make
+      leavePage();
+      pageKey.current = page.key;
+      const saved = pages.current.get(page.key);
+      // A conversation this tab no longer holds (the page was reloaded since): its own address loads it.
+      if (page.view === 'thread' && !saved?.messages.length && /^\/[sq]\//.test(location.pathname)) { location.reload(); return; }
+      setMessages(page.view === 'thread' ? saved?.messages || [] : []);
+      setHistoryOpen(false); setAbout(null); setSelected(''); setSourceTurn(null); setError(''); setEditingSituation(false);
+      conversationId.current = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, saved?.scrollY || 0)));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const conversationId = useRef(null);
   // How the question box was last filled, counted with each question: typed, example, card, followup or clarify.
   const questionFrom = useRef('typed');
@@ -871,7 +914,7 @@ function App() {
         setQuestion(brought); questionFrom.current = 'page';
         if (params.get('mode') === 'find') setMode('find');
       }
-      history.replaceState(null, '', location.pathname + location.hash);
+      history.replaceState(history.state, '', location.pathname + location.hash);
     }
     let stopped = false;
     const slow = setTimeout(() => setAccountWaking(true), 1500);
@@ -1080,6 +1123,7 @@ function App() {
     });
   };
   const startOver = () => {
+    if (messages.length) enterPage('start');
     setMessages([]); setQuestion(''); setBackground({goal: '', facts: '', tried: ''}); setPersonal(false); setEditingSituation(false);
     questionFrom.current = 'typed';
     setSelected(''); setSourceTurn(null); setError('');
@@ -1103,6 +1147,7 @@ function App() {
   function openAsked(item) {
     if (busy) return;
     setHistoryOpen(false);
+    enterPage('thread');
     setMessages([{id: Number(item.id) || Date.now(), question: item.question, intent: item.intent, context: '', personal: item.personal,
       model: item.model, result: item.result, askedAt: item.asked_at}]);
     setQuestion(''); setError(''); setSelected(''); setSourceTurn(null); setEditingSituation(false);
@@ -1137,6 +1182,7 @@ function App() {
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
     let timedOut = false;
     const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 110000);
+    if (!messages.length) enterPage('thread');
     abort.current = controller;
     setMessages(prev => [...prev.filter(m => m.id !== id), {id, question: payload.question, intent: payload.intent, context: payload.context, request: payload, previewSources: retry?.previewSources || [], model: meta?.model || 'AI', progress: {stage: 'retrieving', message: '正在查找相关公开材料…'}}]);
     setQuestion(prev => (!retry || prev.trim() === payload.question ? '' : prev));
