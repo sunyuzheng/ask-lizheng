@@ -125,6 +125,15 @@ class Passage:
     discovery: bool
 
 
+def ordered_terms(module, text: str) -> list[str]:
+    """Open Context's query terms, longest first and, among those as long, in the order the text has
+    them. Its own order breaks such ties by set order, which changes with each process's hash seed:
+    a question with more terms than are kept (70 of its own) kept a different set after each
+    restart, and could find different sources (found 2026-10-15)."""
+    lowered = text.lower()
+    return sorted(module.query_terms(text), key=lambda term: (-len(term), lowered.find(term), term))
+
+
 class Brief(NamedTuple):
     """What ranking reads of every passage; the rest stays in the store until a passage is cited."""
     title: str
@@ -447,10 +456,10 @@ class ContextIndex:
         auxiliary = (context + " " + prior)[:1200]
         module = self.search_module
         focused_query = QUESTION_FILLERS.sub(" ", query[:600])
-        primary = [term for term in module.query_terms(focused_query) if term not in STOP_TERMS][:70]
-        extra = [term for term in module.query_terms(auxiliary) if term not in STOP_TERMS][:45]
+        primary = [term for term in ordered_terms(module, focused_query) if term not in STOP_TERMS][:70]
+        extra = [term for term in ordered_terms(module, auxiliary) if term not in STOP_TERMS][:45]
         aliases = " ".join(expansion for cues, expansion in CONCEPTS if any(cue in (query + " " + context).lower() for cue in cues))
-        expanded = [term for term in module.query_terms(aliases) if term not in STOP_TERMS][:45]
+        expanded = [term for term in ordered_terms(module, aliases) if term not in STOP_TERMS][:45]
         terms = list(dict.fromkeys(primary + extra + expanded))
         if not primary and not linked and not semantic_candidates:
             return []
