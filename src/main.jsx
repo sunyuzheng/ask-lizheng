@@ -12,7 +12,7 @@ import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
-import {REPORT_COPY, REPORT_TEXT_MAX, reportPayload, sendReport} from './report.js';
+import {REPORT_COPY, REPORT_TEXT_MAX, reportCopy, reportPayload, sendReport} from './report.js';
 import {isMembersOnly, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
 import {AmbientMap, AnswerMapPanel} from './answer-map-panel.jsx';
@@ -687,7 +687,7 @@ function About({close, meta, account, focusInput, publicArchive, contextKept, on
 // 反馈问题 (report.js): a line, or nothing, goes to the owner with what the page saw when the
 // person opened this: the question, how long it had waited, the stage, the error; never the situation.
 function Report({report, onClose}) {
-  const copy = REPORT_COPY.zh;
+  const copy = reportCopy('zh', '立正');
   const ref = useRef(null);
   const [text, setText] = useState('');
   const [state, setState] = useState('idle');

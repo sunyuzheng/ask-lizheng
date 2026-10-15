@@ -15,8 +15,8 @@ export const REPORT_COPY = {
   zh: {
     button: '反馈问题',
     title: '反馈问题',
-    introTurn: '会把这次的情况直接发给立正。可以补一句遇到了什么，不写也能发。',
-    introPage: '说说遇到了什么，会直接发给立正。',
+    introTurn: '会把这次的情况直接发给{owner}。可以补一句遇到了什么，不写也能发。',
+    introPage: '说说遇到了什么，会直接发给{owner}。',
     label: '遇到了什么',
     placeholder: '比如：一直在转圈，没出回答。需要回复的话，可以留个邮箱或微信。',
     withTurn: '一起发送：这个问题、等了多久、出错信息和设备类型。不发送你填的处境。',
@@ -34,8 +34,8 @@ export const REPORT_COPY = {
   en: {
     button: 'Report a problem',
     title: 'Report a problem',
-    introTurn: 'This sends what happened straight to Yuzheng. Add a line if you like, or just send it.',
-    introPage: 'Tell us what went wrong. It goes straight to Yuzheng.',
+    introTurn: 'This sends what happened straight to {owner}. Add a line if you like, or just send it.',
+    introPage: 'Say what went wrong. It goes straight to {owner}.',
     label: 'What happened',
     placeholder: 'For example: it kept spinning and no answer came. Leave an email if you want a reply.',
     withTurn: 'Sent with it: this question, how long it took, any error, and your device type. Your situation is not sent.',
@@ -51,6 +51,11 @@ export const REPORT_COPY = {
     communityLink: 'comment on the community post',
   },
 };
+
+/** The words in a page's own voice: ask.lizheng.ai says 立正, the homepage, his own, says 我 (me). */
+export function reportCopy(lang, owner) {
+  return Object.fromEntries(Object.entries(REPORT_COPY[lang]).map(([key, value]) => [key, value.replace('{owner}', owner)]));
+}
 
 const clip = (value, max) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined);
 const whole = value => (Number.isFinite(value) ? Math.min(3600, Math.max(0, Math.round(value))) : undefined);

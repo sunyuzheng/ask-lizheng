@@ -11,7 +11,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 def test_a_report_carries_what_the_page_saw_but_never_the_situation():
     code = r'''
 import assert from 'node:assert/strict';
-import {REPORT_COPY, REPORT_ENDPOINT, reportPayload, sendReport} from './src/report.js';
+import {REPORT_COPY, REPORT_ENDPOINT, reportCopy, reportPayload, sendReport} from './src/report.js';
 const turn = {question: '  合成问题？  ', askedAt: Date.parse('2026-10-15T05:38:57Z'), elapsed: 63.4, quiet: 40.6, stage: 'thinking',
   error: 'provider_timeout', status: 'sources-only', model: 'deepseek-v4-flash', share: 'https://ask.lizheng.ai/s/2026-10-15/quiet-river',
   context: '合成处境', situation: '合成处境'};
@@ -39,6 +39,11 @@ assert.equal(sent[0][1].credentials, 'same-origin');
 assert.equal(sent[0][1].headers['Content-Type'], 'application/json');
 assert.equal(REPORT_COPY.zh.button, '反馈问题');
 for (const lang of ['zh', 'en']) assert.deepEqual(Object.keys(REPORT_COPY[lang]), Object.keys(REPORT_COPY.zh));
+// Each page in its own voice: the ask page names 立正, the homepage speaks as him.
+assert.equal(reportCopy('zh', '立正').introPage, '说说遇到了什么，会直接发给立正。');
+assert.equal(reportCopy('zh', '我').introTurn, '会把这次的情况直接发给我。可以补一句遇到了什么，不写也能发。');
+assert.equal(reportCopy('en', 'me').introPage, 'Say what went wrong. It goes straight to me.');
+for (const words of [reportCopy('zh', '立正'), reportCopy('en', 'Yuzheng')]) assert.ok(Object.values(words).every(text => !/[{}]/.test(text)));
 console.log('report passed');
 '''
     result = subprocess.run(["node", "--input-type=module", "-e", code], cwd=PROJECT, text=True, capture_output=True)
