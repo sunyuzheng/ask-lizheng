@@ -252,10 +252,11 @@ class ContextArchitecture:
         return result
 
 
-def load(root: Path, documents) -> ContextArchitecture:
+def _read_pack(root: Path) -> tuple[CardPack, dict] | None:
+    """This release's validated card pack and manifest records, or None when it has no cards."""
     root = Path(root)
     if not (root / CARDS_PATH).is_file():
-        return ContextArchitecture(documents)
+        return None
     try:
         raw_manifest = json.loads((root / "release-manifest.json").read_text(encoding="utf-8"))
         records = raw_manifest["files"]
@@ -273,11 +274,6 @@ def load(root: Path, documents) -> ContextArchitecture:
     cards = {card.id: card for card in pack.cards}
     if len(cards) != len(pack.cards):
         raise CardValidationError("Duplicate public reasoning card IDs")
-    by_path = {}
-    for index, doc in enumerate(documents):
-        by_path.setdefault(doc.path, []).append(index)
-    verified = set()
-    hydrated = {}
     for card in pack.cards:
         if not any(reference.role == "basis" for reference in card.sources):
             raise CardValidationError("A public reasoning card needs a primary basis")
@@ -285,6 +281,21 @@ def load(root: Path, documents) -> ContextArchitecture:
             raise CardValidationError("Public reasoning card has a broken relation")
         if len({reference.path for reference in card.sources}) != len(card.sources):
             raise CardValidationError("Duplicate source references in a public reasoning card")
+    return pack, manifest
+
+
+def load(root: Path, documents) -> ContextArchitecture:
+    root = Path(root)
+    read = _read_pack(root)
+    if read is None:
+        return ContextArchitecture(documents)
+    pack, manifest = read
+    by_path = {}
+    for index, doc in enumerate(documents):
+        by_path.setdefault(doc.path, []).append(index)
+    verified = set()
+    hydrated = {}
+    for card in pack.cards:
         hydrated[card.id] = []
         for reference in card.sources:
             if reference.path not in verified:
@@ -299,4 +310,24 @@ def load(root: Path, documents) -> ContextArchitecture:
                 raise CardValidationError("Reasoning card focus has no matching primary passage")
             doc = documents[index]
             hydrated[card.id].append(HydratedReference(index, reference.role, tuple(reference.focus_terms), doc.id, doc.source_family or doc.source_id))
+    return ContextArchitecture(documents, pack, hydrated)
+
+
+def stored(architecture: ContextArchitecture) -> dict:
+    """The hydrated references, for a store (server/store.py) to keep."""
+    return {card_id: [[ref.docindex, ref.role, list(ref.focus_terms), ref.document_id, ref.source_family] for ref in refs]
+            for card_id, refs in architecture.references.items()}
+
+
+def restore(root: Path, documents, references: dict) -> ContextArchitecture:
+    """The architecture of this release from references a store hydrated when it was built: the pack is
+    read and checked again, the passages are not."""
+    read = _read_pack(Path(root))
+    if read is None:
+        return ContextArchitecture(documents)
+    pack, _ = read
+    hydrated = {card_id: [HydratedReference(int(i), role, tuple(terms), document_id, family)
+                          for i, role, terms, document_id, family in rows] for card_id, rows in references.items()}
+    if set(hydrated) != {card.id for card in pack.cards}:
+        raise CardValidationError("Stored card references do not match the card pack")
     return ContextArchitecture(documents, pack, hydrated)

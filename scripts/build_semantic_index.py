@@ -24,7 +24,7 @@ sys.path.insert(0, str(PROJECT))
 
 import httpx
 
-from server.retrieval import ContextIndex
+from server.retrieval import load_corpus
 from server.semantic import (DIMENSIONS, EMBEDDING_MODEL, MAX_BATCH, VECTOR_FILE, SemanticIndexError, dry_run_summary,
                              prepare_index, request_embeddings, sha256, verify_public_pack)
 
@@ -35,9 +35,8 @@ def plan() -> tuple[dict, list[str]]:
         raise SemanticIndexError("Public context path escapes this app")
     # Verify public code before importing its document adapter.
     verify_public_pack(root)
-    index = ContextIndex(root)
-    index.load()
-    return prepare_index(root, index.documents)
+    _, documents = load_corpus(root)
+    return prepare_index(root, documents)
 
 
 def write_plan(path: Path) -> dict:

@@ -6,15 +6,20 @@ import importlib.util
 import hashlib
 import json
 import math
+import os
 import re
+import sqlite3
 import unicodedata
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlparse, quote
 
 from .names import NameIndex
 from .semantic import MIN_SIMILARITY
+from .store import SCHEMA as STORE_SCHEMA, Store, build as build_store
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 # A timed line: "[hh:mm:ss](link)" where a transcript keeps its links, "[hh:mm:ss]" in structured
@@ -120,20 +125,138 @@ class Passage:
     discovery: bool
 
 
+class Brief(NamedTuple):
+    """What ranking reads of every passage; the rest stays in the store until a passage is cited."""
+    title: str
+    path: str
+    source_type: str
+    evidence_role: str
+    content_status: str
+    speech_act: str
+    participants: tuple
+    aliases: str
+    family: str
+    data_layer: str
+    speaker_id: str
+    flags: int
+    length: int
+
+
+FLAG_DISCOVERY, FLAG_BODY, FLAG_BASIS, FLAG_STATEMENT = 1, 2, 4, 8
+ATTRIBUTED = frozenset({"reviewed-source-attribution", "audio-voice-match"})
+STORE_FILE = "ask.sqlite"
+# The stored values derive from these files: a change to any of them builds the store again.
+STORE_SOURCES = ("retrieval.py", "store.py", "context_architecture.py", "semantic.py")
+
+
+def store_code() -> str:
+    here = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for name in STORE_SOURCES:
+        digest.update(name.encode("utf-8") + b"\0" + (here / name).read_bytes())
+    return digest.hexdigest()
+
+
+def searchable(doc) -> tuple[str, str]:
+    """The lowercased body and title a passage is searched by."""
+    return plain_text(doc.text).lower(), (doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
+                                         + " " + getattr(doc, "participant_aliases", "") + " " + getattr(doc, "source_context", "")).lower()
+
+
+def brief(doc) -> list:
+    flags = ((FLAG_DISCOVERY if is_discovery(doc) else 0) | (FLAG_BODY if has_body_text(doc) else 0)
+             | (FLAG_BASIS if is_yuzheng_basis(doc) else 0)
+             | (FLAG_STATEMENT if (getattr(doc, "data_layer", "") == "raw" and getattr(doc, "speaker_status", "") in ATTRIBUTED
+                                   and getattr(doc, "speech_act", "") == "statement" and has_body_text(doc)) else 0))
+    participants = [identity for identity in getattr(doc, "participant_entity_ids", "").split("；") if identity]
+    return [doc.title, doc.path, doc.source_type, doc.evidence_role, doc.content_status, getattr(doc, "speech_act", ""),
+            participants, getattr(doc, "participant_aliases", ""), doc.source_family or doc.source_id,
+            getattr(doc, "data_layer", ""), getattr(doc, "speaker_id", ""), flags]
+
+
+def load_corpus(root: Path, require_lock: bool = False):
+    """Open Context's parser and every passage it makes from a verified pack, for tools that build
+    from the whole corpus (the store, the semantic index, the answer map). The service reads the store."""
+    lock_path = root.parent / "context-lock.json"
+    if require_lock and not lock_path.is_file():
+        raise ValueError("Public context lock is required")
+    if lock_path.is_file():
+        from .semantic import verify_public_pack
+        lock = json.loads(lock_path.read_text())
+        if lock.get("release_manifest_sha256") != hashlib.sha256((root / "release-manifest.json").read_bytes()).hexdigest():
+            raise ValueError("Public context lock does not match its release")
+        verify_public_pack(root)
+    module = search_module(root)
+    return module, module.load_documents()
+
+
+def search_module(root: Path):
+    script = root / "scripts" / "search.py"
+    if not script.is_file():
+        raise FileNotFoundError("Public context pack is not available")
+    name = "ask_lizheng_public_search_" + str(abs(hash(str(root))))
+    spec = importlib.util.spec_from_file_location(name, script)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    module.ROOT = root
+    return module
+
+
+class DocumentView(Sequence):
+    """The passages, read from the store one at a time, as the parser made them."""
+    def __init__(self, store: Store, document_class):
+        self.store, self.document_class = store, document_class
+        self.length = int(store.meta("count", 0))
+        self.known = frozenset(getattr(document_class, "__dataclass_fields__", {}))
+
+    def _make(self, fields: dict):
+        doc = self.document_class(**{key: value for key, value in fields.items() if key in self.known})
+        for key, value in fields.items():
+            if key not in self.known:
+                setattr(doc, key, value)
+        return doc
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(self.length))]
+        if index < 0:
+            index += self.length
+        if not 0 <= index < self.length:
+            raise IndexError(index)
+        return self._make(self.store.fields(index))
+
+    def __iter__(self):
+        for fields in self.store.all_fields():
+            yield self._make(fields)
+
+    def index(self, doc, *args) -> int:
+        found = self.store.find(doc.path, doc.id)
+        if found is not None and self[found] == doc:
+            return found
+        raise ValueError("Passage is not in this release")
+
+
 class ContextIndex:
     def __init__(self, root: Path, require_lock: bool = False):
         self.root = root
         self.require_lock = require_lock
         self.documents = []
+        self.briefs: list[Brief] = []
+        self.store: Store | None = None
         self.manifest = {}
         self.search_module = None
-        self._texts = []
-        self._titles = []
+        self.average_length = 0.0
         self.architecture = None
         self.source_revision = "main"
         self.release_sha256 = ""
         self.participant_aliases = {}
         self.guest_catalog = {}
+        self.by_participant: dict[str, list[int]] = {}
+        self._attributed_speakers: set[str] = set()
         self.names = NameIndex.from_catalog({})
 
     def load(self) -> None:
@@ -151,17 +274,7 @@ class ContextIndex:
             revision = str(lock.get("source_commit", ""))
             if re.fullmatch(r"[a-f0-9]{40}", revision):
                 self.source_revision = revision
-        script = self.root / "scripts" / "search.py"
-        if not script.is_file():
-            raise FileNotFoundError("Public context pack is not available")
-        name = "ask_lizheng_public_search_" + str(abs(hash(str(self.root))))
-        spec = importlib.util.spec_from_file_location(name, script)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-        module.ROOT = self.root
-        self.search_module = module
-        self.documents = module.load_documents()
+        self.search_module = module = search_module(self.root)
         catalog_path = self.root / "catalog/guests.json"
         self.participant_aliases = {}
         self.guest_catalog = {}
@@ -175,30 +288,92 @@ class ContextIndex:
         # Open Context's shared name table; a pack published before it falls back to catalog names.
         self.names = (NameIndex(json.loads(names_path.read_text())) if names_path.is_file()
                       else NameIndex.from_catalog(self.guest_catalog))
-        self._texts = [plain_text(doc.text).lower() for doc in self.documents]
-        self._titles = [(doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
-                         + " " + getattr(doc, "participant_aliases", "")
-                         + " " + getattr(doc, "source_context", "")).lower() for doc in self.documents]
         manifest = self.root / "release-manifest.json"
         self.manifest = json.loads(manifest.read_text()) if manifest.is_file() else {}
         self.release_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest() if manifest.is_file() else ""
-        from .context_architecture import load
-        self.architecture = load(self.root, self.documents)
+        self.store = self._store(pinned=lock_path.is_file())
+        intern = sys.intern
+        self.briefs = [Brief(intern(row[0]), intern(row[1]), intern(row[2]), intern(row[3]), intern(row[4]), intern(row[5]),
+                             tuple(intern(identity) for identity in row[6]), intern(row[7]), intern(row[8]), intern(row[9]),
+                             intern(row[10]), row[11], row[12]) for row in self.store.briefs()]
+        self.average_length = self.store.meta("total_length", 0) / max(len(self.briefs), 1)
+        self.by_participant = {}
+        for index, row in enumerate(self.briefs):
+            for identity in row.participants:
+                self.by_participant.setdefault(identity, []).append(index)
+        self._attributed_speakers = set(self.store.meta("attributed_speakers", []))
+        self.documents = DocumentView(self.store, module.Document)
+        from .context_architecture import restore
+        self.architecture = restore(self.root, self.documents, self.store.meta("cards", {}))
 
-    def metadata(self) -> dict:
-        counts = dict(self.manifest.get("counts") or {})
-        counts["retrieval_chunks"] = len(self.documents)
-        counts["source_families"] = len({doc.source_family or doc.source_id for doc in self.documents})
-        counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
-        own = [doc for doc in self.documents if is_yuzheng_basis(doc)]
+    def _store(self, pinned: bool) -> Store:
+        """The store of this release: kept beside a pinned pack (built into the image), in memory for
+        any other pack. It is built again whenever the release, its semantic index or this code changes."""
+        semantic = self.root.parent / "semantic" / "index.json"
+        key = {"release": self.release_sha256, "code": store_code(),
+               "semantic": hashlib.sha256(semantic.read_bytes()).hexdigest() if semantic.is_file() else ""}
+        if not pinned:
+            return self._build_store(None, key)
+        path = self.root.parent / "store" / STORE_FILE
+        if path.is_file():
+            try:
+                existing = Store.open(path)
+                if existing.meta("schema") == STORE_SCHEMA and existing.meta("key") == key:
+                    return existing
+                existing.connection.close()
+            except sqlite3.Error:
+                pass
+        if os.getenv("ASK_STORE") == "prebuilt":
+            # The image builds its store (Dockerfile); building it here would hold the whole corpus.
+            raise ValueError("This image has no store for its release")
+        return self._build_store(path, key)
+
+    def _build_store(self, path: Path | None, key: dict) -> Store:
+        from .context_architecture import load as load_architecture, stored
+        from .semantic import SemanticIndex
+        documents = self.search_module.load_documents()
+        architecture = load_architecture(self.root, documents)
+        semantic = SemanticIndex(self.root, documents)
+        semantic.load()
+        own = [doc for doc in documents if is_yuzheng_basis(doc)]
         def families(types, *classifications):
             return len({doc.source_family or doc.source_id for doc in own
                         if doc.source_type in types and (not classifications or doc.speaker_classification in classifications)})
-        counts.update(yuzheng_solo_transcripts=families({"video-transcript"}, "solo-yuzheng"),
-                      yuzheng_articles=families({"community-post", "knowledge-bank", "blog-post"}),
-                      yuzheng_comments=families({"community-comment"}),
-                      yuzheng_course_lessons=families({"course-lesson"}),
-                      yuzheng_dialogue_sources=families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched"))
+        counts = {"retrieval_chunks": len(documents),
+                  "source_families": len({doc.source_family or doc.source_id for doc in documents}),
+                  "yuzheng_solo_transcripts": families({"video-transcript"}, "solo-yuzheng"),
+                  "yuzheng_articles": families({"community-post", "knowledge-bank", "blog-post"}),
+                  "yuzheng_comments": families({"community-comment"}),
+                  "yuzheng_course_lessons": families({"course-lesson"}),
+                  "yuzheng_dialogue_sources": families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched")}
+        everyone = {getattr(doc, "speaker_id", "") for doc in documents}
+        speakers = sorted(who for who in everyone if who and who not in {"unknown", "yuzheng"}
+                          and any(is_participant_statement(doc, {who}) for doc in documents if doc.speaker_id == who))
+        meta = {"key": key, "cards": stored(architecture), "semantic": semantic.checked, "counts": counts, "attributed_speakers": speakers}
+        del own, semantic, architecture
+        def rows():
+            for i, doc in enumerate(documents):
+                body, title = searchable(doc)
+                yield dict(vars(doc)), brief(doc), body, title
+                documents[i] = None  # each passage is let go once written
+        return build_store(path, rows(), meta)
+
+    def semantic_index(self):
+        """The semantic index as the store checked it when it was built."""
+        from .semantic import SemanticIndex
+        semantic = SemanticIndex(self.root, self.documents)
+        checked = self.store.meta("semantic") if self.store else None
+        if checked:
+            semantic.load_verified(checked)
+        return semantic
+
+    def metadata(self) -> dict:
+        counts = dict(self.manifest.get("counts") or {})
+        stored_counts = self.store.meta("counts", {}) if self.store else {}
+        counts["retrieval_chunks"] = stored_counts.get("retrieval_chunks", 0)
+        counts["source_families"] = stored_counts.get("source_families", 0)
+        counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
+        counts.update({key: value for key, value in stored_counts.items() if key.startswith("yuzheng_")})
         # Which Open Context release this service answers from, so a deploy can be checked from outside.
         commit = self.source_revision if re.fullmatch(r"[a-f0-9]{40}", self.source_revision) else ""
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,
@@ -206,12 +381,7 @@ class ContextIndex:
 
     @property
     def attributed_speakers(self) -> set[str]:
-        """People with at least one attributed statement, computed once per loaded release."""
-        if getattr(self, "_attributed_speakers", None) is None or self._attributed_for is not self.documents:
-            everyone = {getattr(doc, "speaker_id", "") for doc in self.documents}
-            self._attributed_speakers = {who for who in everyone if who and who not in {"unknown", "yuzheng"}
-                                         and any(is_participant_statement(doc, {who}) for doc in self.documents if doc.speaker_id == who)}
-            self._attributed_for = self.documents
+        """People with at least one attributed statement, found when the store was built."""
         return self._attributed_speakers
 
     def names_host(self, query: str) -> bool:
@@ -243,8 +413,9 @@ class ContextIndex:
     def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None, *, intent: str = "find") -> list[Passage]:
         if intent not in {"find", "understand", "apply"}:
             raise ValueError("Invalid retrieval intent")
-        if not self.documents:
+        if not self.briefs:
             return []
+        briefs = self.briefs
         history = history or []
         query = self.retrieval_query(question, history)
         participants = self.participant_entities(query)
@@ -255,16 +426,22 @@ class ContextIndex:
         # A question about their view hears only them, so his words never pass for theirs; with
         # no attributed statement of theirs, the answer rests on his sources as usual.
         own_voice = intent != "find" and bool(speakers & self.attributed_speakers)
-        eligible = {i for i, doc in enumerate(self.documents)
-                    if (is_discovery(doc) or has_body_text(doc))
-                    and (intent == "find" or (is_participant_statement(doc, speakers) if own_voice else is_yuzheng_basis(doc)))}
+        def admitted(row: Brief) -> bool:
+            if not row.flags & (FLAG_DISCOVERY | FLAG_BODY):
+                return False
+            if intent == "find":
+                return True
+            if own_voice:
+                return bool(speakers) and bool(row.flags & FLAG_STATEMENT) and row.speaker_id in speakers
+            return bool(row.flags & FLAG_BASIS)
+        eligible = {i for i, row in enumerate(briefs) if admitted(row)}
         def field(item, key):
             return str(item.get(key, "")) if isinstance(item, dict) else str(getattr(item, key, ""))
         prior = " ".join(field(item, "question") + " " + field(item, "summary") for item in history[-2:])
-        def participant_match(doc):
-            return bool(participants.intersection(getattr(doc, "participant_entity_ids", "").split("；")))
+        def participant_match(index):
+            return bool(participants.intersection(briefs[index].participants))
         if intent == "find" and participants:
-            eligible = {i for i in eligible if participant_match(self.documents[i])}
+            eligible = {i for i in eligible if participant_match(i)}
         card_ids = self.card_ids(question, context, history, semantic_candidates)
         linked = self.architecture.linked_candidates(card_ids) if self.architecture else []
         auxiliary = (context + " " + prior)[:1200]
@@ -277,53 +454,71 @@ class ContextIndex:
         terms = list(dict.fromkeys(primary + extra + expanded))
         if not primary and not linked and not semantic_candidates:
             return []
-        frequencies = {term: sum(term in body or term in title for body, title in zip(self._texts, self._titles)) for term in terms}
-        count = len(self.documents)
-        average_length = sum(len(text) for text in self._texts) / max(count, 1)
+        # Each word's passages from the store: how often in the body, and whether in the title.
+        in_body, in_title = {}, {}
+        for term in terms:
+            ids, counts, titles = self.store.postings(term)
+            in_body[term] = dict(zip(ids, counts))
+            in_title[term] = set(titles)
+        frequencies = {term: len(in_body[term].keys() | in_title[term]) for term in terms}
+        count = len(briefs)
+        average_length = self.average_length
         weights = {term: math.log(1 + (count - frequency + .5) / (frequency + .5)) for term, frequency in frequencies.items()}
         # Full question clauses earn a coverage bonus, rather than letting one
         # incidental noun select every candidate for a multi-part question.
         clauses = [part.strip() for part in re.split(r"[，。！？、；\n]|(?:以及|同时|但是)", query) if len(part.strip()) >= 4][:5]
         clause_terms = [set(module.query_terms(clause)) - STOP_TERMS for clause in clauses]
+        biography = re.search(r"是谁|介绍|背景|学历|经历|职业|名字|姓名|简历|career|education|biograph", question, flags=re.I)
+        # A passage is a candidate when a word of the question is in it or it names a person asked
+        # about; candidates are taken in passage order, as scanning every passage took them.
+        candidates = set()
+        for term in primary:
+            candidates.update(in_body[term])
+            candidates.update(in_title[term])
+        for identity in participants:
+            candidates.update(self.by_participant.get(identity, ()))
         ranked = []
-        for index, (doc, body, title) in enumerate(zip(self.documents, self._texts, self._titles)):
+        for index in sorted(candidates):
             if index not in eligible:
                 continue
-            matched = [term for term in primary if term in body or term in title]
-            if not matched and not participant_match(doc):
+            row = briefs[index]
+            def present(term):
+                return index in in_body[term] or index in in_title[term]
+            matched = [term for term in primary if present(term)]
+            match = participant_match(index)
+            if not matched and not match:
                 continue
-            if not participant_match(doc) and len(primary) > 3 and len(matched) < 2 and not any(term in title and len(term) > 2 for term in matched):
+            if not match and len(primary) > 3 and len(matched) < 2 and not any(index in in_title[term] and len(term) > 2 for term in matched):
                 continue
             def term_score(term):
-                frequency = body.count(term)
-                normalized = frequency * 2.35 / (frequency + 1.35 * (.22 + .78 * max(len(body), 1) / max(average_length, 1))) if frequency else 0
-                return weights[term] * ((5 if term in title else 0) + normalized)
+                frequency = in_body[term].get(index, 0)
+                normalized = frequency * 2.35 / (frequency + 1.35 * (.22 + .78 * max(row.length, 1) / max(average_length, 1))) if frequency else 0
+                return weights[term] * ((5 if index in in_title[term] else 0) + normalized)
             score = sum(term_score(term) for term in matched)
-            score += .35 * sum(weights[term] * ((3 if term in title else 0) + min(body.count(term), 2)) for term in extra if term in body or term in title)
-            score += .65 * sum(term_score(term) for term in expanded if term in body or term in title)
+            score += .35 * sum(weights[term] * ((3 if index in in_title[term] else 0) + min(in_body[term].get(index, 0), 2)) for term in extra if present(term))
+            score += .65 * sum(term_score(term) for term in expanded if present(term))
             coverage = sum(bool(chunk.intersection(matched)) for chunk in clause_terms)
             score *= 1 + .12 * max(0, coverage - 1)
             # Programme-name matches are useful discovery, but an introduction
             # must not crowd out the actual exchange for a substantive question.
-            identity_terms = {part.strip().casefold() for part in getattr(doc, "participant_aliases", "").split("；")}
-            biography = re.search(r"是谁|介绍|背景|学历|经历|职业|名字|姓名|简历|career|education|biograph", question, flags=re.I)
-            if (getattr(doc, "speech_act", "") in {"introduction", "acknowledgement", "joke"}
+            identity_terms = {part.strip().casefold() for part in row.aliases.split("；")}
+            if (row.speech_act in {"introduction", "acknowledgement", "joke"}
                     and not biography and question.strip().casefold() not in identity_terms):
                 score *= .6
-            if doc.content_status != "current":
+            if row.content_status != "current":
                 score *= .5
-            if is_discovery(doc):
+            if row.flags & FLAG_DISCOVERY:
                 score *= .32
-            if doc.source_type == "context" or doc.evidence_role == "secondary-synthesis":
+            if row.source_type == "context" or row.evidence_role == "secondary-synthesis":
                 score *= .7
             # News and logistics remain discoverable, but weak incidental
             # matches should not outrank substantive material.
-            if re.search(r"报名|名额|截止|活动通知|课程通知|开课|优惠|直播预告", doc.title):
+            if re.search(r"报名|名额|截止|活动通知|课程通知|开课|优惠|直播预告", row.title):
                 score *= .68
-            if re.search(r"Main Community｜|Knowledge Bank｜|访谈过的.*列表|报名指南|产品入口", doc.title) and not re.search(r"社区|课程|产品|入口|报名|community|knowledge bank", query, flags=re.I):
+            if re.search(r"Main Community｜|Knowledge Bank｜|访谈过的.*列表|报名指南|产品入口", row.title) and not re.search(r"社区|课程|产品|入口|报名|community|knowledge bank", query, flags=re.I):
                 score *= .35
             ranked.append((score, index))
-        ranked.sort(key=lambda row: (-row[0], self.documents[row[1]].title))
+        ranked.sort(key=lambda row: (-row[0], briefs[row[1]].title))
         # Reciprocal rank fusion preserves exact-word matches while admitting
         # paraphrases. Curated links bring the basis and scope contrast together.
         fused = {index: 1 / (40 + rank) for rank, (_, index) in enumerate(ranked, 1)}
@@ -342,11 +537,11 @@ class ContextIndex:
             focus_by_index[index] = candidate["focus_terms"]
             fused[index] = fused.get(index, 0) + .055 * candidate["weight"]
         ranked = sorted(((score, index) for index, score in fused.items()),
-                        key=lambda row: (not participant_match(self.documents[row[1]]), -row[0], self.documents[row[1]].title))
+                        key=lambda row: (not participant_match(row[1]), -row[0], briefs[row[1]].title))
         if intent == "find" and len(participants) > 1:
             covered, representatives = set(), []
             for row in ranked:
-                ids = participants.intersection(getattr(self.documents[row[1]], "participant_entity_ids", "").split("；"))
+                ids = participants.intersection(briefs[row[1]].participants)
                 if ids - covered:
                     representatives.append(row); covered.update(ids)
             first = {row[1] for row in representatives}
@@ -355,17 +550,17 @@ class ContextIndex:
         family_speakers = {}
         selected_raw = {}
         named_families = {
-            self.documents[index].source_family or self.documents[index].source_id
+            briefs[index].family
             for _, index in ranked
-            if getattr(self.documents[index], "data_layer", "") == "raw"
-            and getattr(self.documents[index], "speaker_id", "") not in {"", "unknown"}
+            if briefs[index].data_layer == "raw"
+            and briefs[index].speaker_id not in {"", "unknown"}
         }
         passages = []
         for score, index in ranked:
-            doc = self.documents[index]
-            family = doc.source_family or doc.source_id
-            speaker = getattr(doc, "speaker_id", "")
-            layer = getattr(doc, "data_layer", "")
+            row = briefs[index]
+            family = row.family
+            speaker = row.speaker_id
+            layer = row.data_layer
             # Preserve distinct participants in one conversation while keeping
             # translations and duplicate passages from becoming extra sources.
             if family in seen:
@@ -374,10 +569,13 @@ class ContextIndex:
                     continue
                 if speaker in owners:
                     overlap = getattr(module, "raw_windows_overlap", None)
-                    if (family in named_families or speaker != "unknown" or overlap is None
-                            or not getattr(doc, "fragment_id", "")
+                    if (family in named_families or speaker != "unknown" or overlap is None):
+                        continue
+                    doc = self.documents[index]
+                    if (not getattr(doc, "fragment_id", "")
                             or any(overlap(doc, old) for old in selected_raw.get(family, []))):
                         continue
+            doc = self.documents[index]
             url = doc.original_source_url if doc.source_type == "video-translation" and doc.original_source_url else doc.source_url
             if urlparse(url).scheme not in {"http", "https"}:
                 continue
@@ -457,7 +655,8 @@ class ContextIndex:
                       "reason": "可打开节目或原稿，了解这场对谈。", "attribution_note": "",
                       "participant_entity_ids": "；".join(people), "participant_names": "；".join(names[p] for p in people),
                       "data_layer": "structured", "content_origin": "metadata-only"}
-            doc = next((d for d in self.documents if d.source_id == row["source_id"]), None)
+            found = self.store.first_with_source(row["source_id"]) if self.store else None
+            doc = self.documents[found] if found is not None else None
             if doc:
                 for key in SOURCE_ACCESS_FIELDS:
                     value = getattr(doc, key, "")
@@ -477,7 +676,7 @@ class ContextIndex:
             return selected
         # A user need not know a framework's keywords. Strong semantic hits on
         # its actual primary basis can route to its scope and contrast sources.
-        paths = {self.documents[row["docindex"]].path: row["score"] for row in (semantic_candidates or [])[:8] if row["score"] >= .4}
+        paths = {self.briefs[row["docindex"]].path: row["score"] for row in (semantic_candidates or [])[:8] if row["score"] >= .4}
         scored = []
         for card in self.architecture.cards.values():
             score = max((paths.get(ref.path, 0) for ref in card.sources if ref.role == "basis"), default=0)

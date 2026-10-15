@@ -266,11 +266,14 @@ class SemanticIndex:
         self.disabled_reason = "missing-index"
         self.vectors = array("f")
         self.document_indexes = []
+        # What load() checked, so a store can hand it to load_verified() without re-deriving it.
+        self.checked: dict | None = None
 
     def load(self) -> bool:
         self.ready = False
         self.vectors = array("f")
         self.document_indexes = []
+        self.checked = None
         try:
             if not self.index_root.resolve().is_relative_to(self.root.parent.resolve()):
                 raise SemanticIndexError("Semantic index path escapes this app's public data directory")
@@ -331,8 +334,44 @@ class SemanticIndex:
                     raise SemanticIndexError("Semantic vectors are not normalized finite values")
             self.vectors, self.document_indexes = vectors, indexes
             self.ready, self.disabled_reason = True, ""
+            self.checked = {"index_sha256": sha256(metadata_path.read_bytes()), "vector_file": filename,
+                            "vector_sha256": metadata["vector_sha256"], "docindexes": list(indexes)}
             return True
         except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            self.disabled_reason = "invalid-or-stale-index"
+            return False
+
+    def load_verified(self, checked: dict) -> bool:
+        """Load an index that load() already checked against every passage it embeds (server/store.py
+        keeps what it checked): the same index file and the same vector bytes, nothing re-derived, so
+        the service neither re-reads every passage nor holds them to start."""
+        self.ready = False
+        self.vectors = array("f")
+        self.document_indexes = []
+        try:
+            if not self.index_root.resolve().is_relative_to(self.root.parent.resolve()):
+                raise SemanticIndexError("Semantic index path escapes this app's public data directory")
+            if sha256((self.index_root / "index.json").read_bytes()) != checked["index_sha256"]:
+                raise SemanticIndexError("Semantic index changed since it was checked")
+            docindexes = checked["docindexes"]
+            if not isinstance(docindexes, list) or not 0 < len(docindexes) <= MAX_INDEX_VECTORS:
+                raise SemanticIndexError("Invalid public semantic entry count")
+            vector_path = _safe_path(self.index_root, checked["vector_file"])
+            size = len(docindexes) * DIMENSIONS * 4
+            if vector_path.stat().st_size != size:
+                raise SemanticIndexError("Semantic vector file has an invalid size")
+            with vector_path.open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != checked["vector_sha256"]:
+                    raise SemanticIndexError("Semantic vector checksum changed")
+                handle.seek(0)
+                vectors = array("f")
+                vectors.fromfile(handle, len(docindexes) * DIMENSIONS)
+            if sys.byteorder != "little":
+                vectors.byteswap()
+            self.vectors, self.document_indexes = vectors, array("I", docindexes)
+            self.ready, self.disabled_reason, self.checked = True, "", checked
+            return True
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, EOFError):
             self.disabled_reason = "invalid-or-stale-index"
             return False
 

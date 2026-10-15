@@ -71,8 +71,8 @@ def evaluate(index: ContextIndex | None = None) -> dict:
     if index is None:
         index = ContextIndex(PROJECT / "data/context", require_lock=True)
         index.load()
-    semantic = SemanticIndex(index.root, index.documents)
-    if not semantic.load():
+    semantic = index.semantic_index()
+    if not semantic.ready:
         raise ValueError("The pinned semantic index is not ready: " + semantic.disabled_reason)
     basis_paths = {card_id: {index.documents[ref.docindex].path for ref in refs if ref.role == "basis"}
                    for card_id, refs in index.architecture.references.items()}

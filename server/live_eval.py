@@ -17,7 +17,7 @@ import httpx
 
 from .answers import ProviderFailure, assemble_answer, attribution_clarification, generate_answer, unsupported_result
 from .retrieval import ContextIndex
-from .semantic import SemanticIndex
+
 
 CASES = [
     ("learning-prefill", "我做出了几个 AI 项目，怎么知道自己是真的学会了？", "apply", ""),
@@ -41,8 +41,7 @@ async def evaluate(root: Path, only: str = "") -> bool:
         raise SystemExit("Set AI_BUILDER_TOKEN in the process environment to run live evaluation.")
     index = ContextIndex(root)
     index.load()
-    semantic = SemanticIndex(root, index.documents)
-    semantic.load()
+    semantic = index.semantic_index()
     model = os.getenv("AI_MODEL", "gpt-5")
     results = []
     async with httpx.AsyncClient(timeout=httpx.Timeout(85, connect=10)) as client:

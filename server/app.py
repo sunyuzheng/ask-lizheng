@@ -9,6 +9,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -26,7 +27,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .answers import BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
-from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
 from .query_records import QueryRecorder
@@ -183,13 +183,12 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         index = ContextIndex(context_root or ROOT / "data" / "context", require_lock=context_root is None)
         try:
             await asyncio.to_thread(index.load)
-        except (FileNotFoundError, ValueError, OSError):
+        except (FileNotFoundError, ValueError, OSError, sqlite3.Error):
             # A partial load must not make an invalid release look healthy.
             index = ContextIndex(context_root or ROOT / "data" / "context", require_lock=context_root is None)
         application.state.index = index
-        semantic = SemanticIndex(context_root or ROOT / "data" / "context", index.documents)
-        await asyncio.to_thread(semantic.load)
-        application.state.semantic = semantic
+        # The semantic index as the store checked it (server/store.py): no passage is read to start.
+        application.state.semantic = await asyncio.to_thread(index.semantic_index)
         # Built with each context update, beside the context it maps.
         application.state.answer_map = await asyncio.to_thread(read_answer_map, (context_root or ROOT / "data" / "context").parent / "answer-map.json")
         application.state.limiter = RateLimiter(int(os.getenv("ASK_RATE_PER_MINUTE", "12")))

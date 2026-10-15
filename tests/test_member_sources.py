@@ -23,27 +23,29 @@ ACCESS = {
 }
 
 
-def member_passage(index):
-    # The original and its translation are one evidence family. This fixture
-    # exercises the original video rather than whichever rendering ranks first.
-    index.documents = [doc for doc in index.documents if doc.source_type != "video-translation"]
-    index._texts = [doc.text.lower() for doc in index.documents]
-    index._titles = [(doc.title + " " + doc.section).lower() for doc in index.documents]
-    for doc in index.documents:
-        if doc.source_type == "video-transcript":
-            for key, value in ACCESS.items():
-                setattr(doc, key, value)
-            doc.content_origin = "mixed-or-unresolved-speech"
-            doc.yuzheng_stance_weight = "not-evidence"
-            doc.attribution_note = "Synthetic multi-speaker transcript; individual speakers retain their views."
-            doc.author = "Synthetic speakers"
-            doc.rights_scope = "publisher-authorized-transcript"
-            doc.license = "LicenseRef-Original-Rights-Retained"
+def as_member_video(root):
+    """The fixture's video as a members-only original with a public transcript. Its translation goes:
+    the original and its translation are one evidence family, and this exercises the original."""
+    (root / "corpus/english-translations/translation.md").unlink()
+    path = root / "corpus/videos/video.md"
+    front, body = path.read_text().split("\n---\n", 1)
+    metadata = {line.split(": ", 1)[0]: json.loads(line.split(": ", 1)[1]) for line in front.removeprefix("---\n").splitlines()}
+    metadata.update(ACCESS, content_origin="mixed-or-unresolved-speech", yuzheng_stance_weight="not-evidence",
+                    attribution_note="Synthetic multi-speaker transcript; individual speakers retain their views.",
+                    author="Synthetic speakers", rights_scope="publisher-authorized-transcript",
+                    license="LicenseRef-Original-Rights-Retained")
+    source_file(root, "corpus/videos", "video.md", metadata, body.lstrip("\n"))
+
+
+def member_passage(context_pack):
+    as_member_video(context_pack)
+    index = ContextIndex(context_pack)
+    index.load()
     return next(p for p in index.retrieve("职业选择能力作品") if p.source["source_type"] == "video-transcript")
 
 
-def test_verified_access_is_preserved_without_reclassifying_attribution(index):
-    passage = member_passage(index)
+def test_verified_access_is_preserved_without_reclassifying_attribution(context_pack):
+    passage = member_passage(context_pack)
     assert {key: passage.source[key] for key in SOURCE_ACCESS_FIELDS} == ACCESS
     assert passage.source["author"] == "Synthetic speakers"
     assert passage.evidence["content_origin"] == "mixed-or-unresolved-speech"
@@ -77,8 +79,8 @@ def test_markdown_parser_keeps_all_access_and_speaker_metadata(context_pack):
     assert passage.evidence["evidence_role"] == "speaker-attributed-speech"
 
 
-def test_model_sees_access_and_asr_limits_without_server_links(index):
-    passage = member_passage(index)
+def test_model_sees_access_and_asr_limits_without_server_links(context_pack):
+    passage = member_passage(context_pack)
     evidence = model_evidence(passage)
     assert evidence["text_access"] == "public" and evidence["source_visibility"] == "members-only"
     assert evidence["transcript_quality"] == "uncorrected-asr"
@@ -89,8 +91,8 @@ def test_model_sees_access_and_asr_limits_without_server_links(index):
     assert "YouTube" in SYSTEM_PROMPT and "Founding Member" in SYSTEM_PROMPT
 
 
-def test_selected_sources_fallback_and_detached_archive_keep_access(index):
-    passage = member_passage(index)
+def test_selected_sources_fallback_and_detached_archive_keep_access(context_pack):
+    passage = member_passage(context_pack)
     result = assemble_answer(answer_for(passage.source["id"]), [passage])
     fallback = sources_only([passage])
     snapshot = archived_answer(result)
@@ -105,8 +107,8 @@ def test_search_sse_candidates_and_final_result_preserve_optional_fields(context
     monkeypatch.setenv("AI_BUILDER_TOKEN", "")
     monkeypatch.setenv("ASK_QUOTA_ENABLED", "false")
     monkeypatch.setenv("ASK_OPS_ENABLED", "false")
+    as_member_video(context_pack)
     with TestClient(create_app(context_pack)) as client:
-        member_passage(client.app.state.index)
         search = client.get("/api/search", params={"q": "职业选择能力作品"})
         assert search.status_code == 200
         member = next(s for s in search.json()["sources"] if s["source_type"] == "video-transcript")

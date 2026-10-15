@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from server.retrieval import ContextIndex  # noqa: E402
+from server.retrieval import load_corpus  # noqa: E402
 
 CONTEXT = ROOT / "data" / "context"
 SEMANTIC = ROOT / "data" / "semantic"
@@ -119,10 +119,9 @@ def principal(vectors: list[list[float]], rounds: int = 40) -> list[float]:
 
 
 def load_materials() -> list[dict]:
-    index = ContextIndex(CONTEXT)
-    index.load()
+    _, documents = load_corpus(CONTEXT)
     materials: dict[str, dict] = {}
-    for doc in index.documents:
+    for doc in documents:
         parts = doc.path.split("/")
         if len(parts) < 3 or parts[0] != "corpus" or parts[1] in SKIP or parts[1] not in KINDS:
             continue

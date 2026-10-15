@@ -14,6 +14,7 @@ from server.answers import (DEFAULT_MODEL, ModelAnswer, answer_fields, assemble_
                             unlabel, validate_answer)
 from server.app import create_app
 from server.retrieval import ContextIndex
+from server.semantic import SemanticIndex
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -692,7 +693,7 @@ def test_actual_sources_arrive_before_slow_semantic_lookup_and_cancel_frees_slot
             await asyncio.Event().wait()
         finally:
             cancelled.append(True)
-    monkeypatch.setattr("server.app.SemanticIndex.candidates", slow_semantic)
+    monkeypatch.setattr("server.semantic.SemanticIndex.candidates", slow_semantic)
     async def run():
         app = create_app(context_pack)
         async with app.router.lifespan_context(app):
@@ -810,7 +811,7 @@ def test_idle_work_sends_heartbeat_and_still_finishes_once(context_pack, monkeyp
                 await release.wait()
             return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
 
-        monkeypatch.setattr(app_module.SemanticIndex, "candidates", semantic)
+        monkeypatch.setattr(SemanticIndex, "candidates", semantic)
         app = create_app(context_pack, httpx.MockTransport(provider))
         async with app.router.lifespan_context(app):
             class Request:
