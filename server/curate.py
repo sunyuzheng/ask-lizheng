@@ -1,14 +1,17 @@
-"""Ops' automatic feed: whether an asked question is published, and under which topic.
+"""Ops' automatic feed: the topic each published question is filed under.
 
-Ops sends one question asked under the v4 notice (no situation, first turn) with its archived
-answer and the topics already published. The model decides whether others would find it worth
-reading and names its topic; the question and answer are published as asked (2026-10-05, the user:
-「自动去个人信息这一步删掉吧，没必要了」; the asker was told it is like raising a hand at a talk,
-public with no names). Ops publishes what comes back; the owner can withdraw any item there.
+Every question answered under the v4 notice is published as asked, with its answer (2026-10-15, the
+owner: 「不要AI判断给不给别人看，全都放」, the situation and follow-ups included; the asker was told
+it is like raising a hand at a recorded talk, public with no names, and that the answer may mention
+the note passed to the stage). Ops sends one question with its archived answer and the topics
+already published; the model only files it under one of them or names a new one, so 最常问 can count
+what is asked often. For a question that has no page yet (answered before lizheng.ai made one for
+every answer), Ops also asks for the word of its page's address. Ops publishes what comes back; the
+owner can withdraw any item there.
 
-Until 2026-10-14 this also wrote de-identified public versions (v1, for questions asked before that
-wording) and generic questions for a first batch of themes (/api/themes, /api/seed-answer). Ops
-withdrew both on 2026-10-14 and no longer asks; they went from here on 2026-10-15.
+Until 2026-10-15 the model also judged whether a question was worth showing (v2), and until
+2026-10-14 wrote de-identified public versions (v1) and a first batch of themes (/api/themes,
+/api/seed-answer); all of that is gone.
 """
 from __future__ import annotations
 
@@ -25,12 +28,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .admission import CURATE_PURPOSE, AdmissionError, derived_secret
 from .answers import ProviderFailure, model_options, provider_status
+from .ops_records import share_word
 
 CURATE_HEADER = "x-ask-curate-proof"
 CURATE_BODY_LIMIT = 262144
 CURATE_SECONDS = 75
 SOURCE_ID = r"^S\d{1,2}$"
-SKIP_REASONS = ("personal", "sensitive", "low_quality", "weak_answer", "unsafe")
 
 
 class CurateSource(BaseModel):
@@ -80,34 +83,28 @@ class CurateTopic(BaseModel):
 
 class CurateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    v: Literal[2]
+    v: Literal[3]
     question: str = Field(min_length=1, max_length=2000)
     answer: CurateAnswer
     topics: list[CurateTopic] = Field(default_factory=list, max_length=300)
+    # The question has no page yet: name the word of its address too.
+    word: bool = False
 
 
-class JudgeDecision(BaseModel):
-    """v2: whether to publish as asked, and the topic. When it declines, only skip_reason matters."""
+class TopicDecision(BaseModel):
+    """v3: the topic, and the address word when it was asked for."""
     model_config = ConfigDict(extra="forbid")
-    publish: bool
-    skip_reason: Literal["personal", "sensitive", "low_quality", "weak_answer", "unsafe"] | None
     topic_key: str | None
     topic_label: str = Field(max_length=80)
+    word: str = Field(default="", max_length=120)
 
 
-JUDGE_PROMPT = """你在为「问问立正」挑选公开问答。提问的人提交前已经被告知：这里像在讲座上举手提问，问答会公开，但不记名，只写愿意当众说的话。问题和回答会原样公开，你不改写。
-你会收到一个问题、它的回答（按段落，带出处编号S1、S2…）和已经公开的主题列表。请做两件事：
+TOPIC_PROMPT = """你在为「问问立正」的公开问答归主题。每个回答过的问题都会和它的回答一起原样公开，你不判断要不要公开，也不改写问题。
+你会收到一个问题、它的回答（按段落，带出处编号S1、S2…）和已经公开的主题列表。已有主题如果和这个问题问的是同一件事，topic_key 填那个 key、topic_label 填它的名称；否则 topic_key 填 null，起一个新的主题名，不超过10个字，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」。
+只输出一个 JSON 对象：{"topic_key": 已有key或null, "topic_label": "主题名"}。"""
 
-1. 判断要不要公开（publish）。值得公开的：别人也可能想问的问题，并且回答有实质内容、能帮到人。不公开时给出 skip_reason：
-   - personal：写了能认出具体某个人的信息（私人的名字、联系方式、账号，或者公司、学校加职位这类能对上某个人的组合；立正、公开人物和公开作品不算），或者问题只关于提问者自己的具体处境，别人不会这样问；
-   - sensitive：涉及健康、法律纠纷、感情、具体的财务情况，或者别人的隐私；
-   - low_quality：测试、乱码、过短或没有意义的问题；
-   - weak_answer：回答没有实质内容，或没有回答这个问题；
-   - unsafe：违法、有害或不适合公开的内容。
-2. 要公开时归到主题。已有主题如果和这个问题问的是同一件事，topic_key 填那个 key、topic_label 填它的名称；否则 topic_key 填 null，起一个新的主题名，不超过10个字，说清问的是什么，例如「学会还是看懂」「AI提效与工作价值」。
-
-只输出一个 JSON 对象，字段都必须有：{"publish": true或false, "skip_reason": 上面五个之一或null, "topic_key": 已有key或null, "topic_label": "主题名"}。
-不公开时，publish 为 false、给出 skip_reason，topic_key 为 null，topic_label 为空字符串。"""
+WORD_PROMPT = """
+这个问题还要一个网页地址用的词，多输出一个字段 word：1 至 3 个小写英文单词概括问题的话题，用连字符连接，如 career-choice、fake-work、ai-learning；只写话题，不写人名、公司名、地名或其他能认出提问者的信息。这时输出 {"topic_key": …, "topic_label": …, "word": "…"}。"""
 
 
 def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float | None = None, path: str = "/api/curate") -> None:
@@ -126,27 +123,27 @@ def verify_curate_proof(token: str, body: bytes, proof: str | None, now: float |
         raise AdmissionError("invalid_admission", 403)
 
 
-def judged(decision: JudgeDecision, request: CurateRequest) -> dict:
-    """What Ops receives for v2: a decline with its reason, or the topic to publish the question under."""
-    if not decision.publish:
-        if decision.skip_reason is None:
-            raise ValueError("A declined question needs skip_reason.")
-        return {"publish": False, "skip_reason": decision.skip_reason}
+def filed(decision: TopicDecision, request: CurateRequest) -> dict:
+    """What Ops receives for v3: the topic to publish the question under, and its page's word if asked."""
     keys = {topic.key: topic.label for topic in request.topics}
-    if decision.skip_reason is not None or not decision.topic_label.strip():
-        raise ValueError("A published question needs a topic and no skip_reason.")
+    if not decision.topic_label.strip():
+        raise ValueError("The question needs a topic_label.")
     if decision.topic_key is not None and decision.topic_key not in keys:
         raise ValueError("topic_key must be one of the given keys, or null.")
     if decision.topic_key is None and len(decision.topic_label.strip()) > 16:
         raise ValueError("A new topic_label must be at most 10 Chinese characters.")
-    return {"publish": True, "topic_key": decision.topic_key,
-            "topic_label": keys[decision.topic_key] if decision.topic_key else decision.topic_label.strip()}
+    if request.word and not decision.word.strip():
+        raise ValueError("The question needs a word for its address.")
+    result = {"topic_key": decision.topic_key,
+              "topic_label": keys[decision.topic_key] if decision.topic_key else decision.topic_label.strip()}
+    # The same words as an answer's own (ops_records.share_word): always a valid address word.
+    return {**result, "word": share_word(decision.word)} if request.word else result
 
 
 async def curate_question(client: httpx.AsyncClient, token: str, model: str, request: CurateRequest) -> dict:
     messages = [
-        {"role": "system", "content": JUDGE_PROMPT},
-        {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+        {"role": "system", "content": TOPIC_PROMPT + (WORD_PROMPT if request.word else "")},
+        {"role": "user", "content": json.dumps(request.model_dump(exclude={"word"}), ensure_ascii=False)},
     ]
     deadline = time.monotonic() + CURATE_SECONDS
     for attempt in range(2):
@@ -169,7 +166,7 @@ async def curate_question(client: httpx.AsyncClient, token: str, model: str, req
             content = choice.get("message", {}).get("content")
             if choice.get("finish_reason") == "length" or not isinstance(content, str) or len(content) > 40000:
                 raise ValueError("The reply was cut off; return the complete JSON object.")
-            return judged(JudgeDecision.model_validate_json(content), request)
+            return filed(TopicDecision.model_validate_json(content), request)
         except (ValueError, ValidationError, TypeError, AttributeError) as exc:
             if attempt:
                 raise ProviderFailure("invalid_answer") from None
