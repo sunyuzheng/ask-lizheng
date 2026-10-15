@@ -43,7 +43,8 @@ function turn(value) {
   return answer && {id: text(value.id) ? value.id : value.asked_at, asked_at: value.asked_at, question: value.question,
     intent: typeof value.intent === 'string' ? value.intent : 'understand', personal: value.personal === true,
     model: typeof value.model === 'string' ? value.model : '', result: answer,
-    // Asked by someone else: the page this conversation went on from.
+    // Asked by someone else (kept so only on 2026-10-15, before a conversation asked on someone
+    // else's page counted as its asker's own from its first question).
     ...(value.shared === true ? {shared: true} : {})};
 }
 function entry(value) {

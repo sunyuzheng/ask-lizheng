@@ -1481,19 +1481,21 @@ function App() {
   }, [messages]);
   // 我的提问 keeps the conversation on screen as one entry (history.js), each time one of its answers
   // arrives in this visit and again once its page is known: its answered questions, the conversation
-  // they go on in, and its page. A conversation only opened is left where it is in the list.
+  // they go on in, and its page. A conversation only opened is left where it is in the list. Asked on
+  // someone else's page, it is the asker's own new conversation (the owner, 2026-10-15): kept from
+  // its asker's first question, as its own page shows it, without the page it was asked on.
   const keptAs = useRef('');
   useEffect(() => {
-    const answered = messages.filter(m => m.result?.status === 'answered');
-    if (!threadKey.current || !answered.some(m => m.fresh)) return;
-    const last = answered.at(-1);
+    const own = messages.filter(m => m.result?.status === 'answered' && !m.shared);
+    if (!threadKey.current || !own.some(m => m.fresh)) return;
+    const last = own.at(-1);
     const url = (shares[last.id]?.phase === 'ready' && shares[last.id].url) || answerPage(last.result.share);
-    const signature = [threadKey.current, url, ...answered.map(m => m.id)].join(' ');
+    const signature = [threadKey.current, url, ...own.map(m => m.id)].join(' ');
     if (keptAs.current === signature) return;
     keptAs.current = signature;
     setAskedHere(keepConversation({id: threadKey.current, conversation_id: conversationId.current, url,
-      turns: answered.map(m => ({id: String(m.id), asked_at: m.askedAt || new Date(m.id).toISOString(), question: m.question, intent: m.intent,
-        personal: !!(m.context || m.personal), model: m.model || '', result: m.result, ...(m.shared ? {shared: true} : {})}))}));
+      turns: own.map(m => ({id: String(m.id), asked_at: m.askedAt || new Date(m.id).toISOString(), question: m.question, intent: m.intent,
+        personal: !!(m.context || m.personal), model: m.model || '', result: m.result}))}));
   }, [messages, shares]);
   // The address bar shows the conversation's page once one of its answers has it (one conversation,
   // one page, since 2026-10-15; while a follow-up is written it stays), and the start otherwise:
