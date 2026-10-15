@@ -1,0 +1,31 @@
+name: Builder health
+# Builder Space's side of 问问立正's daily check (scripts/builder_health.py): AI spend against the
+# account's ceiling, the end of free hosting, the deployment's state, and whether the live service
+# answers from Open Context's latest release. lizheng.ai checks the rest and mails the owner itself;
+# here a failed run is the alarm, and GitHub mails it.
+on:
+  schedule:
+    - cron: '23 15 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: builder-health
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Holds AI_BUILDER_TOKEN, readable only by runs on main.
+    environment: builder
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts
+          persist-credentials: false
+      - env:
+          AI_BUILDER_TOKEN: ${{ secrets.AI_BUILDER_TOKEN }}
+        run: python3 scripts/builder_health.py

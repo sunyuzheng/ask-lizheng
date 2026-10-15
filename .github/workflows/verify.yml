@@ -18,3 +18,5 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: docker build -t ask-lizheng .
+      # Starts the image in Builder Space's 256 MB and fails near the limit (scripts/check_image_memory.py).
+      - run: python scripts/check_image_memory.py ask-lizheng

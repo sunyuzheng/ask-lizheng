@@ -154,6 +154,9 @@ def update(token: str) -> dict | None:
     sh(sys.executable, "scripts/build_answer_map.py", timeout=600)
     sh(sys.executable, "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider", timeout=1200)
     sh(sys.executable, "data/context/scripts/validate_release.py")
+    # The release must start in Builder Space's 256 MB, with room to answer, before it is committed.
+    sh("docker", "build", "-q", "-t", "ask-lizheng-update", ".", timeout=1800)
+    sh(sys.executable, "scripts/check_image_memory.py", "ask-lizheng-update", timeout=600)
     if not commit_data(subject, commit, before, after, built):
         return None
     return {"open_context": commit, "subject": subject, "files": [before.get("files"), after.get("files")],
