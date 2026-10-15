@@ -829,6 +829,10 @@ def test_idle_work_sends_heartbeat_and_still_finishes_once(context_pack, monkeyp
             assert any(frame.startswith("event: sources") for frame in frames)
             assert not any(frame.startswith("event: result") for frame in frames)
             assert len(frames[-1].encode()) >= 16384
+            if phase == "semantic":
+                # What was found locally is flushed before the wait, not held by proxies until it ends.
+                first = next(i for i, frame in enumerate(frames) if frame.startswith("event: sources"))
+                assert any(frame.endswith(" " * 16384 + "\n\n") for frame in frames[first:-1])
             release.set()
             frames.extend([frame async for frame in response.body_iterator])
             parsed = events(httpx.Response(200, text="".join(frames)))

@@ -532,7 +532,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, intent=payload.intent)
                     if passages:
                         yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]], "candidates": map_candidates(passages)})
-                    yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"})
+                    # The padding sends these now: proxies hold small frames, and without it the
+                    # materials found here reached readers only with what follows the semantic
+                    # search, seconds later (2026-10-15).
+                    yield sse("progress", {"stage": "matching", "message": "正在匹配意思相近的材料，并合并重复出处…"}) + STREAM_HEARTBEAT
                     while not semantic_task.done():
                         done, _ = await asyncio.wait({semantic_task}, timeout=STREAM_HEARTBEAT_SECONDS)
                         if not done:
