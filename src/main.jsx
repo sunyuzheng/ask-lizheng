@@ -5,7 +5,7 @@ import {LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, discoveryDetail, discoveryLink, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
-import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
+import {conversationAt, forgetAll, forgetAsked, keepConversation, readHistory} from './history.js';
 import {homeQuestion} from './home-question.js';
 import {IN_APP} from './in-app.js';
 import {answerPage, copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
@@ -129,6 +129,21 @@ function inventoryText(counts) {
   ].filter(Boolean);
   return parts.length ? `现在收录${parts.join('、')}\u2060。` : '';
 }
+// How much there is to answer from (2026-10-15, the owner: say how much, and let readers draw the
+// conclusion; never say it is a lot). Counted when the release was built (server/retrieval.py,
+// corpus_figures): 字数 as Chinese word processors count it, over the original texts; the dialogue
+// lines whose speaker was recognised by voice; the guests and their programmes.
+function figuresOf(counts) {
+  const n = key => count(counts, key);
+  const zi = n('corpus_zi'), lines = n('dialogue_lines_attributed'), year = n('corpus_first_year');
+  return [
+    zi >= 10000 && {key: 'zi', value: Math.floor(zi / 10000), unit: '万字',
+      note: `文章、讲课和对谈的原文${year >= 2000 ? `，${year}年到现在` : ''}`},
+    lines >= 10000 && {key: 'lines', value: Math.floor(lines / 10000), unit: '万句', note: '对谈里的话，按声音认出了是谁说的'},
+    n('guest_entities') && {key: 'guests', value: n('guest_entities'), unit: '位',
+      note: `对谈嘉宾${n('guest_sources') ? `，${n('guest_sources')}期节目` : ''}`},
+  ].filter(Boolean);
+}
 function refinedText(counts) {
   const cards = count(counts, 'reasoning_cards');
   return `还有${cards ? `${cards}张` : ''}判断卡和几份阅读地图，帮回答找到相关的思路。它们由AI整理，每一张都连着原文。`;
@@ -160,6 +175,10 @@ const MESSAGES = {
 // never shows inside WeChat or the iPhone app.
 const SHARE = {
   label: '分享这条回答',
+  // A conversation of several questions shares one page (2026-10-15), under its latest answer; each
+  // answer before it can still be saved as an image or a PDF.
+  conversation: '分享这段对话',
+  save: '保存这条回答',
   quota: '分享上面的回答，今天多问一次',
   what: PUBLIC_QA.zh.share,
   create: '复制分享链接',
@@ -175,6 +194,7 @@ const SHARE = {
   // The bar under an answer (ShareBar): the answer's own page, ready as soon as it is written.
   qr: '二维码',
   qrNote: '用手机扫一扫，打开这条回答。',
+  qrConversation: '用手机扫一扫，打开这段对话。',
   bonusHint: '分享出去，今天多问一次。',
 };
 
@@ -383,7 +403,7 @@ function AccountLine({account, waking, busy, step, foundingOpen, onToggleFoundin
 }
 
 // The QR code of an answer's page, drawn when asked for (qrcode-generator, as the saved image's).
-function QrCode({url}) {
+function QrCode({url, note = SHARE.qrNote}) {
   const [svg, setSvg] = useState('');
   useEffect(() => {
     let alive = true;
@@ -398,17 +418,18 @@ function QrCode({url}) {
   }, [url]);
   return <figure className="share-qr">
     <div className="share-qr-code" aria-hidden="true" dangerouslySetInnerHTML={{__html: svg}}/>
-    <figcaption>{SHARE.qrNote}</figcaption>
+    <figcaption>{note}</figcaption>
   </figure>;
 }
 
 // 分享这条回答, under every finished answer: its own page as soon as it is written, with what to
 // do with it. An answer to a question with the situation gets its page only when asked for, after
-// saying what the page shows; so does one whose page could not be made at once.
-function ShareBar({state = {}, link, bonus, exporting, onCreate, onCopy, onSend, onQr, onExport}) {
+// saying what the page shows; so does one whose page could not be made at once. In a conversation
+// the page is the conversation's, under its latest answer; the answers before it only save.
+function ShareBar({state = {}, label = SHARE.label, link, bonus, exporting, onCreate, onCopy, onSend, onQr, onExport}) {
   const ready = link && state.phase === 'ready';
   return <div className="share-bar">
-    <p className="share-label">{SHARE.label}</p>
+    <p className="share-label">{label}</p>
     {ready ? <a className="share-url" href={state.url} target="_blank" rel="noopener">{shareDisplay(state.url)}<Ext/></a>
       : link && state.phase !== 'working' && <p className="share-note">{SHARE.what}</p>}
     {state.error && <p className="share-error" role="alert">{state.error}</p>}
@@ -425,7 +446,7 @@ function ShareBar({state = {}, link, bonus, exporting, onCreate, onCopy, onSend,
       {state.copied ? SHARE.copied : state.copied === false ? SHARE.select : ''}{state.bonus === 'granted' && <b>{SHARE.bonus}</b>}
     </p>}
     {ready && bonus && state.bonus !== 'granted' && <p className="share-bonus">{SHARE.bonusHint}</p>}
-    {ready && state.qr && <QrCode url={state.url}/>}
+    {ready && state.qr && <QrCode url={state.url} note={label === SHARE.conversation ? SHARE.qrConversation : SHARE.qrNote}/>}
     {ready && IN_WECHAT && <p className="share-hint">{SHARE.wechat}</p>}
   </div>;
 }
@@ -518,17 +539,26 @@ function QuestionCard({card, open, detail, like, share, exporting, feedback, sel
 // is this page with that answer in it (#ask-shared): it opens as the conversation, as its asker saw
 // it, and can be followed up. Since 2026-10-13 (the owner: the link should show what the asker sees).
 // So is a public question's shared link, ask.lizheng.ai/q/<id> (2026-10-14: 别人在问什么's links look
-// like this page too).
+// like this page too). A page is a whole conversation (2026-10-15): its first question, then `turns`,
+// the follow-ups answered after it.
+const answeredResult = answer => answer?.status === 'answered' && typeof answer.summary === 'string'
+  && Array.isArray(answer.sections) && Array.isArray(answer.sources);
 const SHARED = (() => {
   try {
     const value = JSON.parse(document.getElementById('ask-shared')?.textContent || 'null');
-    const answer = value?.answer;
     if (!value || typeof value.question !== 'string' || !value.question.trim() || typeof value.url !== 'string'
-      || !/^https:\/\/ask\.lizheng\.ai\/[sq]\//.test(value.url) || answer?.status !== 'answered' || typeof answer.summary !== 'string'
-      || !Array.isArray(answer.sections) || !Array.isArray(answer.sources)) return null;
-    return value;
+      || !/^https:\/\/ask\.lizheng\.ai\/[sq]\//.test(value.url) || !answeredResult(value.answer)) return null;
+    const turns = Array.isArray(value.turns)
+      ? value.turns.filter(turn => turn && typeof turn.question === 'string' && turn.question.trim() && answeredResult(turn.answer)) : [];
+    return {...value, turns};
   } catch { return null; }
 })();
+// A shared page this device asked: its asker goes on in the same conversation, on the same page.
+const SHARED_OWN = SHARED ? conversationAt(SHARED.url) : null;
+// The conversation on screen when the page opens: a shared page's, each question as its asker saw it.
+const SHARED_TURNS = SHARED ? [SHARED, ...SHARED.turns].map((turn, index) => ({id: index + 1, question: turn.question.trim(),
+  intent: turn.intent || 'understand', context: '', personal: turn.intent === 'apply', shared: !SHARED_OWN, followUp: index > 0, model: '',
+  result: turn.answer, askedAt: turn.created_at || ''})) : [];
 // The address bar follows the conversation's latest answer: its own page once it has one, else the
 // start. Only where /s/… is this page (ask.lizheng.ai, the app, a local build).
 const SHARE_PATHS = location.hostname === 'ask.lizheng.ai' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -541,8 +571,9 @@ function askedOn(iso, now = new Date()) {
   return `${date.getFullYear() === now.getFullYear() ? '' : `${date.getFullYear()}年`}${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
 }
 
-// 我的提问: the questions asked on this device, newest first. Opening one shows it as a conversation,
-// where it can be followed up and shared; each can be deleted, or all of them.
+// 我的提问: the conversations asked on this device, the latest first, each titled by its first
+// question. Opening one shows the conversation, where it can be followed up and shared; each can be
+// deleted, or all of them.
 function MyQuestions({items, busy, close, onOpen, onForget, onForgetAll}) {
   const ref = useRef(null);
   const [confirming, setConfirming] = useState(false);
@@ -567,7 +598,7 @@ function MyQuestions({items, busy, close, onOpen, onForget, onForgetAll}) {
       <p className="dialog-intro">{HISTORY.note}<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a></p>
       {items.length ? <ol className="history-list">{items.map(item => <li key={item.id}>
         <button type="button" className="history-item" disabled={busy} onClick={() => onOpen(item)}>
-          <time dateTime={item.asked_at}>{askedOn(item.asked_at)}</time>
+          <time dateTime={item.asked_at}>{askedOn(item.asked_at)}{item.turns.length > 1 ? ` · 追问${item.turns.length - 1}次` : ''}</time>
           <span>{item.question}</span>
         </button>
         <button type="button" className="icon-button history-forget" aria-label={`删除这条提问：${item.question.slice(0, 30)}`} title="删除" onClick={() => onForget(item.id)}><X size={16}/></button>
@@ -622,7 +653,7 @@ function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
       <h2 id="consent-title">{publicArchive ? '参与公开问答' : '同意AI处理你的输入'}</h2>
       <p>{publicArchive ? `${PUBLIC_QA.zh.notice} 同意后保存问题、完整回答与出处，用于帮助别人、改进回答和内容选题。` : '提问按输入旁的说明和隐私政策保存，用于改进回答及内容选题。'}</p>
       <p><b>AI处理</b><br/>Builder Space转交输入给{recipient || '待确认的服务商'}生成回答{backup && `（${recipient || '它'}没有及时回应时改由${backup}生成）`}、OpenAI匹配资料。回答AI接收问题、选填处境、最多6轮问题与回答摘要及公开资料；OpenAI接收用于匹配的问题、处境及必要时的上一轮问题。{recipient === 'DeepSeek' && 'DeepSeek可能保留输入并用于改进模型，没有训练退出选项。'}</p>
-      <p><b>公开范围</b><br/>{publicArchive ? `每个问答都原样放进「别人在问什么」，也有自己的网页，显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
+      <p><b>公开范围</b><br/>{publicArchive ? `每个问答都原样放进「别人在问什么」。一段对话一个网页，标题是第一个问题，接着问的也在里面，显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
       <p>发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a> · <a className="inline-link" href="https://space.ai-builders.com/privacy" target="_blank" rel="noopener noreferrer">服务商数据说明<Ext/></a></p>
       {!recipient && <p role="alert">回答服务商尚未确认，暂时不能发送。你仍可浏览公开问答。</p>}
       <p className="consent-choice">不同意也能浏览问答；可在「说明」里撤回AI同意。</p>
@@ -750,8 +781,7 @@ function App() {
   const [personal, setPersonal] = useState(false);
   const [editingSituation, setEditingSituation] = useState(false);
   const [background, setBackground] = useState({goal: '', facts: '', tried: ''});
-  const [messages, setMessages] = useState(() => (SHARED ? [{id: 1, question: SHARED.question.trim(), intent: SHARED.intent || 'understand',
-    context: '', personal: SHARED.intent === 'apply', shared: true, model: '', result: SHARED.answer, askedAt: SHARED.created_at || ''}] : []));
+  const [messages, setMessages] = useState(SHARED_TURNS);
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
@@ -763,7 +793,7 @@ function App() {
   const [sourceTurn, setSourceTurn] = useState(null);
   const [copied, setCopied] = useState(null);
   // Each answer's share, by turn: whether its panel is open, and how far it got.
-  const [shares, setShares] = useState(() => (SHARED ? {1: {phase: 'ready', url: SHARED.url}} : {}));
+  const [shares, setShares] = useState(() => Object.fromEntries(SHARED_TURNS.map(m => [m.id, {phase: 'ready', url: SHARED.url}])));
   // 反馈问题 (Report): what the page saw of the question when the person opened it.
   const [reporting, setReporting] = useState(null);
   const openReport = (place, m) => {
@@ -884,6 +914,8 @@ function App() {
     pages.current.set(pageKey.current, {
       scrollY: window.scrollY,
       messages: messagesNow.current.map(m => (stopping && !m.result && !m.error ? {...m, error: MESSAGES.stopped, errorCode: 'stopped'} : m)),
+      // Coming back to it goes on in the same conversation.
+      conversation: conversationId.current, thread: threadKey.current,
     });
   };
   const enterPage = view => {
@@ -904,13 +936,17 @@ function App() {
       if (page.view === 'thread' && !saved?.messages.length && /^\/[sq]\//.test(location.pathname)) { location.reload(); return; }
       setMessages(page.view === 'thread' ? saved?.messages || [] : []);
       setHistoryOpen(false); setAbout(null); setSelected(''); setSourceTurn(null); setError(''); setEditingSituation(false);
-      conversationId.current = null;
+      conversationId.current = page.view === 'thread' ? saved?.conversation ?? null : null;
+      threadKey.current = page.view === 'thread' ? saved?.thread ?? null : null;
       requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, saved?.scrollY || 0)));
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  const conversationId = useRef(null);
+  // The conversation on screen, as Builder knows it (its follow-ups go on the same page), and as
+  // 我的提问 keeps it (history.js): its asker's own shared page goes on where it was.
+  const conversationId = useRef(SHARED_OWN?.conversation_id ?? null);
+  const threadKey = useRef(SHARED_OWN?.id ?? null);
   // How the question box was last filled, counted with each question: typed, example, card, followup or clarify.
   const questionFrom = useRef('typed');
   // A question from the homepage's box, sent once this page can send (src/home-question.js).
@@ -1215,7 +1251,7 @@ function App() {
     setMessages([]); setQuestion(''); setBackground({goal: '', facts: '', tried: ''}); setPersonal(false); setEditingSituation(false);
     questionFrom.current = 'typed';
     setSelected(''); setSourceTurn(null); setError('');
-    conversationId.current = null;
+    conversationId.current = null; threadKey.current = null;
     window.scrollTo({top: 0, behavior: scrollBehavior()});
   };
   const newChat = () => {
@@ -1231,15 +1267,18 @@ function App() {
     if (conversation && !busy) startOver();
     else window.scrollTo({top: 0, behavior: scrollBehavior()});
   };
-  // A question from 我的提问 opens as the conversation, its answer as it came; it can be followed up.
+  // A conversation from 我的提问 opens as it was, each answer as it came; a follow-up goes on in the
+  // same conversation, on its page (2026-10-15).
   function openAsked(item) {
     if (busy) return;
     setHistoryOpen(false);
     enterPage('thread');
-    setMessages([{id: Number(item.id) || Date.now(), question: item.question, intent: item.intent, context: '', personal: item.personal,
-      model: item.model, result: item.result, askedAt: item.asked_at}]);
+    setMessages(item.turns.map((turn, index) => ({id: Number(turn.id) || Date.parse(turn.asked_at) + index, question: turn.question,
+      intent: turn.intent, context: '', personal: turn.personal, model: turn.model, result: turn.result, askedAt: turn.asked_at,
+      ...(turn.shared ? {shared: true, followUp: index > 0} : {})})));
     setQuestion(''); setError(''); setSelected(''); setSourceTurn(null); setEditingSituation(false);
-    conversationId.current = null;
+    conversationId.current = item.conversation_id ?? null;
+    threadKey.current = item.id;
     track('Ask History Open', {surface: SURFACE});
     window.scrollTo({top: 0});
   }
@@ -1262,6 +1301,8 @@ function App() {
     const history = messages.filter(m => m.result).slice(-6).map(m => ({question: m.question, summary: m.result.summary}));
     const ops = meta?.ops_logging?.enabled === true;
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
+    // 我的提问 keeps the conversation under the first question asked here.
+    if (!threadKey.current) threadKey.current = conversationId.current || String(retry?.id || Date.now());
     const payload = {...(retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})}),
       ...(IN_APP ? {ai_consent_model: meta?.model || 'AI', ...(meta?.backup_model ? {ai_consent_backup: meta.backup_model} : {})} : {})};
@@ -1326,13 +1367,10 @@ function App() {
         else if (name === 'quota') seeQuota(value);
         else if (name === 'result') {
           received = true;
-          if (value.status === 'answered') {
-            markUsage('answer');
-            setAskedHere(keepAsked({id: String(id), asked_at: new Date(id).toISOString(), question: payload.question, intent: payload.intent,
-              personal: !!payload.context, model: meta?.model || 'AI', result: value}));
-          }
+          if (value.status === 'answered') markUsage('answer');
           seeQuota(value.quota);
-          update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000)});
+          // `fresh`: answered in this visit, so 我的提问 keeps the conversation again (below).
+          update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000), fresh: value.status === 'answered'});
         } else if (name === 'error') throw refusal(value, value.status, MESSAGES.failed);
       };
       try {
@@ -1425,12 +1463,29 @@ function App() {
         .then(value => setShare(m.id, {phase: 'ready', url: value.url}), () => setShare(m.id, {phase: 'confirm'}));
     }
   }, [messages]);
-  // The address bar shows the latest answer's own page once it has one, and the start otherwise:
-  // refreshing keeps the answer, and the address is the link to share.
+  // 我的提问 keeps the conversation on screen as one entry (history.js), each time one of its answers
+  // arrives in this visit and again once its page is known: its answered questions, the conversation
+  // they go on in, and its page. A conversation only opened is left where it is in the list.
+  const keptAs = useRef('');
+  useEffect(() => {
+    const answered = messages.filter(m => m.result?.status === 'answered');
+    if (!threadKey.current || !answered.some(m => m.fresh)) return;
+    const last = answered.at(-1);
+    const url = (shares[last.id]?.phase === 'ready' && shares[last.id].url) || answerPage(last.result.share);
+    const signature = [threadKey.current, url, ...answered.map(m => m.id)].join(' ');
+    if (keptAs.current === signature) return;
+    keptAs.current = signature;
+    setAskedHere(keepConversation({id: threadKey.current, conversation_id: conversationId.current, url,
+      turns: answered.map(m => ({id: String(m.id), asked_at: m.askedAt || new Date(m.id).toISOString(), question: m.question, intent: m.intent,
+        personal: !!(m.context || m.personal), model: m.model || '', result: m.result, ...(m.shared ? {shared: true} : {})}))}));
+  }, [messages, shares]);
+  // The address bar shows the conversation's page once one of its answers has it (one conversation,
+  // one page, since 2026-10-15; while a follow-up is written it stays), and the start otherwise:
+  // refreshing keeps the answers, and the address is the link to share.
   useEffect(() => {
     if (!SHARE_PATHS) return;
-    const last = messages.at(-1);
-    const page = last && shares[last.id]?.phase === 'ready' ? shares[last.id].url : '';
+    const last = messages.filter(m => shares[m.id]?.phase === 'ready').at(-1);
+    const page = last ? shares[last.id].url : '';
     const path = page ? new URL(page).pathname : '/';
     if (location.pathname !== path) window.history.replaceState(window.history.state, '', path === '/' ? `/${location.search}` : path);
   }, [messages, shares]);
@@ -1493,6 +1548,8 @@ function App() {
   }
 
   const conversation = messages.length > 0;
+  const answeredTurns = messages.filter(m => m.result?.status === 'answered');
+  const lastAnswered = answeredTurns.at(-1), answeredCount = answeredTurns.length;
   const current = MODES.find(m => m.id === mode);
   // In a conversation the situation folds into one line after it has been sent once.
   const showFields = mode === 'ask' && personal && (!conversation || editingSituation);
@@ -1652,6 +1709,12 @@ function App() {
         <section className="materials" aria-labelledby="materials-title">
           <h2 id="materials-title">{MATERIALS.title}</h2>
           <div>
+            {figuresOf(meta?.counts).length > 0 && <dl className="materials-figures">
+              {figuresOf(meta?.counts).map(figure => <div key={figure.key}>
+                <dt><b>{figure.value}</b>{figure.unit}</dt>
+                <dd>{figure.note}</dd>
+              </div>)}
+            </dl>}
             <p className="materials-list"><Phrases text={MATERIALS.own}/></p>
             <p className="materials-list"><Phrases text={MATERIALS.guests}/></p>
             {inventoryText(meta?.counts) && <p><Phrases text={inventoryText(meta?.counts)}/>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/solo-videos.md`} target="_blank" rel="noreferrer">主讲文字稿<Ext/></a>{' '}<a className="inline-link" href={`${LINKS.context}/blob/main/index/dialogues.md`} target="_blank" rel="noreferrer">对谈原稿<Ext/></a></p>}
@@ -1671,6 +1734,8 @@ function App() {
           <section className="thread" aria-label="当前对话">
             {messages.map((m, index) => {
               const last = index === messages.length - 1;
+              // The conversation's page is shared under its latest answer.
+              const sharing = m.id === lastAnswered?.id;
               const working = busy && last;
               const sources = m.result?.sources || [];
               const select = id => selectSource(id, m.id);
@@ -1679,7 +1744,7 @@ function App() {
                   <span className="sr-only">你的问题</span>
                   <h2><Phrases text={m.question}/></h2>
                   {m.askedAt && (m.shared
-                    ? <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt).replace(/ .*$/, '')}</time>提问</p>
+                    ? <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt).replace(/ .*$/, '')}</time>{m.followUp ? '追问' : '提问'}</p>
                     : <p className="question-when"><time dateTime={m.askedAt}>{askedOn(m.askedAt)}</time>问的，保存在这台设备上</p>)}
                   {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
@@ -1707,7 +1772,9 @@ function App() {
                     <summary>回到{sources.length}份原文<Chev/></summary>
                     <div>{sources.map(source => <SourceCard key={source.id} source={source} prefix={`turn-${m.id}`} selected={sourceTurn === m.id && selected === source.id} onOpen={id => { setSelected(id); setSourceTurn(m.id); }}/>)}</div>
                   </details>}
-                  {m.result.status === 'answered' && <div id={`share-${m.id}`}><ShareBar state={shares[m.id]} link={!!(m.result.share || shares[m.id]?.url)} bonus={bonusOffer && !!m.result.share}
+                  {m.result.status === 'answered' && <div id={`share-${m.id}`}><ShareBar state={shares[m.id]}
+                    label={!sharing ? SHARE.save : answeredCount > 1 ? SHARE.conversation : SHARE.label}
+                    link={sharing && !!(m.result.share || shares[m.id]?.url)} bonus={sharing && bonusOffer && !!m.result.share}
                     exporting={exporting === `${m.id}-png` ? 'png' : exporting === `${m.id}-pdf` ? 'pdf' : exporting ? 'other' : ''}
                     onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onQr={() => toggleQr(m)} onExport={kind => exportTurn(kind, m)}/></div>}
                   <div className="answer-actions">

@@ -158,6 +158,42 @@ STORE_FILE = "ask.sqlite"
 STORE_SOURCES = ("retrieval.py", "store.py", "context_architecture.py", "semantic.py")
 
 
+# What the page says of the material (2026-10-15, the owner asked it to say how much there is): its
+# 字数 as Chinese word processors count it, a Chinese character or full-width mark one each and an
+# English word or a number one each, over the original texts only: no translations, front matter,
+# provenance notes, timecodes or links. The owner's own count, every character but spaces and English
+# letter by letter, came to 11 million; this one is the one readers know as 字数.
+ZI = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef\u2018-\u201f\u2026\u2014]|[A-Za-z][A-Za-z'’-]*|\d+")
+NOT_TEXT = (re.compile(r"\A---\n.*?\n---\n", re.S), re.compile(r"<!-- provenance:start -->.*?<!-- provenance:end -->", re.S),
+            re.compile(r"\[\d\d:\d\d:\d\d\]\([^)]*\)"), re.compile(r"^> \[观看原视频\].*$", re.M))
+LINKED, URL = re.compile(r"\[([^\]]*)\]\((?=https?://)[^)]*\)"), re.compile(r"https?://\S+")
+
+
+def corpus_figures(root: Path) -> dict:
+    """How much the material is, for the page: its 字数, the dialogue lines whose speaker was recognised,
+    and the year its earliest dated text came out."""
+    zi, lines, years = 0, 0, []
+    for path in sorted((root / "corpus").rglob("*")):
+        if not path.is_file() or path.parent.name == "english-translations" or path.suffix not in {".md", ".json"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".json":
+            data = json.loads(text)
+            units = data.get("units") or []
+            lines += sum(1 for unit in units if unit.get("speaker_status") in ATTRIBUTED)
+            body, published = "\n".join(str(unit.get("text") or "") for unit in units), str(data.get("published_at") or "")
+        else:
+            match = re.search(r'^published_at: "([^"]*)"', text, re.M)
+            published, body = match.group(1) if match else "", text
+            for pattern in NOT_TEXT:
+                body = pattern.sub("", body)
+            body = URL.sub("", LINKED.sub(r"\1", body))
+        zi += sum(1 for _ in ZI.finditer(body))
+        if re.match(r"(19|20)\d\d-", published):
+            years.append(int(published[:4]))
+    return {"corpus_zi": zi, "dialogue_lines_attributed": lines, "corpus_first_year": min(years, default=0)}
+
+
 def store_code() -> str:
     here = Path(__file__).resolve().parent
     digest = hashlib.sha256()
@@ -354,7 +390,8 @@ class ContextIndex:
                   "yuzheng_articles": families({"community-post", "knowledge-bank", "blog-post"}),
                   "yuzheng_comments": families({"community-comment"}),
                   "yuzheng_course_lessons": families({"course-lesson"}),
-                  "yuzheng_dialogue_sources": families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched")}
+                  "yuzheng_dialogue_sources": families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched"),
+                  **corpus_figures(self.root)}
         everyone = {getattr(doc, "speaker_id", "") for doc in documents}
         speakers = sorted(who for who in everyone if who and who not in {"unknown", "yuzheng"}
                           and any(is_participant_statement(doc, {who}) for doc in documents if doc.speaker_id == who))
@@ -382,7 +419,8 @@ class ContextIndex:
         counts["retrieval_chunks"] = stored_counts.get("retrieval_chunks", 0)
         counts["source_families"] = stored_counts.get("source_families", 0)
         counts["reasoning_cards"] = len(self.architecture.cards) if self.architecture else 0
-        counts.update({key: value for key, value in stored_counts.items() if key.startswith("yuzheng_")})
+        counts.update({key: value for key, value in stored_counts.items()
+                       if key.startswith("yuzheng_") or key in {"corpus_zi", "dialogue_lines_attributed", "corpus_first_year"}})
         # Which Open Context release this service answers from, so a deploy can be checked from outside.
         commit = self.source_revision if re.fullmatch(r"[a-f0-9]{40}", self.source_revision) else ""
         return {"context_date": self.manifest.get("snapshot_at", ""), "context_release": self.release_sha256,

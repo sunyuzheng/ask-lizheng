@@ -169,3 +169,27 @@ def test_semantic_candidates_are_cut_after_the_source_purpose(index):
     semantic = [{"docindex": outsiders[n % len(outsiders)], "score": .95} for n in range(60)] + [{"docindex": own, "score": .5}]
     passages = index.retrieve("毫不相干的提问词汇", intent="understand", semantic_candidates=semantic)
     assert [p.evidence["docindex"] for p in passages] == [own]
+
+
+def test_the_page_is_told_how_much_material_there_is(context_pack):
+    # 2026-10-15, the owner: the page says how much there is. 字数 as Chinese word processors count it,
+    # over original texts only: not front matter, provenance, timecodes, links or translations.
+    from server.retrieval import corpus_figures
+    path = dialogue(context_pack)
+    data = json.loads(path.read_text()); data["published_at"] = "2019-12-31T00:00:00Z"
+    path.write_text(json.dumps(data, ensure_ascii=False))
+    source_file(context_pack, "corpus/videos", "counted.md", {"id": "counted", "title": "计数", "source_type": "video-transcript",
+        "published_at": "2024-01-02T00:00:00Z", "source_url": "https://example.org/counted"},
+        "<!-- provenance:start -->\n> 归属说明不计\n<!-- provenance:end -->\n\n> [观看原视频](https://example.org/counted) · 字幕说明不计\n\n"
+        "[00:00:01](https://www.youtube.com/watch?v=counted&t=1s) 你好，AI agent 2026年[链接文字](https://example.org/x)")
+    base = corpus_figures(context_pack)
+    assert base["corpus_first_year"] == 2019
+    # Three attributed lines? Two: the third's speaker is unresolved.
+    assert base["dialogue_lines_attributed"] == 2
+    (context_pack / "corpus/videos/counted.md").unlink()
+    without = corpus_figures(context_pack)
+    # 你 好 ， AI agent 2026 年 链 接 文 字 = 11, and nothing of the notes, the timecode or the address.
+    assert base["corpus_zi"] - without["corpus_zi"] == 11
+    ix = ContextIndex(context_pack); ix.load()
+    counts = ix.metadata()["counts"]
+    assert {key: counts[key] for key in ("corpus_zi", "dialogue_lines_attributed", "corpus_first_year")} == without
