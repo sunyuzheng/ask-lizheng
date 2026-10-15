@@ -16,6 +16,8 @@ jobs:
       - run: python -m pytest tests -q
       - run: python data/context/scripts/validate_release.py
       - run: npm ci
+      # The page's own modules (tests/*.mjs): the homepage hand-over, source attribution.
+      - run: node --test tests/*.mjs
       - run: npm run build
       - run: docker build -t ask-lizheng .
       # Starts the image in Builder Space's 256 MB and fails near the limit (scripts/check_image_memory.py).

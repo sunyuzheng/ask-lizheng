@@ -6,6 +6,7 @@ import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, discoveryDetail, discoveryLink, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
 import {forgetAll, forgetAsked, keepAsked, readHistory} from './history.js';
+import {homeQuestion} from './home-question.js';
 import {IN_APP} from './in-app.js';
 import {answerPage, copyWhenReady, createShareLink, IN_WECHAT, shareDisplay} from './share-link.js';
 import {markUsage, startUsage, watchUsage} from './usage.js';
@@ -912,6 +913,8 @@ function App() {
   const conversationId = useRef(null);
   // How the question box was last filled, counted with each question: typed, example, card, followup or clarify.
   const questionFrom = useRef('typed');
+  // A question from the homepage's box, sent once this page can send (src/home-question.js).
+  const sendHome = useRef(false);
   const metadataAbort = useRef(null);
   // The page loads from lizheng.ai at once, but the settings come from Builder, which sleeps when
   // idle and takes up to half a minute to wake: say so while it wakes, and keep asking.
@@ -988,6 +991,16 @@ function App() {
         if (params.get('mode') === 'find') setMode('find');
       }
       history.replaceState(history.state, '', location.pathname + location.hash);
+    }
+    // A question from the homepage's box (#q=): sent as soon as the page can, when it came from there.
+    const home = homeQuestion(location.hash, document.referrer);
+    if (location.hash.startsWith('#q=')) {
+      if (!draft && home) {
+        setQuestion(home.question); questionFrom.current = 'home';
+        setMode(home.mode);
+        sendHome.current = home.send;
+      }
+      history.replaceState(history.state, '', location.pathname + location.search);
     }
     let stopped = false;
     const slow = setTimeout(() => setAccountWaking(true), 1500);
@@ -1487,15 +1500,21 @@ function App() {
   const hint = mode === 'ask' && personal ? current.personalHint : current.hint;
   const placeholder = mode === 'ask' && personal ? current.personalPlaceholder : current.placeholder;
   const outOfQuota = account?.enabled && !account.unavailable && !account.founding && account.remaining === 0;
+  // The homepage's question goes as soon as 提问 could be pressed; once, and not after it was changed.
+  useEffect(() => {
+    if (!sendHome.current || busy || !storageReady || outOfQuota || !question.trim()) return;
+    sendHome.current = false;
+    submit();
+  });
   const composer = <div className="composer-area" id="ask-lizheng">
     <form className={`composer ${busy ? 'is-busy' : ''}`} onSubmit={submit} aria-busy={busy}>
       <div className="modes" role="group" aria-label="这次想怎样问">
-        {MODES.map(m => <button key={m.id} type="button" aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>{m.label}</button>)}
+        {MODES.map(m => <button key={m.id} type="button" aria-pressed={mode === m.id} onClick={() => { sendHome.current = false; setMode(m.id); }}>{m.label}</button>)}
       </div>
       {!conversation && <p className="mode-hint">{hint}</p>}
       <label className="sr-only" htmlFor="question">你的问题</label>
       <textarea id="question" ref={input} maxLength={2000} value={question} rows={conversation ? 1 : 3}
-        onChange={event => { setQuestion(event.target.value); if (!event.target.value.trim()) questionFrom.current = 'typed'; }} placeholder={conversation ? (mode === 'find' ? '还想读哪方面的？' : '接着问，或者换一个问题') : placeholder}
+        onChange={event => { sendHome.current = false; setQuestion(event.target.value); if (!event.target.value.trim()) questionFrom.current = 'typed'; }} placeholder={conversation ? (mode === 'find' ? '还想读哪方面的？' : '接着问，或者换一个问题') : placeholder}
         onKeyDown={event => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
         }}/>

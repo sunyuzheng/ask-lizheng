@@ -22,7 +22,7 @@
 
 前后端约定：
 - 前端（个人站主页与本仓库页面）已支持v4，但只在`/api/meta`宣布`ops_logging: {enabled: true, retention: "until_deleted", answer_archive: true, notice: "v4", context_archive: true, public_display: "deidentified"}`时显示v4提示，并在请求里带`query_log_notice: "v4"`、`conversation_id`和照常的`context`。字段不全或notice是未知版本时：主页退回v1提示与v1标记，本页面暂停发送并提示保存设置尚未确认。
-- 个人站转发层对v4与v3一样签入匿名visitor和entrypoint。
+- 个人站转发层对v4与v3一样签入匿名visitor和entrypoint。2026-10-15起主页的提问框只把问题交给 ask.lizheng.ai、在那里发出，所以新记录的entrypoint都是standalone。
 - 后端（Builder与Ops存储）须先能接受`v4`（Builder请求模型目前只收v1/v3）、逐条保存提示版本和处境原文，再让meta宣布v4；宣布之前页面一直显示v3。
 
 ## 分享这条回答，处境不再保存（2026-10-04）

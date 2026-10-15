@@ -15,6 +15,7 @@
 ```sh
 npm ci
 npm run build
+node --test tests/*.mjs   # 页面自己的模块：主页交来的问题、出处归属
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 # 在进程环境设置 AI_BUILDER_TOKEN；不设置时仍可检索资料。
