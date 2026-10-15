@@ -12,6 +12,7 @@ import {markUsage, startUsage, watchUsage} from './usage.js';
 import {MARK_PATHS} from './mark.js';
 import playLogo from './badges/google-play-logo.png';
 import {answerService, PUBLIC_QA, publicQaCopy} from './public-qa.js';
+import {REPORT_COPY, REPORT_TEXT_MAX, reportPayload, sendReport} from './report.js';
 import {isMembersOnly, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
 import {AmbientMap, AnswerMapPanel} from './answer-map-panel.jsx';
@@ -314,13 +315,14 @@ function SectionBlock({section, sources, onSelect, personal}) {
   </section>;
 }
 
-function Working({message, elapsed, onStop, onSelect}) {
+function Working({message, elapsed, onStop, onSelect, onReport}) {
   const candidates = message.previewSources || [];
   const stale = message.lastActivity && Date.now() - message.lastActivity > 12000;
   return <section className="working" aria-label="回答进度">
     <div className="working-top">
       <LoaderCircle size={18} className="spin" aria-hidden="true"/>
       <p role="status">{message.progress?.message || '正在查找相关公开材料…'}</p>
+      <button type="button" className="ghost-button" onClick={onReport}>{REPORT_COPY.zh.button}</button>
       <button type="button" className="ghost-button" onClick={onStop}>停止</button>
     </div>
     <AnswerMapPanel message={message} live onSelect={onSelect} onOpen={source => trackSource(source.url)}/>
@@ -682,6 +684,64 @@ function About({close, meta, account, focusInput, publicArchive, contextKept, on
   </div>;
 }
 
+// 反馈问题 (report.js): a line, or nothing, goes to the owner with what the page saw when the
+// person opened this: the question, how long it had waited, the stage, the error; never the situation.
+function Report({report, onClose}) {
+  const copy = REPORT_COPY.zh;
+  const ref = useRef(null);
+  const [text, setText] = useState('');
+  const [state, setState] = useState('idle');
+  const turn = report.place !== 'page';
+  useEffect(() => {
+    const previous = document.activeElement;
+    const previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    ref.current?.focus();
+    const handler = event => {
+      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab') return;
+      const items = ref.current?.querySelectorAll('button:not(:disabled),a,textarea');
+      const first = items?.[0], last = items?.[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      document.documentElement.style.overflow = previousOverflow;
+      previous?.focus?.();
+    };
+  }, []);
+  async function send() {
+    setState('sending');
+    const result = await sendReport(reportPayload({surface: SURFACE, place: report.place, text, turn: report.turn}));
+    track('Ask Report', {surface: SURFACE, place: report.place, step: result});
+    setState(result);
+  }
+  return <div className="backdrop" onClick={onClose}>
+    <section className="dialog report" role="dialog" aria-modal="true" aria-labelledby="report-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
+      <button type="button" className="icon-button dialog-close" aria-label={copy.close} onClick={onClose}><X size={20}/></button>
+      <h2 id="report-title">{copy.title}</h2>
+      {state === 'sent' ? <>
+        <p className="report-done" role="status">{copy.sent}</p>
+        <div className="report-actions"><button type="button" className="consent-agree" onClick={onClose}>{copy.close}</button></div>
+      </> : <>
+        <p>{turn ? copy.introTurn : copy.introPage}</p>
+        <label className="report-field"><span className="sr-only">{copy.label}</span>
+          <textarea rows={3} maxLength={REPORT_TEXT_MAX} value={text} placeholder={copy.placeholder} onChange={event => setText(event.target.value)}/>
+        </label>
+        <p className="report-attached">{turn ? copy.withTurn : copy.withPage}</p>
+        {(state === 'failed' || state === 'limited') && <p className="report-error" role="alert">{copy[state]}</p>}
+        <div className="report-actions">
+          <button type="button" className="ghost-button" onClick={onClose}>{copy.cancel}</button>
+          <button type="button" className="consent-agree" disabled={state === 'sending' || (!turn && !text.trim())} onClick={send}>{state === 'sending' ? copy.sending : copy.send}</button>
+        </div>
+      </>}
+      <p className="report-community">{copy.community}<a className="inline-link" href={LINKS.feedback} target="_blank" rel="noopener noreferrer">{copy.communityLink}<Ext/></a></p>
+    </section>
+  </div>;
+}
+
 function App() {
   const [meta, setMeta] = useState(null);
   const [mode, setMode] = useState('ask');
@@ -703,6 +763,17 @@ function App() {
   const [copied, setCopied] = useState(null);
   // Each answer's share, by turn: whether its panel is open, and how far it got.
   const [shares, setShares] = useState(() => (SHARED ? {1: {phase: 'ready', url: SHARED.url}} : {}));
+  // 反馈问题 (Report): what the page saw of the question when the person opened it.
+  const [reporting, setReporting] = useState(null);
+  const openReport = (place, m) => {
+    const waiting = place === 'waiting';
+    const turn = m && {question: m.question, askedAt: m.askedAt || (typeof m.id === 'number' ? m.id : undefined),
+      elapsed: waiting ? elapsed : m.elapsed ?? m.waited, quiet: waiting && m.lastActivity ? (Date.now() - m.lastActivity) / 1000 : undefined,
+      stage: waiting ? m.progress?.stage : undefined, error: m.errorCode || m.result?.failure_code, status: m.result?.status,
+      model: m.model, share: answerPage(m.result?.share) || shares[m.id]?.url};
+    track('Ask Report', {surface: SURFACE, place, step: 'open'});
+    setReporting({place, turn});
+  };
   const [exporting, setExporting] = useState('');
   const [account, setAccount] = useState(null);
   const [loginStep, setLoginStep] = useState('');
@@ -1270,7 +1341,7 @@ function App() {
         : err instanceof TypeError ? MESSAGES.lost
         : String(err.message || MESSAGES.failed);
       setError(message);
-      update({error: message, errorCode: controller.signal.aborted && !timedOut ? 'stopped' : err.code});
+      update({error: message, errorCode: controller.signal.aborted && !timedOut ? 'stopped' : err.code, waited: Math.round((performance.now() - started) / 1000)});
       setQuestion(prev => (prev.trim() ? prev : payload.question));
     } finally {
       clearTimeout(deadline);
@@ -1566,7 +1637,7 @@ function App() {
         </section>
         <footer className="footer">
           <p>回答由AI根据公开材料整理，不是立正本人回复。材料更新于{meta?.context_date || '…'}。</p>
-          <p><a href={LINKS.feedback} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Feedback', {surface: SURFACE, location: 'footer'})}>反馈或举报<Ext/></a><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
+          <p><button type="button" className="footer-report" onClick={() => openReport('page')}>{REPORT_COPY.zh.button}</button><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
         </div>
       </div> : <div className="layout">
@@ -1588,7 +1659,7 @@ function App() {
                   {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
                 {!m.result && (working || m.previewSources?.length > 0) && (working
-                  ? <Working message={m} elapsed={elapsed} onStop={() => abort.current?.abort()} onSelect={select}/>
+                  ? <Working message={m} elapsed={elapsed} onStop={() => abort.current?.abort()} onSelect={select} onReport={() => openReport('waiting', m)}/>
                   : <section className="working idle"><Candidates sources={m.previewSources} turnId={m.id} onSelect={select}/></section>)}
                 {m.result && <div className="answer">
                   {m.result.status === 'sources-only'
@@ -1616,6 +1687,7 @@ function App() {
                     onCreate={() => createShare(m)} onCopy={() => copyShare(m)} onSend={() => sendShare(m)} onQr={() => toggleQr(m)} onExport={kind => exportTurn(kind, m)}/></div>}
                   <div className="answer-actions">
                     <button type="button" className="ghost-button" onClick={() => copy(m.result)}>{copied === m.result ? '已复制' : m.result.status === 'sources-only' ? '复制这些出处' : '复制回答和出处'}</button>
+                    {!m.result.retryable && <button type="button" className="ghost-button" onClick={() => openReport('answer', m)}>{REPORT_COPY.zh.button}</button>}
                   </div>
                   {last && m.result.followups?.length > 0 && <div className="followups">
                     <p>可以接着问<span>点一下放进输入框，改好再发</span></p>
@@ -1633,7 +1705,11 @@ function App() {
                           </span>}
                     </div>
                   : <p className={`turn-alert ${m.errorCode === 'stopped' ? 'muted' : ''}`} role="alert">{m.error}</p>)}
-                {!busy && last && (m.errorCode !== 'quota_exhausted' || account?.founding || account?.remaining > 0) && (m.error || m.result?.retryable) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
+                {(m.error || m.result?.retryable) && m.errorCode !== 'quota_exhausted' && <div className="turn-actions">
+                  {!busy && last && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
+                  <button type="button" className="ghost-button" onClick={() => openReport('failed', m)}>{REPORT_COPY.zh.button}</button>
+                </div>}
+                {!busy && last && m.errorCode === 'quota_exhausted' && (account?.founding || account?.remaining > 0) && <button type="button" className="ghost-button retry" disabled={!storageReady} onClick={() => submit(undefined, m)}>重新生成回答</button>}
               </article>;
             })}
           </section>
@@ -1652,6 +1728,7 @@ function App() {
     {historyOpen && <MyQuestions items={askedHere} busy={busy} close={() => setHistoryOpen(false)} onOpen={openAsked}
       onForget={id => setAskedHere(forgetAsked(id))} onForgetAll={() => { setAskedHere(forgetAll()); setHistoryOpen(false); }}/>}
     {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept} onRevokeConsent={revokeConsent}/>}
+    {reporting && <Report report={reporting} onClose={() => setReporting(null)}/>}
     {asking && <AppConsent meta={meta} publicArchive={publicArchive} contextKept={contextKept} onCancel={() => { setAsking(null); focusInput(); }} onAgree={() => { const retry = asking.retry; consented.current = consentScope(meta); revokedConsent.current = false; saveConsent(consented.current); setAsking(null); void submit(undefined, retry); }}/>}
   </div>;
 }

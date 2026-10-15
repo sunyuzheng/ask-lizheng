@@ -1681,7 +1681,13 @@ main {
   font-weight: 500;
 }
 
+.footer-report {
+  color: var(--green-text);
+  font-weight: 500;
+}
+
 .footer a:hover,
+.footer-report:hover,
 .dialog-foot a:hover,
 .rail-foot:hover,
 .public-copy:hover {
@@ -2476,6 +2482,18 @@ main {
   color: var(--green-text);
 }
 
+/* 重新生成回答 and 反馈问题 under an answer that did not finish. */
+.turn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 14px 0 0 -10px;
+}
+
+.turn-actions .retry {
+  margin: 0;
+}
+
 /* The question box stays at hand under a long answer. */
 .dock {
   position: sticky;
@@ -2881,6 +2899,86 @@ main {
 
 .consent-agree:disabled {
   opacity: 0.5;
+}
+
+/* 反馈问题 (Report): as small as the consent, a box to write in and the send. */
+.dialog.report {
+  width: min(520px, 100%);
+  max-height: min(88dvh, 900px);
+  overscroll-behavior: contain;
+}
+
+.dialog.report h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+
+.report p {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  line-height: 1.8;
+}
+
+.report-field {
+  display: block;
+  margin-top: 14px;
+}
+
+.report-field textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 16px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.report-field textarea:focus {
+  outline: none;
+  border-color: var(--green);
+  background: #fff;
+}
+
+.report .report-attached,
+.report .report-community {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.report .report-error {
+  color: var(--red);
+  font-size: 14px;
+}
+
+.report .report-done {
+  margin-top: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.report-actions .ghost-button {
+  min-height: 44px;
+  color: var(--ink-2);
+}
+
+.report .report-community {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
 }
 
 .dialog-close {
