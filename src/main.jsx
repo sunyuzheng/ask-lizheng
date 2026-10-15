@@ -518,6 +518,22 @@ function QuestionCard({card, open, detail, like, share, exporting, feedback, sel
           <summary>回到{answer.sources.length}份原文<Chev/></summary>
           <div>{answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={prefix} selected={selected === `${prefix}:${source.id}`}/>)}</div>
         </details>}
+        {/* The rest of the conversation (2026-10-15): each follow-up after the answer, as on its page. */}
+        {(detail.turns || []).map((turn, index) => {
+          const turnPrefix = `${prefix}-t${index + 2}`;
+          const pick = id => onSelect(turnPrefix, id);
+          return <section className="qcard-turn" key={turnPrefix} aria-label={`追问：${turn.question}`}>
+            <p className="qcard-turn-label">追问</p>
+            <h3 className="qcard-turn-question"><Phrases text={turn.question}/></h3>
+            <div className="summary"><Markdown text={turn.answer.summary} sources={turn.answer.sources} onSelect={pick}/></div>
+            {turn.answer.sections.map((section, i) => <SectionBlock key={i} section={section} sources={turn.answer.sources} onSelect={pick}/>)}
+            {turn.answer.limitations && <Limits text={turn.answer.limitations} sources={turn.answer.sources} onSelect={pick}/>}
+            {turn.answer.sources.length > 0 && <details className="inline-sources">
+              <summary>回到{turn.answer.sources.length}份原文<Chev/></summary>
+              <div>{turn.answer.sources.map(source => <SourceCard key={source.id} source={source} prefix={turnPrefix} selected={selected === `${turnPrefix}:${source.id}`}/>)}</div>
+            </details>}
+          </section>;
+        })}
         <p className="qcard-attribution">{DISCOVERY.attribution}</p>
       </div> : <p className="qcard-note">{detail === 'failed' ? '这条回答暂时打不开，请稍后再试。' : '正在打开…'}</p>}
       <div className="qcard-actions">

@@ -158,19 +158,26 @@ export function discoveryView(lists, view) {
   }).sort(often).map(card => ({...card, role: 'common'}));
 }
 
+const shownAnswer = answer => (answer && typeof answer.summary === 'string' && Array.isArray(answer.sections) && Array.isArray(answer.sources) ? {
+  summary: answer.summary,
+  sections: answer.sections.map(section).filter(Boolean),
+  sources: answer.sources.map(source).filter(Boolean),
+  limitations: text(answer.limitations) ? answer.limitations : '',
+} : null);
+/** A published question, as it opens in place: its answer, and since 2026-10-15 the follow-ups asked
+ * after it in the same conversation (`turns`, oldest first; lizheng.ai reads them live). */
 export async function discoveryDetail(id, signal) {
   try {
     const response = await fetch(`/api/ask-lizheng/discovery/detail?public_id=${encodeURIComponent(id)}`, {cache: 'no-store', credentials: 'omit', signal});
     if (!response.ok) return null;
     const value = await response.json();
-    const answer = value?.answer;
-    if (!text(value?.question) || !answer || typeof answer.summary !== 'string' || !Array.isArray(answer.sections) || !Array.isArray(answer.sources)) return null;
-    return {question: value.question, ...(isAnswerPage(value.share_url) ? {share_url: value.share_url} : {}), answer: {
-      summary: answer.summary,
-      sections: answer.sections.map(section).filter(Boolean),
-      sources: answer.sources.map(source).filter(Boolean),
-      limitations: text(answer.limitations) ? answer.limitations : '',
-    }};
+    const answer = shownAnswer(value?.answer);
+    if (!text(value?.question) || !answer) return null;
+    const turns = (Array.isArray(value.turns) ? value.turns : []).map(turn => {
+      const shown = shownAnswer(turn?.answer);
+      return text(turn?.question) && shown ? {question: turn.question, created_at: typeof turn.created_at === 'string' ? turn.created_at : '', answer: shown} : null;
+    }).filter(Boolean);
+    return {question: value.question, ...(isAnswerPage(value.share_url) ? {share_url: value.share_url} : {}), answer, turns};
   } catch { return null; }
 }
 
