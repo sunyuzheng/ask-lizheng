@@ -16,6 +16,8 @@ curl -N http://127.0.0.1:8000/api/ask \
 
 2026-10-04本地审核修复候选：App在单独披露和取得同意后，附上`ai_consent_model`（1–128字符），表示用户同意的回答模型。它不能用来选择模型。服务端在预留额度、存档或发送给AI前比对当前模型；不匹配返回HTTP409和`{"code":"ai_consent_changed","model":"当前模型"}`，客户端展示新模型并重新征求同意。请求一旦通过比对，本次生成和记录固定用捕获的模型；同意字段不会发给模型。旧浏览器请求不带该字段仍可调用。发布时须先部署支持该字段的后端，再同步个人站提供的App前端；第三方处理方与同等保护材料未确认前，不发布此候选。
 
+2026-10-15起，`/api/meta` 带 `backup_model`（现为 `gpt-5`；没有备用时为 null）。App 在同意说明里写明备用模型的服务商并取得同意后，请求另附 `ai_consent_backup`（同意时的 backup_model，1–128字符）；不带或与当前备用不一致时，这一请求不用备用模型。网页请求不带同意字段，由页面说明和隐私政策写明备用模型。两个同意字段都不发给模型。
+
 返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；approach 提前提供结合检索材料的整理方向、待核对的问题与出处；partial 提供已完整返回且通过来源编号与格式检查的段落；result 是一次完整且已经校验的 JSON。approach 是公开的回答准备摘要，尚不是结论；不是模型内部推理文本。完整回答仍须经过格式与来源编号核对。
 
 ```text
@@ -75,6 +77,6 @@ sources 事件另带 `candidates`：这次交给模型的全部候选材料（so
 
 在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `grok-4.5`（reasoning_effort: medium），使用严格 JSON schema；核心摘要最多 350 字符、解释段落最多三节。Grok 4.5 与候选 `deepseek-v4-flash` 使用真实 provider SSE，读取完整段落后发布 partial；网关忽略 stream 并返回完整 JSON 时仍按原校验流程处理，不为此多发一次模型请求。送给模型的每份材料保留完整 excerpt 和归属字段，链接及检索内部字段由服务器持有。
 
-服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
+服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。例外是备用模型（2026-10-15，立正决定）：主模型流式回答30秒内没有写出内容，或在写出内容前超时、断网或返回HTTP错误，同一问题在同一85秒预算内交给 `BACKUP_MODELS` 里的备用模型（`deepseek-v4-flash`/`deepseek-v4-pro` → `gpt-5`）重答一次；剩余不足20秒时不换，按超时处理；已经开始写的回答不换。换用时进度提示「回答模型没有及时回应，已换备用模型重新整理回答…」，运行日志只写哪个模型没回应、哪个回答了，不含问题和回答。存档记录里的 model 仍是提问时的主模型。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
 
 输入及检索到的公开片段由Builder模型服务处理，默认模型仍为`deepseek-v4-flash`。旧`query_log_notice:"v1"`仅保存提问及元数据30天。新页面确认v3配置并展示提示后，提交`query_log_notice:"v3",conversation_id:<UUID>`，问题先可靠保存，完整已核验回答和当时所用来源在result发送前确认保存，持续至所有者手动删除。不关联账号/邮箱，不单独保存背景或历史摘要；回答可能引用背景，不保存模型内部推理。失去存档确认时明确返回`answer_archive_failed`且不扣额度。缺少提示版本的客户端不开始存档；第三方模型服务的处理规则由其管理。详见[记录协议](QUERY_RECORDS.md)。

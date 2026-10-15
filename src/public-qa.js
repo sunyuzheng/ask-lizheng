@@ -5,8 +5,10 @@
 // to shared/ask-public-qa.js, and its tests check the policy still says the same. Edit it here.
 //
 // In the Chinese text {owner} is who answers from his own material (立正 on this page, 我 on the
-// homepage), {self} is how the same sentence refers back to him (他 or 我), and {answerer} is the
-// service that writes the answers (from /api/meta). The English text is the homepage's, in his voice.
+// homepage), {self} is how the same sentence refers back to him (他 or 我), {answerer} is the
+// service that writes the answers (from /api/meta) and {backup} the clause for the one that writes
+// them when it does not respond in time (/api/meta backup_model; empty when there is none, 2026-10-15).
+// The English text is the homepage's, in his voice.
 export const PUBLIC_QA = {
   zh: {
     notice: '这里像在讲座上举手提问：问答会公开，但不记名。只写愿意当众说的话。',
@@ -17,7 +19,7 @@ export const PUBLIC_QA = {
       '不记名：提问不和邮箱、账号或IP记在一起，我们不知道是谁问的；登录只用来核验Founding身份。但你写的内容本身可能认出你，发给AI前也不会自动删掉，所以别写名字、公司和联系方式。',
       {kept: '「结合我的处境」像递给台上的一张纸条：只给{owner}分析，不单独公开；但回答可能提到纸条上的内容。',
         notKept: '「结合我的处境」像递给台上的一张纸条：只用来回答你，我们不保存；但回答可能提到纸条上的内容。'},
-      '回答由AI根据{owner}公开的文章和视频整理，不是{self}本人回复。提问交给AI处理：{answerer}写回答，OpenAI找资料。',
+      '回答由AI根据{owner}公开的文章和视频整理，不是{self}本人回复。提问交给AI处理：{answerer}写回答{backup}，OpenAI找资料。',
     ],
     situation: {
       kept: '这里填的内容只给{owner}分析，不单独公开；回答可能提到其中的细节。',
@@ -26,6 +28,7 @@ export const PUBLIC_QA = {
     share: '分享页只显示这个问题和回答，不显示你填的处境和其他提问。',
     policy: '简单说：这里像在一场有录像的讲座上举手提问。问题和回答会公开，别人看得到、搜得到；但不记名，我们不知道是谁问的。请只写愿意当众说的话。',
     answerer: 'AI模型',
+    backup: backup => `（它没有及时回应时改由${backup}写）`,
   },
   en: {
     notice: 'Like raising your hand at a talk: questions and answers are public, with no names attached. Write only what you’d say in front of everyone.',
@@ -36,7 +39,7 @@ export const PUBLIC_QA = {
       'No names attached: questions aren’t linked to an email, account or IP address, so we don’t know who asked. Signing in only checks Founding Member status. But what you write may still identify you, and it isn’t redacted before AI processing, so leave out names, companies and contact details.',
       {kept: '“Apply to my situation” is like passing a note to the stage: only I see it, for analysis, and it isn’t published on its own, but the answer may mention what it said.',
         notKept: '“Apply to my situation” is like passing a note to the stage: it’s only used to answer you and we don’t keep it, but the answer may mention what it said.'},
-      'Answers are written by AI from my public articles and videos, not by me. Your question goes to AI services: {answerer} writes the answer and OpenAI finds the sources.',
+      'Answers are written by AI from my public articles and videos, not by me. Your question goes to AI services: {answerer} writes the answer{backup} and OpenAI finds the sources.',
     ],
     situation: {
       kept: 'Only I see what you write here, for analysis, and it isn’t published on its own, though the answer may mention its details.',
@@ -45,6 +48,7 @@ export const PUBLIC_QA = {
     share: 'The shared page shows only this question and answer, not your situation or other questions.',
     policy: 'In short: asking here is like raising your hand at a recorded talk. Questions and answers are public, others can see them and search engines can find them, but no names are attached and we don’t know who asked. Write only what you’d say in front of everyone.',
     answerer: 'an AI model',
+    backup: backup => ` (${backup} steps in if it doesn’t respond in time)`,
   },
 };
 
@@ -61,9 +65,10 @@ export const answerService = model => {
 
 // The text for one language and voice, with the situation sentences chosen by whether the service
 // keeps the situation (/api/meta ops_logging.context_archive).
-export function publicQaCopy(lang, {owner, self, answerer, contextKept}) {
+export function publicQaCopy(lang, {owner, self, answerer, backup, contextKept}) {
   const copy = PUBLIC_QA[lang];
-  const fill = text => text.replaceAll('{owner}', owner).replaceAll('{self}', self).replaceAll('{answerer}', answerer || copy.answerer);
+  const fill = text => text.replaceAll('{owner}', owner).replaceAll('{self}', self).replaceAll('{answerer}', answerer || copy.answerer)
+    .replaceAll('{backup}', backup ? copy.backup(backup) : '');
   const pick = text => fill(typeof text === 'string' ? text : contextKept ? text.kept : text.notKept);
   return {
     notice: copy.notice,

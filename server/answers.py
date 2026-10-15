@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import sys
 import time
 from typing import Literal
 
@@ -15,6 +16,14 @@ from .retrieval import Passage
 
 ANSWER_BUDGET_SECONDS = 85
 DEFAULT_MODEL = "deepseek-v4-flash"
+# A backup writes the answer when the answering model has written nothing for FIRST_CONTENT_SECONDS,
+# or failed before it wrote anything (2026-10-15, the owner: on that morning, Beijing time,
+# DeepSeek through Builder Space stalled for over an hour and five questions ran out of time).
+# OpenAI already receives every question to find sources; pages, the app's consent and the
+# privacy policy say it also writes the answer then (/api/meta backup_model).
+BACKUP_MODELS = {"deepseek-v4-flash": "gpt-5", "deepseek-v4-pro": "gpt-5"}
+FIRST_CONTENT_SECONDS = 30
+BACKUP_MIN_SECONDS = 20
 
 
 def model_options(model: str) -> dict:
@@ -195,7 +204,7 @@ def provider_status(response: httpx.Response) -> None:
         raise ProviderFailure("provider_unavailable")
 
 
-async def streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial) -> dict | httpx.Response:
+async def streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial, on_start=None) -> dict | httpx.Response:
     content = ""
     finish = None
     seen_done = False
@@ -238,8 +247,11 @@ async def streamed_completion(client, payload, token, remaining, passages, on_pr
                     content += text
                     if len(content) > 36000:
                         raise InvalidAnswer("输出必须是有界的 JSON 字符串。")
-                    if not started and on_progress:
-                        await on_progress({"stage": "drafting", "message": "回答内容已开始返回，正在整理完整段落与出处…"})
+                    if not started:
+                        if on_start:
+                            on_start()
+                        if on_progress:
+                            await on_progress({"stage": "drafting", "message": "回答内容已开始返回，正在整理完整段落与出处…"})
                     started = True
                     if on_partial:
                         sections = completed_sections(content, passages)
@@ -257,7 +269,33 @@ async def streamed_completion(client, payload, token, remaining, passages, on_pr
     return {"choices": [{"message": {"content": content}, "finish_reason": finish}]}
 
 
-async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage], on_progress=None, on_partial=None) -> ModelAnswer:
+class ProviderStalled(Exception):
+    """The answering model wrote nothing in time, or failed before it wrote anything."""
+
+
+async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage],
+                          on_progress=None, on_partial=None, backup: str | None = None) -> ModelAnswer:
+    """The answer to one question, within one wall-clock budget. With a backup, a model that has
+    written nothing after FIRST_CONTENT_SECONDS (or failed first) hands the question to it once."""
+    deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
+    if not backup or backup == model:
+        return await answer_with(client, token, model, request, passages, deadline, on_progress, on_partial)
+    try:
+        return await answer_with(client, token, model, request, passages, deadline, on_progress, on_partial,
+                                 first_content=FIRST_CONTENT_SECONDS)
+    except ProviderStalled:
+        if deadline - time.monotonic() < BACKUP_MIN_SECONDS:
+            raise ProviderFailure("provider_timeout") from None
+    if on_progress:
+        await on_progress({"stage": "thinking", "message": "回答模型没有及时回应，已换备用模型重新整理回答…"})
+    answer = await answer_with(client, token, backup, request, passages, deadline, on_progress, on_partial)
+    # No question or answer text in the log: which model stalled and which one answered.
+    sys.stderr.write(f"ask: {model} wrote nothing in time; {backup} answered\n")
+    sys.stderr.flush()
+    return answer
+
+
+def answer_payload(model: str, request: dict, passages: list[Passage]) -> dict:
     payload = {
         "model": model, "stream": model in {"grok-4.5", "deepseek-v4-flash"}, "temperature": .35, "max_tokens": 4000,
         "messages": [
@@ -276,19 +314,36 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
         payload["messages"][0]["content"] += "\n输出 JSON 必须符合以下 schema（所有字段必填，不得增加字段）：" + json.dumps(strict_schema(), ensure_ascii=False)
     if model == "deepseek-v4-flash":
         payload["messages"][0]["content"] += "\n本轮先给紧凑回答：summary加所有sections的正文合计以300至600字为目标，通常一到两个要点；复杂细节留给followups。优先保留成立条件和来源，不重复同一判断。用户未提供处境时，summary和正文都用可能原因、条件或核对问题，不能直接把资料中的组织制度、瓶颈或能力缺口诊断成用户事实。"
+    return payload
+
+
+async def answer_with(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage], deadline: float,
+                      on_progress=None, on_partial=None, first_content: float | None = None) -> ModelAnswer:
+    """One model's answer by the shared deadline. With first_content, a streamed first attempt that
+    has written nothing by then, or fails before it writes, raises ProviderStalled."""
+    payload = answer_payload(model, request, passages)
+    watch = first_content is not None and payload["stream"]
+    loop = asyncio.get_running_loop()
     # At most one targeted repair, 8,000 generated tokens in total, and one
     # shared wall-clock budget. Network/auth failures are never blindly retried.
-    deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
     worded = None  # a valid answer sent back only for its wording
     for attempt in range(2):
         content = ""
+        # Watched: the first attempt of a streamed model, until it writes its first words.
+        waiting = watch and not attempt
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise ProviderFailure("provider_timeout")
-            async with asyncio.timeout(remaining):
+            async with asyncio.timeout(min(remaining, first_content) if waiting else remaining) as limit:
+                def started():
+                    # Writing has begun: the rest of the shared budget applies again.
+                    nonlocal waiting
+                    if waiting:
+                        waiting = False
+                        limit.reschedule(loop.time() + max(0.0, deadline - time.monotonic()))
                 if payload["stream"]:
-                    data = await streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial)
+                    data = await streamed_completion(client, payload, token, remaining, passages, on_progress, on_partial, on_start=started)
                 else:
                     response = await client.post(
                         "https://space.ai-builders.com/backend/v1/chat/completions",
@@ -340,10 +395,16 @@ async def generate_answer(client: httpx.AsyncClient, token: str, model: str, req
                 continue
             failure = ProviderFailure("invalid_answer")
         except ProviderFailure as exc:
+            if waiting and exc.code != "invalid_answer":
+                raise ProviderStalled() from None
             failure = exc
         except (httpx.TimeoutException, TimeoutError):
+            if waiting:
+                raise ProviderStalled() from None
             failure = ProviderFailure("provider_timeout")
         except httpx.HTTPError:
+            if waiting:
+                raise ProviderStalled() from None
             failure = ProviderFailure("provider_unavailable")
         # Only a source-number wording repair can fall back to its attributable original answer.
         if worded is not None:

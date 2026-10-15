@@ -126,3 +126,66 @@ def test_stream_transport_failure_ends_without_automatic_model_retry(index,monke
             assert error.value.code==('provider_timeout' if failure=='deadline' else 'provider_unavailable')
     asyncio.run(run())
     assert len(calls)==1 and closed
+
+
+# The backup (2026-10-15): when the answering model has written nothing in time, or failed before
+# it wrote anything, the question goes once to the backup within the same budget.
+def backup_run(index, monkeypatch, primary, budget=5.0, backup_after=.05, least=.1):
+    import time
+    monkeypatch.setattr('server.answers.ANSWER_BUDGET_SECONDS', budget)
+    monkeypatch.setattr('server.answers.FIRST_CONTENT_SECONDS', backup_after)
+    monkeypatch.setattr('server.answers.BACKUP_MIN_SECONDS', least)
+    passages = index.retrieve('职业选择'); value = answer(); calls = []; progress = []
+    def provider(request):
+        body = json.loads(request.content); calls.append(body['model'])
+        if body['model'] == 'gpt-5':
+            return httpx.Response(200, json={'choices': [{'message': {'content': value.model_dump_json()}, 'finish_reason': 'stop'}]})
+        return primary(value)
+    async def note(item): progress.append(item)
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            start = time.monotonic()
+            try:
+                return await generate_answer(client, 'synthetic-token', 'deepseek-v4-flash', {'question': '职业选择'}, passages,
+                                             on_progress=note, backup='gpt-5'), time.monotonic() - start
+            except ProviderFailure as error:
+                return error, time.monotonic() - start
+    result, seconds = asyncio.run(run())
+    return result, seconds, calls, progress, value
+
+
+def silent_then(value, wait):
+    class Bytes(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            await asyncio.sleep(wait)
+            yield delta(prefix(value) + suffix(value)); yield END
+    return httpx.Response(200, headers={'content-type': 'text/event-stream'}, stream=Bytes())
+
+
+def test_the_backup_answers_when_the_model_writes_nothing_in_time(index, monkeypatch):
+    result, seconds, calls, progress, value = backup_run(index, monkeypatch, lambda value: silent_then(value, 1))
+    assert result == value and calls == ['deepseek-v4-flash', 'gpt-5'] and seconds < .8
+    assert any('备用模型' in item['message'] for item in progress)
+
+
+def test_the_backup_answers_when_the_model_fails_before_writing(index, monkeypatch):
+    result, _, calls, _, value = backup_run(index, monkeypatch, lambda value: httpx.Response(503, json={}))
+    assert result == value and calls == ['deepseek-v4-flash', 'gpt-5']
+
+
+def test_a_model_that_has_begun_writing_keeps_its_budget(index, monkeypatch):
+    def writes_then_pauses(value):
+        class Bytes(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield delta(prefix(value))
+                await asyncio.sleep(.2)  # longer than the wait for first words, within the budget
+                yield delta(suffix(value)); yield END
+        return httpx.Response(200, headers={'content-type': 'text/event-stream'}, stream=Bytes())
+    result, _, calls, progress, value = backup_run(index, monkeypatch, writes_then_pauses)
+    assert result == value and calls == ['deepseek-v4-flash']
+    assert not any('备用模型' in item['message'] for item in progress)
+
+
+def test_no_backup_without_time_left_for_it(index, monkeypatch):
+    result, _, calls, _, _ = backup_run(index, monkeypatch, lambda value: silent_then(value, 1), least=10)
+    assert isinstance(result, ProviderFailure) and result.code == 'provider_timeout' and calls == ['deepseek-v4-flash']

@@ -315,6 +315,32 @@ def test_matching_or_legacy_consent_binds_model_without_forwarding_field(context
         assert "ai_consent_model" not in recorded[0]
 
 
+@pytest.mark.parametrize("consent, backup_used", [({}, True), ({"ai_consent_model": "deepseek-v4-flash"}, False),
+                                                 ({"ai_consent_model": "deepseek-v4-flash", "ai_consent_backup": "gpt-5"}, True)])
+def test_the_backup_answers_only_where_it_was_named(context_pack, monkeypatch, consent, backup_used):
+    """Pages and the privacy policy name the backup; the app uses it once its consent named it."""
+    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    calls = []
+
+    def provider(request):
+        body = json.loads(request.content)
+        calls.append(body["model"])
+        prompt = json.loads(body["messages"][1]["content"])
+        assert "ai_consent_backup" not in prompt and "ai_consent_model" not in prompt
+        if body["model"] == "deepseek-v4-flash":
+            return httpx.Response(503, json={})
+        return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
+
+    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
+        assert client.get("/api/meta").json()["backup_model"] == "gpt-5"
+        result = events(client.post("/api/ask", json={"question": "职业选择怎么做", **consent}))[-1][1]
+    if backup_used:
+        assert result["status"] == "answered" and calls == ["deepseek-v4-flash", "gpt-5"]
+    else:
+        assert result["status"] == "sources-only" and result["retryable"] and calls == ["deepseek-v4-flash"]
+
+
 def test_consent_model_field_is_bounded(context_pack):
     with TestClient(create_app(context_pack)) as client:
         for model in ["", "x" * 129]:
@@ -598,7 +624,8 @@ def test_provider_failure_preserves_retrieved_sources(context_pack, monkeypatch,
         assert result["status"] == "sources-only" and result["sources"]
         assert result["limitations"]
         assert result["retryable"] and result["failure_code"]
-        assert len(attempts) == (2 if failure in {"invalid-json", "unknown-source"} else 1)
+        # A wrong answer gets one repair; a model that fails before writing gets the backup once.
+        assert len(attempts) == 2
 
 
 def test_unsupported_question_does_not_call_provider(context_pack, monkeypatch):

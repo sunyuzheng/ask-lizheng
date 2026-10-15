@@ -24,7 +24,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .answers import DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
+from .answers import BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
 from .retrieval import ContextIndex
 from .semantic import SemanticIndex
 from .admission import AdmissionError, HEADER
@@ -67,6 +67,9 @@ class AskRequest(BaseModel):
     intent: Intent = "understand"
     history: list[HistoryItem] = Field(default_factory=list, max_length=6)
     ai_consent_model: str | None = Field(default=None, min_length=1, max_length=128)
+    # The backup the app's consent named (/api/meta backup_model); an app page that did not name it
+    # gets no backup.
+    ai_consent_backup: str | None = Field(default=None, min_length=1, max_length=128)
     query_log_notice: Literal["v1", "v3", "v4"] | None = None
     conversation_id: str | None = Field(default=None, max_length=36)
 
@@ -280,6 +283,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
+                # Writes the answer when the model has written nothing in time (answers.BACKUP_MODELS).
+                "backup_model": BACKUP_MODELS.get(model),
                 "query_logging": {"enabled": bool(application.state.query_records.secret and application.state.quota.enabled and application.state.quota.ready), "retention_days": 30},
                 # v4: answers may be published, as asked since 2026-10-05 (public_display "as_asked"; before,
                 # "deidentified"). The situation is not kept (since 2026-10-04); pages say so when
@@ -361,8 +366,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             if not passages or not any(not passage.discovery for passage in passages):
                 return JSONResponse(status_code=422, content={"code": "unsupported"})
             cards = application.state.index.reasoning_bundle(question, "", [], passages, semantic)
-            answer = await generate_answer(application.state.provider, token, os.getenv("AI_MODEL", DEFAULT_MODEL),
-                {"question": question, "context": "", "intent": "understand", "history": [], "reasoning_cards": cards}, passages)
+            model = os.getenv("AI_MODEL", DEFAULT_MODEL)
+            answer = await generate_answer(application.state.provider, token, model,
+                {"question": question, "context": "", "intent": "understand", "history": [], "reasoning_cards": cards}, passages,
+                backup=BACKUP_MODELS.get(model))
             result = assemble_answer(answer, passages)
             if result["status"] != "answered":
                 return JSONResponse(status_code=422, content={"code": result["status"]})
@@ -391,6 +398,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
     @application.post("/api/ask")
     async def ask(request: Request, payload: AskRequest):
         current_model = os.getenv("AI_MODEL", DEFAULT_MODEL)
+        # Pages and the privacy policy name the backup; in the app it is used once its consent named it.
+        backup_model = BACKUP_MODELS.get(current_model)
+        if payload.ai_consent_model is not None and payload.ai_consent_backup != backup_model:
+            backup_model = None
         if payload.ai_consent_model is not None and payload.ai_consent_model != current_model:
             return JSONResponse(status_code=409, content={"code": "ai_consent_changed", "model": current_model},
                                 headers={"X-Ask-Error-Code": "ai_consent_changed"})
@@ -608,7 +619,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         await updates.put({"_event": "partial", **value})
                     async def generate():
                         try:
-                            return await generate_answer(application.state.provider, token, current_model, {**payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial)
+                            return await generate_answer(application.state.provider, token, current_model, {**payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model", "ai_consent_backup"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial, backup=backup_model)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())

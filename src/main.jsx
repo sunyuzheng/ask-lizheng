@@ -45,7 +45,7 @@ const kindLabel = (kind, personal) => kind === 'source' ? '材料里的观点'
 const NOTICE = '提问会保存30天，用于改进回答。请勿填写私密信息。';
 // v4, public Q&A: the notice, 说明 and the situation note come from public-qa.js, shared with
 // lizheng.ai. The situation is not kept since 2026-10-04 (/api/meta says context_archive: false).
-const publicQa = (meta, contextKept) => publicQaCopy('zh', {owner: '立正', self: '他', answerer: answerService(meta?.model), contextKept});
+const publicQa = (meta, contextKept) => publicQaCopy('zh', {owner: '立正', self: '他', answerer: answerService(meta?.model), backup: answerService(meta?.backup_model), contextKept});
 // v3, today's notice: answers are kept to improve them and only 立正 sees the records. Purpose first, in the same four parts.
 const V3_PARTS = [
   ['为什么保存', '看哪些问题答得不好、缺哪些材料，把回答做得更好；也让立正知道大家关心什么。'],
@@ -583,7 +583,8 @@ function MyQuestions({items, busy, close, onOpen, onForget, onForgetAll}) {
 // require explicit permission before sharing personal data with a third-party AI.
 const CONSENT_KEY = 'ask-app-ai-consent';
 // Retire earlier permission when recipients, public-use disclosure or archive mode change.
-const consentScope = meta => `v4:${meta?.model || 'AI'}:${answerService(meta?.model) || 'unknown'}:OpenAI:${meta?.ops_logging?.enabled === true}:${meta?.ops_logging?.notice || 'v1'}:${meta?.ops_logging?.answer_archive === true}:${meta?.ops_logging?.public_display || 'none'}:${meta?.ops_logging?.context_archive === true}`;
+// The backup is part of what the app's consent names: adding or changing it asks again (2026-10-15).
+const consentScope = meta => `v4:${meta?.model || 'AI'}:${answerService(meta?.model) || 'unknown'}:${meta?.backup_model || 'no-backup'}:${answerService(meta?.backup_model) || 'none'}:OpenAI:${meta?.ops_logging?.enabled === true}:${meta?.ops_logging?.notice || 'v1'}:${meta?.ops_logging?.answer_archive === true}:${meta?.ops_logging?.public_display || 'none'}:${meta?.ops_logging?.context_archive === true}`;
 const readConsent = scope => { try { return localStorage.getItem(CONSENT_KEY) === scope; } catch { return false; } };
 const saveConsent = scope => { try { localStorage.setItem(CONSENT_KEY, scope); } catch { /* asked again next visit */ } };
 const clearConsent = () => {
@@ -594,6 +595,7 @@ const clearConsent = () => {
 function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
   const ref = useRef(null);
   const recipient = answerService(meta?.model);
+  const backup = answerService(meta?.backup_model);
   useEffect(() => {
     const previousOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
@@ -616,7 +618,7 @@ function AppConsent({meta, publicArchive, contextKept, onAgree, onCancel}) {
     <section className="dialog consent" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={ref} onClick={event => event.stopPropagation()}>
       <h2 id="consent-title">{publicArchive ? '参与公开问答' : '同意AI处理你的输入'}</h2>
       <p>{publicArchive ? `${PUBLIC_QA.zh.notice} 同意后保存问题、完整回答与出处，用于帮助别人、改进回答和内容选题。` : '提问按输入旁的说明和隐私政策保存，用于改进回答及内容选题。'}</p>
-      <p><b>AI处理</b><br/>Builder Space转交输入给{recipient || '待确认的服务商'}生成回答、OpenAI匹配资料。回答AI接收问题、选填处境、最多6轮问题与回答摘要及公开资料；OpenAI接收用于匹配的问题、处境及必要时的上一轮问题。{recipient === 'DeepSeek' && 'DeepSeek可能保留输入并用于改进模型，没有训练退出选项。'}</p>
+      <p><b>AI处理</b><br/>Builder Space转交输入给{recipient || '待确认的服务商'}生成回答{backup && `（${recipient || '它'}没有及时回应时改由${backup}生成）`}、OpenAI匹配资料。回答AI接收问题、选填处境、最多6轮问题与回答摘要及公开资料；OpenAI接收用于匹配的问题、处境及必要时的上一轮问题。{recipient === 'DeepSeek' && 'DeepSeek可能保留输入并用于改进模型，没有训练退出选项。'}</p>
       <p><b>公开范围</b><br/>{publicArchive ? `常见问答由同一AI挑选后原样展示；分享页显示问题、完整回答与出处，可被搜索找到。${contextKept ? '处境原文只用于分析。' : '不保存处境原文。'}回答引用的细节也可能公开。` : '当前保存说明不包含公开使用。'}</p>
       <p>发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。<a className="inline-link" href={LINKS.privacy} target="_blank" rel="noopener noreferrer">隐私政策<Ext/></a> · <a className="inline-link" href="https://space.ai-builders.com/privacy" target="_blank" rel="noopener noreferrer">服务商数据说明<Ext/></a></p>
       {!recipient && <p role="alert">回答服务商尚未确认，暂时不能发送。你仍可浏览公开问答。</p>}
@@ -668,7 +670,7 @@ function About({close, meta, account, focusInput, publicArchive, contextKept, on
         <li>账号只用于登录和Founding资格核验，不交给模型。如果浏览器拦截了登录窗口，未发送的输入会在本机临时保留，恢复后清除，最长10分钟。</li>
       </ul></div>}
       {account?.enabled && <div className="about-row"><h3>次数</h3><p>每天可以问3次，北京时间0点恢复。Superlinear的Founding Member用邮箱验证后不限次。没有完成的回答不扣次数。</p>{!IN_APP && <p>Stay Superlinear前3,000位新年费会员，以及AI Builder、AI Architect的老学员，都是Founding Member。<a className="inline-link" href={stayLink('about')} target="_blank" rel="noopener noreferrer" onClick={() => track('Ask Membership Click', {surface: SURFACE, location: 'about'})}>了解会员<Ext/></a></p>}</div>}
-      {IN_APP && <div className="about-row"><h3>AI处理与公开问答</h3><p>Builder Space转发输入给{answerService(meta?.model) || '待确认的回答服务商'}生成回答（{meta?.model || 'AI'}），给OpenAI匹配资料（text-embedding-3-small）。回答AI接收问题、选填处境及最近最多6轮问题与回答摘要；OpenAI接收问题、处境及上一轮问题的文本。发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。</p><p>提问前会明确征求同意。撤回后，新提问和重新生成都需要再次同意。已经发出的内容和已公开的页面不会因此收回；删除记录或撤下页面请按隐私政策联系我们。</p><button type="button" className="pill-button" onClick={onRevokeConsent}>撤回AI数据发送同意</button></div>}
+      {IN_APP && <div className="about-row"><h3>AI处理与公开问答</h3><p>Builder Space转发输入给{answerService(meta?.model) || '待确认的回答服务商'}生成回答（{meta?.model || 'AI'}）{answerService(meta?.backup_model) && `，它没有及时回应时改由${answerService(meta.backup_model)}生成（${meta.backup_model}）`}，给OpenAI匹配资料（text-embedding-3-small）。回答AI接收问题、选填处境及最近最多6轮问题与回答摘要；OpenAI接收问题、处境及上一轮问题的文本。发送前不会自动去掉个人信息；邮箱和登录信息不交给AI。</p><p>提问前会明确征求同意。撤回后，新提问和重新生成都需要再次同意。已经发出的内容和已公开的页面不会因此收回；删除记录或撤下页面请按隐私政策联系我们。</p><button type="button" className="pill-button" onClick={onRevokeConsent}>撤回AI数据发送同意</button></div>}
       <div className="dialog-foot">
         <span>材料更新于{meta?.context_date || '…'}</span>
         <a href={LINKS.context} target="_blank" rel="noreferrer">Open Context<Ext/></a>
@@ -1178,7 +1180,7 @@ function App() {
     if (ops && !conversationId.current) conversationId.current = crypto.randomUUID();
     const payload = {...(retry?.request || {question: question.trim(), context: situation, intent, history,
       query_log_notice: ops ? (publicArchive ? 'v4' : 'v3') : 'v1', ...(ops ? {conversation_id: conversationId.current} : {})}),
-      ...(IN_APP ? {ai_consent_model: meta?.model || 'AI'} : {})};
+      ...(IN_APP ? {ai_consent_model: meta?.model || 'AI', ...(meta?.backup_model ? {ai_consent_backup: meta.backup_model} : {})} : {})};
     if (!usageStarted.current) { usageStarted.current = true; startUsage(IN_APP ? 'app' : 'ask'); }
     if (!retry) { markUsage('ask'); track('Ask Question', {surface: SURFACE, from: questionFrom.current}); questionFrom.current = 'typed'; }
     const id = retry?.id || Date.now(), started = performance.now(), controller = new AbortController();
