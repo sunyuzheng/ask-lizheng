@@ -1,5 +1,20 @@
 # 更新记录
 
+## 2026-10-15 架构体检之后：资料不再放内存，上线前量内存，体检每天跑
+
+立正问「是不是加内存也不是完整办法？我们会一直膨胀下去吗？」，然后让需要改的都改掉。
+
+- **资料放进镜像里的本地索引**（`server/store.py`、`server/build_store.py`）：构建镜像时把固定版本的资料建成 `data/store/ask.sqlite`（正文，和每个汉字、汉字对、英文词出现在哪些段落、几次、在不在标题里），回答时查索引、只读出用到的段落。本机实测内存从约260MB降到约120MB、启动加载从4.6秒到0.2秒、找一次材料从0.3–0.6秒到0.01–0.1秒；389个真实问题四种问法共1,556次找材料，新旧结果逐条一致，`/api/meta` 一致。
+- **上线前的内存关**（`scripts/check_image_memory.py`）：CI 和资料自动更新都在256MB的容器里试启动镜像，服务进程最高内存超过200MB就不上线。
+- **Builder 账号每日检查**（`.github/workflows/health.yml`、`scripts/builder_health.py`）：AI 花费离上限不到 $100、免费托管60天内到期、部署不正常、线上不是 Open Context 最新一版时，这次运行失败、GitHub 发信。lizheng.ai 的每日体检查其余部分（见 [ARCHITECTURE.md](docs/ARCHITECTURE.md) 第11条）。
+- **长问题的词固定下来**：保留的70个词里，同样长短的按在问题里出现的先后取；之前随服务器每次启动的随机设置变化，389个真实问题里有42个这么长。
+- **退掉后台不再调用的接口**：`/api/curate` 的 v1（去掉个人信息改写）、`/api/themes`、`/api/seed-answer`（后台 10-14 起不再调用）。
+- **晚到的拒绝**：lizheng.ai 的转发12秒内没收到回应就先给页面回话；之后到的拒绝（次数用完、模型变了、保存没确认）是流里的 error 事件，页面照原来的说法提示（`src/main.jsx` 的 `refusal`）。
+
+## 2026-10-15 备用模型、反馈问题、早期讲AI的材料归AI认知
+
+DeepSeek 30秒内没开始写或先报错，同一问题在同一预算里改由 `gpt-5` 重答一次（`server/answers.py` 的 `BACKUP_MODELS`）；等回答时、没答完时和回答下面可以「反馈问题」（`src/report.js`，经 lizheng.ai 发到立正邮箱）；2024年以前讲AI的材料在地图上归「AI认知」。见 [PRODUCT.md](docs/PRODUCT.md) 同日三节。
+
 ## 2026-10-14 每个回答问完就有网址，「别人在问什么」用同一个
 
 存档完成的记录带上网址的词（`share_word`），lizheng.ai 存档时就建好这条回答的网页，回复里告诉回答服务；回答服务把网址放进结果（`share.url`），读者中途离开也照样建。页面直接用这个网址，只有旧的回答服务没给时才去 `/api/ask-lizheng/share` 要（`auto`）；「结合我的处境」（apply）的回答仍然点了才建。「别人在问什么」的分享链接是这条问答自己的网页（Ops 给的 `share_url`，`discoveryLink(id, page)`），旧的 `/q/<编号>` 跳过去。见 [PRODUCT.md](docs/PRODUCT.md)「每个回答一个网址，问完就有」和 [QUERY_RECORDS.md](docs/QUERY_RECORDS.md)「每个回答问完就有网页」。

@@ -55,7 +55,7 @@
 
 start在准入/额度预留后、模型调用前确认。final answer从服务端已核验的最终result捕获，字段仅status、summary、sections、sources、followups、clarifying_questions、limitations和可选retryable/failure_code；来源保留当时的标题、链接、作者、日期、片段、归属说明与时间点。排除quota、账号、原始provider JSON、partial和内部推理。不单独保存提交的背景/历史；回答可能引用背景，提交前明确提示。
 
-来源可带的字段由`server/ops_records.py`的`SOURCE_FIELDS`决定。个人站和Ops读记录时各自按`shared/ask-archive-answer.ts`里的同一张表检查，带了表外字段的记录整条读不出。所以加字段的顺序是：先改这两处读取方并上线，再改`SOURCE_FIELDS`。2026-10-10给来源加了13个说话人和出处字段，个人站同步了，Ops没有；Ops的自动发布读不出之后的新提问，又照常推进进度，「别人在问什么」约23小时没有更新。2026-10-11修好读取方，从10-11 04:00Z起重新判断，漏掉的提问按原提问时间补发（Ops仓库`docs/public-discovery.md`有经过）。
+来源可带的字段由`server/ops_records.py`的`SOURCE_FIELDS`决定。个人站和Ops各自按`shared/ask-archive-answer.ts`里的同一张表读；2026-10-15起，表外的字段只是不用（个人站存档时就不存它），不再让整条记录读不出。所以加字段时仍先改这两处读取方并上线，再改`SOURCE_FIELDS`，否则新字段在读取方认得之前会被丢掉，但不会出错。2026-10-10给来源加了13个说话人和出处字段，个人站同步了，Ops没有；Ops的自动发布读不出之后的新提问，又照常推进进度，「别人在问什么」约23小时没有更新。2026-10-11修好读取方，从10-11 04:00Z起重新判断，漏掉的提问按原提问时间补发（Ops仓库`docs/public-discovery.md`有经过）。
 
 每次写入最多2秒、最多两次，重试沿用UUID与冻结正文。start失败不调用模型并退额度。完整结果须等待finish ACK再发SSE result，生成槽先释放。final ACK无法确认则返回`answer_archive_failed`，不冒充成功、不扣这次额度，cleanup有界重试同一实际回答，不能改写成null/error而丢失已生成答案。取消/异常没有完整结果时保存null answer及安全错误标记。进程崩溃或存储持续故障可能留下generating，后台显示“尚未确认”，不能推断为已答。
 

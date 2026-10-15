@@ -68,14 +68,14 @@ sources 事件另带 `candidates`：这次交给模型的全部候选材料（so
 
 ## 查看资料与状态
 
-`GET /api/answer-map` 返回材料地图的布局（`data/answer-map.json`，由 `scripts/build_answer_map.py` 从语料和语义索引生成，每次资料更新时重建）：`keys` 是每份材料的位置（同上），同序的 `kinds`、`t`、`r`、`g` 依次是它的形式、方向（万分之一圈）、离中心的距离（千分之一，越远越新）和主题序号；`topics` 是各主题的名字和所占角度，`years` 是最里和最外的年份，`cards` 是判断卡的方向和所依据材料的序号，`release` 是它对应的 Open Context 提交。约75KB，请求带 `Accept-Encoding: gzip` 时约27KB。它对所有人都一样：`Cache-Control: public, max-age=600, s-maxage=3600, stale-while-revalidate=604800`，网络边缘保存一小时，服务睡着时先给旧的，资料更新后一小时内换新。页面不直接连这里：ask.lizheng.ai 的 `/api/answer-map` 和 lizheng.ai 的 `/api/ask-lizheng/answer-map` 都由 lizheng.ai 的函数 `api/ask-lizheng-answer-map.ts` 来取、按同样的设置缓存（直接把请求转给这里时 Vercel 不缓存，2026-10-13 上线时试过）。
+`GET /api/answer-map` 返回材料地图的布局（`data/answer-map.json`，由 `scripts/build_answer_map.py` 从语料和语义索引生成，每次资料更新时重建）：`keys` 是每份材料的位置（同上），同序的 `kinds`、`t`、`r`、`g`、`d` 依次是它的形式、方向（万分之一圈，旧的圆盘画法用）、离中心的距离（千分之一，越远越新，旧画法用）、主题序号和发表日期（距2020-01-01的天数，时间长卷用）；`topics` 是各主题的名字和所占角度，`years` 是最里和最外的年份，`cards` 是判断卡的方向和所依据材料的序号，`release` 是它对应的 Open Context 提交。约75KB，请求带 `Accept-Encoding: gzip` 时约27KB。它对所有人都一样：`Cache-Control: public, max-age=600, s-maxage=3600, stale-while-revalidate=604800`，网络边缘保存一小时，服务睡着时先给旧的，资料更新后一小时内换新。页面不直接连这里：ask.lizheng.ai 的 `/api/answer-map` 和 lizheng.ai 的 `/api/ask-lizheng/answer-map` 都由 lizheng.ai 的函数 `api/ask-lizheng-answer-map.ts` 来取、按同样的设置缓存（直接把请求转给这里时 Vercel 不缓存，2026-10-13 上线时试过）。
 
 
 `GET /api/search?q=...` 提供无需生成回答的词法与判断卡检索，适合找原文。`GET /api/meta` 返回公开资料版本、收录数量、model_ready、semantic_ready 和 mode；`GET /health` 在资料未就绪时返回 503。
 
 ## 服务端怎样调用 Builder
 
-在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `grok-4.5`（reasoning_effort: medium），使用严格 JSON schema；核心摘要最多 350 字符、解释段落最多三节。Grok 4.5 与候选 `deepseek-v4-flash` 使用真实 provider SSE，读取完整段落后发布 partial；网关忽略 stream 并返回完整 JSON 时仍按原校验流程处理，不为此多发一次模型请求。送给模型的每份材料保留完整 excerpt 和归属字段，链接及检索内部字段由服务器持有。
+在线时并行查找本地词法材料与调用 `/backend/v1/embeddings` 获取问题向量；本地找到的材料先发给读者，8 秒预算内语义请求失败便保留词法与判断卡结果。词法材料从镜像里建好的本地索引查（`server/store.py`，2026-10-15起，不再逐段扫描），结果和逐段扫描一致。公开原文向量在发布前离线构建，在线请求不改写索引。证据包与必要前文送至 `/backend/v1/chat/completions`，默认模型为 `deepseek-v4-flash`（thinking enabled、reasoning_effort: low、JSON object 加 schema 提示），备用 `gpt-5`（low，严格 JSON schema）；核心摘要最多 350 字符、解释段落最多三节。`deepseek-v4-flash` 与 `grok-4.5` 使用真实 provider SSE，读取完整段落后发布 partial；网关忽略 stream 并返回完整 JSON 时仍按原校验流程处理，不为此多发一次模型请求。送给模型的每份材料保留完整 excerpt 和归属字段，链接及检索内部字段由服务器持有。
 
 服务端选择 `gpt-5` 时附带 `reasoning_effort: low`；`deepseek-v4-pro` 和 `deepseek-v4-flash` 使用 JSON object 加同一 schema 提示，分别请求 thinking enabled / high 与 enabled / low，均保留服务端来源与格式校验。Builder 是否将这些参数转发并实际生效尚未得到可验证信息。Flash 的紧凑提示以 400–700 字与两段为目标，不把篇幅目标当硬性保证；仍执行通用长度、归属与条件要求。生成与至多一次结构修复共用 85 秒预算；不对网络或授权失败盲目重试。例外是备用模型（2026-10-15，立正决定）：主模型流式回答30秒内没有写出内容，或在写出内容前超时、断网或返回HTTP错误，同一问题在同一85秒预算内交给 `BACKUP_MODELS` 里的备用模型（`deepseek-v4-flash`/`deepseek-v4-pro` → `gpt-5`）重答一次；剩余不足20秒时不换，按超时处理；已经开始写的回答不换。换用时进度提示「回答模型没有及时回应，已换备用模型重新整理回答…」，运行日志只写哪个模型没回应、哪个回答了，不含问题和回答。存档记录里的 model 仍是提问时的主模型。`/api/meta` 公开当前 model 与请求的 reasoning_effort，客户端不能覆盖。
 
