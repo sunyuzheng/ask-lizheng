@@ -1268,23 +1268,29 @@ function App() {
       if (value && Number.isFinite(value.remaining)) setAccount(prev => (prev?.enabled && !prev.founding ? {...prev, remaining: value.remaining} : prev));
     };
     const failure = (code, message) => Object.assign(new Error(message), {code});
+    // Why no answer came, said the same way whether the refusal came as the reply's HTTP status or,
+    // when the reply was late, as an error event in the stream that waited for it (lizheng.ai's relay).
+    const refusal = (body, status, otherwise) => {
+      if (body?.code === 'ai_consent_changed') {
+        consented.current = '';
+        if (typeof body.model === 'string' && body.model.length <= 200) setMeta(prev => ({...prev, model: body.model}));
+        else refreshMeta();
+        return failure(body.code, 'AI模型已更新，这次没有交给AI处理，也不扣次数。重新生成前会请你再次同意。');
+      }
+      // `scope: network`: a shared network's daily guest limit ran out, not this person's own 3.
+      if (body?.code === 'quota_exhausted' && body.scope === 'network') return failure('quota_exhausted', MESSAGES.networkQuota);
+      if (body?.code === 'quota_exhausted') { seeQuota({remaining: 0}); return failure('quota_exhausted', MESSAGES.quota); }
+      if (body?.code === 'ops_storage_unavailable') return failure(body.code, '未能确认问题保存，这次没有开始生成，也不扣次数。请重试。');
+      if (body?.code === 'membership_unavailable') return failure(body.code, MESSAGES.membership);
+      if (body?.code === 'answer_archive_failed') return failure(body.code, '这次回答未能确认归档，请重试；问题和已找到的材料仍保留。');
+      return failure(body?.code, status === 429 ? MESSAGES.busy : otherwise);
+    };
     try {
       const response = await fetch('/api/ask', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload), signal: controller.signal, cache: 'no-store', credentials: 'same-origin'});
       if (!response.ok) {
         let body;
         try { body = await response.json(); } catch {}
-        if (body?.code === 'ai_consent_changed') {
-          consented.current = '';
-          if (typeof body.model === 'string' && body.model.length <= 200) setMeta(prev => ({...prev, model: body.model}));
-          else refreshMeta();
-          throw failure(body.code, 'AI模型已更新，这次没有交给AI处理，也不扣次数。重新生成前会请你再次同意。');
-        }
-        // `scope: network`: a shared network's daily guest limit ran out, not this person's own 3.
-        if (body?.code === 'quota_exhausted' && body.scope === 'network') throw failure('quota_exhausted', MESSAGES.networkQuota);
-        if (body?.code === 'quota_exhausted') { seeQuota({remaining: 0}); throw failure('quota_exhausted', MESSAGES.quota); }
-        if (body?.code === 'ops_storage_unavailable') throw failure(body.code, '未能确认问题保存，这次没有开始生成，也不扣次数。请重试。');
-        if (body?.code === 'membership_unavailable') throw failure(body.code, MESSAGES.membership);
-        throw failure(body?.code, response.status === 429 ? MESSAGES.busy : MESSAGES.unreachable);
+        throw refusal(body, response.status, MESSAGES.unreachable);
       }
       if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) throw failure('invalid_stream', MESSAGES.stream);
       const reader = response.body.getReader(), decoder = new TextDecoder();
@@ -1314,7 +1320,7 @@ function App() {
           }
           seeQuota(value.quota);
           update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000)});
-        } else if (name === 'error') throw failure(value.code, value.code === 'answer_archive_failed' ? '这次回答未能确认归档，请重试；问题和已找到的材料仍保留。' : MESSAGES.failed);
+        } else if (name === 'error') throw refusal(value, value.status, MESSAGES.failed);
       };
       try {
         while (!received) {
