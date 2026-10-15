@@ -1,6 +1,16 @@
 {
   "note": "Topics of the answer map, in order around it; neighbours are related. Each seed matches titles that start the topic; see scripts/build_answer_map.py. kinds: folders without embeddings that belong to a topic outright.",
   "fallback": "ai",
+  "early_ai": {
+    "note": "2026-10-15 立正：早期提到AI的内容尽量归到AI，有利于他的AI品牌。2024年以前发表、标题讲AI（含当年的说法：机器学习、算法、模型）或正文以AI为主要内容（相关词至少6次、每万字至少10次）的材料，放进AI认知；已经在「用AI做东西」的不动。",
+    "topic": "ai",
+    "keep": ["build"],
+    "before": "2024-01-01",
+    "title": "(?<![A-Za-z])AI(?![A-Za-z])|AIGC|人工智能|机器学习|深度学习|神经网络|算法|模型|GPT|AGI|LLM|大模型|自动驾驶|机器人|OpenAI",
+    "text": "(?<![A-Za-z])AI(?![A-Za-z])|人工智能|机器学习|深度学习|神经网络|算法工程师|大模型|GPT",
+    "text_min": 6,
+    "text_per_10k": 10
+  },
   "topics": [
     {"key": "ai", "label": "AI认知", "seed": "AGI|OpenAI|大模型|GPT|ChatGPT|LLM|人工智能|DeepSeek|Gemini|Anthropic|Scaling|模型训练|叙事陷阱|AI泡沫|AI Bubble"},
     {"key": "build", "label": "用AI做东西", "seed": "Claude Code|Cursor|Codex|Agent|agent|[Vv]ibe|Builder|编程|写代码|全栈|MCP|Skill|skill|工作流|自动化|做了一个|搓"},

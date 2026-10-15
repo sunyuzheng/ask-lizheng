@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -42,6 +43,37 @@ def test_the_map_lays_out_the_current_context():
     cards = json.loads((PROJECT / "data" / "context" / "context" / "decision-cards.json").read_text())["cards"]
     assert sorted(card["id"] for card in layout["cards"]) == sorted(card["id"] for card in cards)
     assert all(0 <= i < count for card in layout["cards"] for i in card["src"])
+
+
+def test_early_talk_about_ai_is_on_the_ai_rows():
+    """2026-10-15: what Yuzheng said about AI before 2024 shows with AI (early_ai in the config)."""
+    config = json.loads((PROJECT / "config" / "answer-map-topics.json").read_text())
+    rule, keys = config["early_ai"], [topic["key"] for topic in config["topics"]]
+    ai_rows = {keys.index(rule["topic"]), *(keys.index(key) for key in rule["keep"])}
+    module = builder()
+    layout = json.loads(MAP.read_text())
+    early = [n for n, row in enumerate(module.load_materials())
+             if row["days"] < module.days(rule["before"]) and re.search(rule["title"], row["title"])]
+    assert len(early) >= 20
+    assert all(layout["g"][n] in ai_rows for n in early)
+
+
+def test_the_early_ai_rule_moves_only_what_is_about_ai():
+    module = builder()
+    config = {"topics": [{"key": "ai"}, {"key": "build"}, {"key": "data"}],
+              "early_ai": {"topic": "ai", "keep": ["build"], "before": "2024-01-01", "title": "机器学习|算法",
+                           "text": "AI|机器学习", "text_min": 6, "text_per_10k": 10}}
+    filler = "数据" * 10000
+    rows = [
+        {"days": 400, "title": "数据科学家真的适合机器学习吗？", "text": ""},        # title says so
+        {"days": 400, "title": "一次长访谈", "text": "AI 机器学习 " * 20 + "其他" * 200},  # mostly about AI
+        {"days": 400, "title": "一次长访谈", "text": "AI " * 7 + filler},             # mentions it in passing
+        {"days": 2000, "title": "机器学习的新进展", "text": ""},                      # 2025: not early
+        {"days": 400, "title": "算法工程师用 Cursor", "text": ""},                    # already in build
+    ]
+    topic_of = [2, 2, 2, 2, 1]
+    assert module.early_ai(rows, topic_of, config) == [0, 1]
+    assert topic_of == [0, 0, 2, 2, 1]
 
 
 def test_the_service_serves_the_map_beside_its_context(context_pack, tmp_path, monkeypatch):  # noqa: F811

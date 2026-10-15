@@ -12,7 +12,9 @@ materials. Their mean embeddings start a few rounds of k-means over the material
 not comments (comments share a format that would otherwise pull them together), and every
 material, comments included, then joins the nearest topic. Within a topic, materials are
 ordered along their first principal direction, so related ones sit side by side. The GDAP book
-chapters and Statsig posts have no embeddings and belong to growth and data.
+chapters and Statsig posts have no embeddings and belong to growth and data. What Yuzheng said
+about AI before 2024 sits with AI whatever its nearest topic (early_ai in the config, his call on
+2026-10-15): an early data-science video on machine learning shows on the AI row, not on growth.
 
 scripts/update_context.py runs this after each context update, in a child process like every
 step that runs Open Context's parser, and the service serves the result at /api/answer-map.
@@ -128,7 +130,8 @@ def load_materials() -> list[dict]:
         published = doc.original_published_at or doc.published_at
         moment = when(published)
         row = materials.setdefault(key, {"key": key, "path": doc.path, "kind": KINDS[parts[1]], "title": doc.title, "when": moment,
-                                         "days": days(published)})
+                                         "days": days(published), "text": ""})
+        row["text"] += "\n" + (doc.text or "")
         if math.isnan(row["when"]) and not math.isnan(moment):
             row["when"] = moment
             row["days"] = days(published)
@@ -155,6 +158,32 @@ def load_embeddings(rows: list[dict]) -> list[list[float] | None]:
         positions = by_key.get(row["key"])
         embeddings.append(unit(mean(vectors[p * dimensions:(p + 1) * dimensions] for p in positions)) if positions else None)
     return embeddings
+
+
+def early_ai(rows: list[dict], topic_of: list[int], config: dict) -> list[int]:
+    """Materials from before the rule's date that talk about AI join its topic; returns them.
+
+    A title counts with the words of the time (machine learning, algorithms, models); a text
+    counts when AI is what it is mostly about: its words often, and densely enough that a long
+    interview mentioning AI in passing does not. Topics the rule keeps stay where they are."""
+    rule = config.get("early_ai")
+    if not rule:
+        return []
+    order = {t["key"]: n for n, t in enumerate(config["topics"])}
+    target = order[rule["topic"]]
+    keep = {target, *(order[k] for k in rule.get("keep", []))}
+    before = days(rule["before"])
+    title, text = re.compile(rule["title"]), re.compile(rule["text"])
+    def about_ai(row: dict) -> bool:
+        hits = len(text.findall(row["text"]))
+        return hits >= rule["text_min"] and hits * 10000 >= rule["text_per_10k"] * max(1, len(row["text"]))
+
+    moved = []
+    for i, row in enumerate(rows):
+        if row["days"] < before and topic_of[i] not in keep and (title.search(row["title"]) or about_ai(row)):
+            topic_of[i] = target
+            moved.append(i)
+    return moved
 
 
 def main() -> None:
@@ -186,6 +215,7 @@ def main() -> None:
             topic_of.append(nearest(embedding[i], centroids))
         else:
             topic_of.append(fixed.get(row["path"].split("/")[1], order[config["fallback"]]))
+    early = early_ai(rows, topic_of, config)
 
     # Angular span grows with the topic's size, but slowly, so small topics stay readable.
     counts = [topic_of.count(t) for t in range(len(topics))]
@@ -262,6 +292,8 @@ def main() -> None:
     }
     OUTPUT.write_text(json.dumps(output, ensure_ascii=False, separators=(",", ":")) + "\n")
     print(f"{OUTPUT.relative_to(ROOT)}: {len(rows)} materials, {len(cards)} cards, {OUTPUT.stat().st_size // 1024} KB")
+    for i in early:
+        print(f"  early AI -> {topics[topic_of[i]]['label']}: {rows[i]['title'][:48]}")
     for n, t in enumerate(topics):
         members = [i for i in range(len(rows)) if topic_of[i] == n and has[i]]
         sample = sorted(members, key=lambda i: -dot(embedding[i], centroids[n]))[:6]
