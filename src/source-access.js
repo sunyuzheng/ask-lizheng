@@ -13,6 +13,8 @@ export const isMemberPost = source => source?.source_visibility === 'members-onl
 export const isMembersOnly = source => source?.source_visibility === 'members-only';
 export const sourceTypeLabel = source => isMemberVideo(source) ? '会员视频' : isMemberCourse(source) ? '会员课程'
   : isMemberPost(source) ? (source.source_type === 'community-comment' ? '会员区回复' : '会员帖子') : isMembersOnly(source) ? '会员内容'
+  : source?.source_type === 'guest-appearance-catalog' ? '节目目录'
+  : source?.source_type === 'audio-transcript' ? '音频原稿'
   : source?.source_type?.includes('video') ? '视频' : source?.source_type === 'context' ? 'AI整理' : '文章';
 export function sourceAccessNote(source) {
   if (isMemberCourse(source)) return source.text_access === 'public' ? '文字稿已公开；课程视频需超线性学院会员。' : '课程需超线性学院会员。';

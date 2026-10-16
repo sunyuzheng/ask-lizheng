@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {discoveryDetail} from '../src/discovery.js';
 import {sourceAttributionLabel} from '../src/source-attribution.js';
-import {sourceCopyText} from '../src/source-access.js';
+import {sourceCopyText, sourceTypeLabel} from '../src/source-access.js';
 
 const synthetic = {
   id:'S1', title:'Synthetic fixture', url:'https://example.org/fixture',
@@ -13,6 +13,10 @@ const synthetic = {
   speech_act:'substantive', content_origin:'speaker-attributed-speech', generation_method:'source-original',
   transcript_quality:'ai-text-reviewed',
 };
+test('an audio transcript is labelled as an audio source', () => {
+  assert.equal(sourceTypeLabel({source_type:'audio-transcript',source_visibility:'public'}), '音频原稿');
+  assert.equal(sourceTypeLabel({source_type:'guest-appearance-catalog',data_layer:'structured'}), '节目目录');
+});
 async function detail(sources) {
   const prior = globalThis.fetch;
   globalThis.fetch = async (url, options) => {

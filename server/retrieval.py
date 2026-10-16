@@ -68,6 +68,8 @@ def timed_url(doc, anchor) -> str:
     """The link for a timed line: its own, or the chunk's source URL at that second."""
     if anchor is None:
         return ""
+    if getattr(doc, "timestamp_mode", "") == "display-only":
+        return ""
     if anchor.group(2):
         return anchor.group(2)
     h, m, s = (int(part) for part in timed_label(anchor).split(":"))
@@ -390,7 +392,7 @@ class ContextIndex:
                   "yuzheng_articles": families({"community-post", "knowledge-bank", "blog-post"}),
                   "yuzheng_comments": families({"community-comment"}),
                   "yuzheng_course_lessons": families({"course-lesson"}),
-                  "yuzheng_dialogue_sources": families({"video-excerpt", "video-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched"),
+                  "yuzheng_dialogue_sources": families({"video-excerpt", "video-transcript", "audio-transcript"}, "yuzheng-turns-reviewed", "yuzheng-turns-voice-matched"),
                   **corpus_figures(self.root)}
         everyone = {getattr(doc, "speaker_id", "") for doc in documents}
         speakers = sorted(who for who in everyone if who and who not in {"unknown", "yuzheng"}
