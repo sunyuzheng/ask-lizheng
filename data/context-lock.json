@@ -1,18 +1,18 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
-  "snapshot_at": "2026-10-11",
-  "release_manifest_sha256": "53310702f013c809eef90dad125b0e31496d1a8fd7920f35ff38f2f91082b7d1",
-  "files": 1687,
+  "snapshot_at": "2026-10-16",
+  "release_manifest_sha256": "504f4f66b72e7f42f5887054fc3058e70c4972a112721f7b71f49ab69ff376b6",
+  "files": 1739,
   "counts": {
-    "structured_public_dialogues": 339,
-    "structured_dialogue_cues": 248599,
+    "structured_public_dialogues": 364,
+    "structured_dialogue_cues": 286707,
     "guest_entities": 152,
     "guest_sources": 406,
     "guest_appearances": 425,
     "guest_slug_routes": 156,
     "guest_articles": 23,
     "guest_redirects": 3,
-    "guest_public_raw_records": 339,
+    "guest_public_raw_records": 364,
     "guest_introductions": 154,
     "community_posts_catalog": 252,
     "community_posts_full_text": 252,
@@ -33,6 +33,7 @@
     "member_video_transcripts": 218,
     "member_video_solo_reviewed": 45,
     "known_guest_videos": 387,
+    "external_guest_appearances": 28,
     "english_community_catalog": 50,
     "english_community_full_text_files": 49,
     "english_community_original_yuzheng": 11,
@@ -40,11 +41,11 @@
     "english_video_translations": 76
   },
   "licenses": {
-    "CC-BY-4.0": 920,
-    "CC0-1.0": 43,
-    "LicenseRef-Lizheng-Reference-Use-1.0": 623,
-    "LicenseRef-Original-Rights-Retained": 39,
-    "MIT": 55
+    "CC-BY-4.0": 944,
+    "CC0-1.0": 44,
+    "LicenseRef-Lizheng-Reference-Use-1.0": 624,
+    "LicenseRef-Original-Rights-Retained": 63,
+    "MIT": 57
   },
-  "source_commit": "c021fa2a4eaa0a367909d39c74c6bac8e88abb89"
+  "source_commit": "20652761ec8fbfa51054ef1fda1599e35643e4a5"
 }

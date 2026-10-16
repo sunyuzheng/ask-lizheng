@@ -127,7 +127,7 @@ def _source_projection(root: Path, path: str, records: dict, cache: dict):
 def _verify_projection(root: Path, doc, records: dict, cache: dict):
     canonical = _source_projection(root, doc.path, records, cache).get(doc.id)
     fields = (
-        "id", "source_id", "path", "title", "section", "text", "source_type", "source_url", "timestamp_mode",
+        "id", "source_id", "path", "title", "section", "text", "source_type", "source_url", "source_family", "timestamp_mode",
         "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id",
         "source_snapshot_sha256", "content_origin", "evidence_role", "yuzheng_stance_weight",
         "speaker_classification", "author", "original_author", "generation_method", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act",
