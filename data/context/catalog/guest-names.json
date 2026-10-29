@@ -1538,6 +1538,16 @@
       ]
     },
     {
+      "name": "Russell",
+      "key": "russell",
+      "entity_ids": [
+        "host:russell-huang"
+      ],
+      "kinds": [
+        "appearance-participant"
+      ]
+    },
+    {
       "name": "Ryo",
       "key": "ryo",
       "entity_ids": [
@@ -2688,6 +2698,16 @@
       ]
     },
     {
+      "name": "小飘 Ivanka",
+      "key": "小飘ivanka",
+      "entity_ids": [
+        "host:ivanka"
+      ],
+      "kinds": [
+        "appearance-participant"
+      ]
+    },
+    {
       "name": "尚莞迪（Lydia）",
       "key": "尚莞迪lydia",
       "entity_ids": [
@@ -2981,6 +3001,16 @@
       ]
     },
     {
+      "name": "树杨",
+      "key": "树杨",
+      "entity_ids": [
+        "host:shuyang"
+      ],
+      "kinds": [
+        "appearance-participant"
+      ]
+    },
+    {
       "name": "格桑泽仁",
       "key": "格桑泽仁",
       "entity_ids": [
@@ -3048,6 +3078,16 @@
       ],
       "kinds": [
         "member"
+      ]
+    },
+    {
+      "name": "沈明高",
+      "key": "沈明高",
+      "entity_ids": [
+        "host:shen-minggao"
+      ],
+      "kinds": [
+        "appearance-participant"
       ]
     },
     {
@@ -3653,6 +3693,16 @@
       ],
       "kinds": [
         "display"
+      ]
+    },
+    {
+      "name": "黄涵涵",
+      "key": "黄涵涵",
+      "entity_ids": [
+        "host:huang-hanhan"
+      ],
+      "kinds": [
+        "appearance-participant"
       ]
     }
   ],
