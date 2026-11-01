@@ -5,6 +5,7 @@ import {LoaderCircle, X} from 'lucide-react';
 import './style.css';
 import {askLoginHere, beginAskLogin, finishAskLogin, logoutAsk, readAskAccount, takeAskDraft} from './account-client.js';
 import {askedAgo, discoveryDetail, discoveryLink, discoveryLists, discoveryPage, discoveryView, likeState, readLikes, rememberLike, voteDiscovery} from './discovery.js';
+import {changedDiscoveryIds, watchDiscoveryLists} from './discovery-refresh.js';
 import {conversationAt, forgetAll, forgetAsked, keepConversation, readHistory} from './history.js';
 import {homeQuestion} from './home-question.js';
 import {IN_APP} from './in-app.js';
@@ -828,6 +829,9 @@ function App() {
   // Questions others asked: 最近问 and 最常问, the same lists for everyone; each answer once opened,
   // and this visit's likes and shares.
   const [questionLists, setQuestionLists] = useState(null);
+  const listsNow = useRef(null), pendingLists = useRef(null), listWatcher = useRef(null);
+  const [listsPending, setListsPending] = useState(false);
+  const firstLists = useRef(true);
   // loading until the list arrives, then ready; none when it cannot be read here (other hosts,
   // Ops down) or takes past eight seconds, and only then the examples show in its place.
   const [discoveryState, setDiscoveryState] = useState('loading');
@@ -885,8 +889,10 @@ function App() {
     for (const card of liveCards) {
       if (liveRead.current.has(card.public_id)) continue;
       liveRead.current.add(card.public_id);
-      void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => (
-        prev[card.public_id] && prev[card.public_id] !== 'loading' ? prev : {...prev, [card.public_id]: detail || 'failed'})));
+      void discoveryDetail(card.public_id).then(detail => {
+        if (!listsNow.current || changedDiscoveryIds([card], listsNow.current).size) return;
+        setCardDetails(prev => (prev[card.public_id] && prev[card.public_id] !== 'loading' ? prev : {...prev, [card.public_id]: detail || 'failed'}));
+      });
     }
   }, [wideStage, liveCards]);
   useEffect(() => {
@@ -1073,24 +1079,56 @@ function App() {
     refreshMeta();
     return () => { metadataAbort.current?.abort(); metadataAbort.current = null; metaTimers.current.forEach(clearTimeout); };
   }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    const late = setTimeout(() => setDiscoveryState(state => (state === 'loading' ? 'none' : state)), 8000);
-    void discoveryLists(controller.signal).then(lists => {
-      clearTimeout(late);
-      if (controller.signal.aborted) return;
-      if (!lists || (!lists.recent.length && !lists.frequent.length)) { setDiscoveryState('none'); return; }
+  const applyLists = lists => {
+    const previous = listsNow.current ? [...listsNow.current.recent, ...listsNow.current.frequent] : [];
+    const stale = changedDiscoveryIds(previous.flatMap(card => [card, ...(card.similar || [])]), lists);
+    if (firstLists.current && (lists.recent.length || lists.frequent.length)) {
+      firstLists.current = false;
       // Until someone has asked, the common questions written fresh are all there is.
       if (!openList.current && !discoveryView(lists, 'recent').length) setView('frequent');
       // On a wide screen the newest are already beside the question box (别人正在问), so the list
       // below starts with the most asked rather than showing the same questions twice.
       else if (!openList.current && WIDE.matches) setView('frequent');
-      setPublicTotal(lists.total);
-      setQuestionLists(lists);
-      setDiscoveryState('ready');
+    }
+    listsNow.current = lists;
+    pendingLists.current = null;
+    setListsPending(false);
+    setPublicTotal(lists.total);
+    setQuestionLists(lists);
+    setDiscoveryState(lists.recent.length || lists.frequent.length ? 'ready' : 'none');
+    if (stale.size) {
+      setCardDetails(prev => Object.fromEntries(Object.entries(prev).filter(([id]) => !stale.has(id))));
+      for (const id of stale) liveRead.current.delete(id);
+      if (stale.has(openCard)) setOpenCard('');
+      if (stale.has(openNested)) setOpenNested('');
+      setOpenSimilar(prev => new Set([...prev].filter(id => !stale.has(id))));
+    }
+  };
+  const receiveLists = useRef(null);
+  receiveLists.current = (lists, {manual = false} = {}) => {
+    const top = document.getElementById('questions')?.getBoundingClientRect().top;
+    const reading = openCard || openNested || (top !== undefined && top < window.innerHeight);
+    const shown = [...discovery, ...liveCards, ...discovery.filter(card => openSimilar.has(card.public_id)).flatMap(card => card.similar || [])];
+    if (!manual && listsNow.current && reading && !changedDiscoveryIds(shown, lists).size && JSON.stringify(listsNow.current) !== JSON.stringify(lists)) {
+      pendingLists.current = lists;
+      setListsPending(true);
+    } else applyLists(lists);
+  };
+  const onStartPage = messages.length === 0;
+  useEffect(() => {
+    if (!onStartPage) return;
+    const watcher = watchDiscoveryLists({read: discoveryLists,
+      onLists: (...args) => receiveLists.current(...args),
+      // A failed background refresh keeps the questions already on screen.
+      onUnavailable: () => { if (!listsNow.current) setDiscoveryState('none'); },
     });
-    return () => { clearTimeout(late); controller.abort(); };
-  }, []);
+    listWatcher.current = watcher;
+    return () => { watcher.stop(); listWatcher.current = null; };
+  }, [onStartPage]);
+  const refreshLists = () => {
+    if (pendingLists.current) applyLists(pendingLists.current);
+    else listWatcher.current?.refresh();
+  };
   // lizheng.ai links here to see a whole list: #recent (or the older #questions) or #frequent.
   // Once it is in and the page is long enough, scroll to it.
   const openList = useRef({'#questions': 'recent', '#recent': 'recent', '#frequent': 'frequent'}[location.hash] || '');
@@ -1176,7 +1214,10 @@ function App() {
     const known = cardDetails[card.public_id];
     if (known && known !== 'failed') return;
     setCardDetails(prev => ({...prev, [card.public_id]: 'loading'}));
-    void discoveryDetail(card.public_id).then(detail => setCardDetails(prev => ({...prev, [card.public_id]: detail || 'failed'})));
+    void discoveryDetail(card.public_id).then(detail => {
+      if (!listsNow.current || changedDiscoveryIds([card], listsNow.current).size) return;
+      setCardDetails(prev => ({...prev, [card.public_id]: detail || 'failed'}));
+    });
   };
   const askSimilar = card => {
     markUsage('d_similar');
@@ -1216,6 +1257,7 @@ function App() {
     document.getElementById('questions')?.scrollIntoView({block: 'start', behavior: scrollBehavior()});
   }
   function showView(target) {
+    refreshLists();
     if (view === target) return;
     setView(target);
     setOpenCard(''); setOpenNested(''); setOpenSimilar(new Set());
@@ -1705,7 +1747,10 @@ function App() {
           <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
             <div className="discovery-views" role="group" aria-label="怎样看这些问题">
               {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
-            </div></div>
+            </div>
+            <button type="button" className="discovery-refresh" data-pending={listsPending || undefined} onClick={refreshLists}>
+              <span aria-live="polite">{listsPending ? '有更新，点击查看' : '刷新列表'}</span>
+            </button></div>
           <div className="discovery-list" aria-busy={!questionLists}>
             {/* While the questions load, the rows they will fill; never the examples first. */}
             {!questionLists ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)

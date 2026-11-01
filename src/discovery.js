@@ -51,7 +51,7 @@ export async function discoveryLists(signal) {
 }
 
 // When a question was asked, the way people say it: 刚刚, 23分钟前, 3小时前, 2天前, then the date.
-// Ops gives the time to five minutes; a question shows up 15 to 30 minutes after it is asked.
+// Ops gives the time to five minutes; completed conversations are processed every minute.
 export function askedAgo(iso, now = Date.now()) {
   const time = Date.parse(iso);
   if (!Number.isFinite(time)) return '';

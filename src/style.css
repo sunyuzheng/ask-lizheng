@@ -1233,6 +1233,18 @@ main {
   box-shadow: inset 0 -2px 0 var(--green);
 }
 
+.discovery-refresh {
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.discovery-refresh:hover,
+.discovery-refresh[data-pending] {
+  color: var(--green-text);
+}
+
 @media (min-width: 960px) {
   .starters {
     grid-template-columns: 260px minmax(0, 1fr);
