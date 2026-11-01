@@ -28,6 +28,7 @@ from server.query_context import uses_previous_question
 
 DEFAULT_FIXTURE = ROOT / "tests/fixtures/evidence-benchmark.json"
 DEFAULT_CACHE = ROOT / ".local/rules-revision-20261101/query-vectors.json"
+PUBLIC_VECTOR_SEED = ROOT / "tests/fixtures/evidence-query-vectors.json"
 
 
 def digest(value: bytes) -> str:
@@ -168,7 +169,10 @@ def decode(value: str, dimensions: int) -> array:
 
 async def vectors(impl, cases: list[dict], path: Path, refresh: bool = False, client=None, token: str = "") -> tuple[dict, dict]:
     semantic = impl.semantic
-    cache = json.loads(path.read_text()) if path.is_file() else {
+    read_path = path
+    if not path.is_file() and path.resolve() == DEFAULT_CACHE.resolve() and PUBLIC_VECTOR_SEED.is_file():
+        read_path = PUBLIC_VECTOR_SEED
+    cache = json.loads(read_path.read_text()) if read_path.is_file() else {
         "schema_version": 1, "model": semantic.EMBEDDING_MODEL, "dimensions": semantic.DIMENSIONS, "queries": {}}
     if (cache.get("schema_version") != 1 or cache.get("model") != semantic.EMBEDDING_MODEL
             or cache.get("dimensions") != semantic.DIMENSIONS):

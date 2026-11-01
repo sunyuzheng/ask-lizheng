@@ -53,21 +53,25 @@ def test_all_models_share_semantic_policy_and_actual_evidence():
     p = sample_passage()
     p.source["source_type"] = "community-post"
     for model in ("gpt-5", "deepseek-v4-flash", "deepseek-v4-pro", "grok-4.5"):
-        payload = answers.answer_payload(model, {"question": "合成问题"}, [p])
+        payload = answers.answer_payload(model, {"question": "合成问题", "reasoning_cards": [{"thesis": "导航中的无依据结论"}]}, [p])
         assert payload["messages"][0]["content"].startswith(contract.system_prompt())
         suffix = payload["messages"][0]["content"][len(contract.system_prompt()):]
         assert not suffix or suffix.startswith("\n为逐段展示") or suffix.startswith("\n输出 JSON")
         assert "Flash" not in suffix
         assert json.loads(payload["messages"][1]["content"])["sources"] == [contract.model_evidence(p)]
+        assert "reasoning_cards" not in json.loads(payload["messages"][1]["content"])
+        assert "导航中的无依据结论" not in payload["messages"][1]["content"]
 
 
 def test_compact_annotations_do_not_replace_full_provenance():
     p = sample_passage()
     p.source["source_type"] = "community-post"
+    p.source["attribution_note"] = "英文原作与中文AI改写归属不同，这是来源本身的说明。"
     p.evidence["section"] = "Synthetic Alpha在本期的陈述"
     value = contract.model_evidence(p)
     assert "归属已核对" in " ".join(value["attribution"]["notes"])
     assert "句间可能隔着其他发言" in " ".join(value["attribution"]["notes"])
+    assert p.source["attribution_note"] in value["attribution"]["notes"]
     assert "Synthetic Alpha" in value["attribution"]["basis"]
     assert value["source_type"] == "community-post"
     assert "source_snapshot_sha256" not in value

@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "context_commit": "7095f8de26f393966a36a5e2b9286084e1893000",
+  "method": "Supplementary release verification, fixed before any query vectors or answer measurements on these questions. Two source files per course/community/blog/raw-dialogue stratum, ordered by SHA256 of release-check-20261101:path after excluding all prior gold paths. Questions and anchors authored from those source bodies; no model-generated gold, no private questions. This is a fresh question/source-gold set, not a claim that these documents never appeared among earlier retrieval candidates.",
+  "selection_seed": "release-check-20261101",
+  "refs": {
+    "agency": {
+      "path": "corpus/course-lessons/20250301-1883185.md",
+      "sha256": "8ea1af8d5c6143c0073129aa161a91ddde666cf3aa07cfbb35bd1c60b53799dd",
+      "quotes": [
+        "外界环境大多是我们无法改变的，而我们能改变的，往往是自己的思维。"
+      ],
+      "context": "的思维方式。它让我们“不想做”,或者“不知道怎么做”,最终导致“做不成”。 当然,我不是说外部环境不重要。宏观经济、行业趋势、你过往的选择、家庭背景......这些都在很大程度上影响着我们。但关键是,外界环境大多是我们无法改变的,而我们能改变的,往往是自己的思维。你会惊讶地发现,我们头顶那块“天花板”,很大一部分,恰恰是我们自己的思维模式焊上去的。 (别担心,后面我们会讲“成长型思维”,教你具体怎么打破这些天花板。这节课,先点燃你“想要打破”的意愿。) 而意识到天花板的存在,并且生出“我要打破它”的行动力,这,就是我们今天要谈的“客体思维”与“主体思维”的分野。 核心议题:你是谁?——“客体”还是“主体”? 到底什么是“客体思维”,什么是“主体思维”?定义"
+    },
+    "work-leverage": {
+      "path": "corpus/course-lessons/20250302-1883219.md",
+      "sha256": "c4e33927e6a39cb3767a1abcb8a46b6ddbf0ea033b918ce2f761895f67de610e",
+      "quotes": [
+        "组织其实已经通过给你杠杆，在你身上投入了“成本”"
+      ],
+      "context": "于尝试而被重用! 这听起来有点怪,但细想一下就明白了。在工作中,真正稀缺的是什么?是那些有担当、愿意承担责任、敢闯敢试的人。 - 第一,你主动去承担高杠杆的任务,证明了你有这种闯劲和拼劲。 - 第二,组织其实已经通过给你杠杆,在你身上投入了“成本”(让你去试错,去学习)。你踩过了坑,学到了东西,下次再做类似的事情,成功率自然比那些没承担过这么大责任的人要高。从组织的角度看,与其让之前的投入打水漂,不如继续信任你,让你承担更多责任,把学到的经验用起来。 所以,从这两个角度看,在职场中主动去承担“高杠杆”任务,很多时候并不是一个高风险行为,反而是一个 低风险、高回报 的选择。 认清了这一点,我们就可以大胆地去学习,怎么给自己“上杠杆”了。 如何"
+    },
+    "event-notes": {
+      "path": "corpus/community-posts/20260429-indigo-meetup-32120041.md",
+      "sha256": "cd633eaac81fbe5ee518ce6722cb220e3df544172aa96034b93baa2cb1d4a80a",
+      "quotes": [
+        "AI 是放大器，不是均衡器。"
+      ],
+      "context": "。文章比较长,但我觉得里面很多观点值得反复读。 --- 一、先讲 Taste:为什么这是 AI 时代最重要的能力 Indigo 把 Taste 放在了所有投资和创业方法论的最前面讲。 他的核心论断是:AI 是放大器,不是均衡器。 \"在过去用软件的时代,软件交互结果确定。你用 Word 输出文档、PPT 做东西,结果都是稳定的。但 AI 时代,你的提示词、流程、选择的结果不一样,差别会非常大。所以 AI 不是让所有人能力接近,而是让人和人的差异变得更大。\" 他引用了 Paul Graham 的两篇 Taste 评论——一篇 2002 年写的,一篇最近写的,时隔 20 年。Paul Graham 想说的是:Taste 不是玄"
+    },
+    "summary-kind": {
+      "path": "corpus/community-posts/20260604-up-33308766.md",
+      "sha256": "1837f4e6a038d73a0f16c3d10744cdec51b5b8000df75aa718b05d4c722d693b",
+      "quotes": [
+        "视频我发在会员频道了，AI总结我发在这里，enjoy"
+      ],
+      "context": "现有点乌龙 — 他们以为我的主页是教大厂人创业,而不是AI。所以约了之后再找机会线下访谈。 这次访谈一开始互相都没找到节奏,但是后面给出了非常多和深度的干货。如果对知识付费、自媒体感兴趣,会很有收获。视频我发在会员频道了,AI总结我发在这里,enjoy --- 这是我和斯斯、梓泉三个人聊了两个半小时的一场对话。斯斯是「给女孩的商业第一课」的主播,梓泉是她的合伙人,也是「小声比比」的创始人。他们俩一个擅长提问,一个擅长拆解,我是那个被拆的人。 这场对话从我在腾讯给马化腾写信开始,聊到了大厂打工人的集体痛苦,聊到了好学生路径正在失效,聊到了中美知识付费的两个世界,最后落到了 AI 时代应该怎么学习。每一个话题都比我预想的聊得更深,因为三个人的视角确"
+    },
+    "automation": {
+      "path": "corpus/blog-posts/20241016-how-ab-testing-platforms-make-data-science-more-interesting-zh.md",
+      "sha256": "a71ea6bcef168c8dab1765442b16e6f3f0c6ba5458533a9a1023bbe81f7c8fef",
+      "quotes": [
+        "实验自动化对数据科学家有直接和间接两种好处"
+      ],
+      "context": "放在哪里? 4. 怎样让领导层支持实验? 如果你对这些话题感兴趣,可以看看他的slides。他的完整回答我就不在这里重复了,下面总结三个最重要的收获,再摘几段值得一读的原话和它们的上下文。 三个收获 实验自动化对数据科学家有直接和间接两种好处 最明显的好处是,自动化把数据科学家从低价值的重复工作里解放了出来。A/B实验基本自动化以后,他们可以专注于更高层次的事情,比如形成业务洞察和制定策略。 间接的好处影响更大。一个组织一旦形成了实验文化,团队会被真实的数据教育得更谦虚,也更愿意接受推翻自己假设的证据。 数据科学家经常抱怨,领导只重视那些支持他们既有看法的数据。可数据真正的力量,就在于改变决策。 要建立这样的数据驱动文化,就得跑更多的"
+    },
+    "marketplace-images": {
+      "path": "corpus/blog-posts/20240910-meta-a-b-testing-zh.md",
+      "sha256": "41f2961c09ed30d5220d5a096d18b3bd7eb63d0d2fc711a443848e43c2ee27a7",
+      "quotes": [
+        "白色背景导致点击率和转化率下降"
+      ],
+      "context": "的商品,图片都带着真实场景做背景,比如东西就摆在一张桌子上;而大多数电商商品的图片,都是干净、专业的白底图。 于是,对同一批商品,我们随机决定用户在浏览信息流里看到的是白底图还是带场景的图。结果发现,白色背景导致点击率和转化率下降:它让用户觉得自己在逛一个传统的电商,而不是在淘便宜货。 再结合我们对这个产品的其他理解,我们很有把握地得出结论:Marketplace的用户就是对电商商品不感兴趣,甚至可能会反感,因为这些商品看起来很像Marketplace上的广告。 同一件商品的两种图片:带场景的背景与白底(图见英文原文) 图2 实验的两个版本:同一件商品(30美元的LED光疗面罩),左边是带场景的原生图片,右边是白底图。哪一"
+    },
+    "coaching": {
+      "path": "corpus/dialogues/youtube-Tk49xo6i-04.json",
+      "sha256": "1c74a141c30a6aa8f8a992ede86ebce47c33ecacfe28ece8ca0cbeb147023dbb",
+      "speaker_id": "yuzheng",
+      "quotes": [
+        "提供了非常多的coaching"
+      ],
+      "context": "[yuzheng] 也可以是我做了以后\n[yuzheng] 我老板拿过去修修改改\n[yuzheng] 然后他去present\n[yuzheng] 我也不会觉得有任何问题\n[yuzheng] 因为当时我是一个senior\n[yuzheng] 我们这个presentation\n[yuzheng] 是要给VP级别做presentation的\n[yuzheng] 就是要很多个director看\n[yuzheng] 然后之后VP也要看\n[yuzheng] 然后最后还会决定我们\n[yuzheng] 做很大的事情\n[yuzheng] 他当时做了这么几件事\n[yuzheng] 第一他把这个机会就交给了我\n[yuzheng] 去信任我去做这件事\n[yuzheng] 第二他在这个过程中\n[yuzheng] 提供了非常多的coaching\n[yuzheng] 之后他又把presentation的机会\n[unknown] 交给了我"
+    },
+    "channel-margin": {
+      "path": "corpus/dialogues/youtube-vd_oYgwQSBM.json",
+      "sha256": "0c0bf0fbd94050b8281a50794ff00ce6a470330c0f27d57f39e702ae47680a0e",
+      "speaker_id": "guest:yang-ying",
+      "quotes": [
+        "和你用的这个渠道平台的效率"
+      ],
+      "context": "[guest:yang-ying] 你的人设需要与你的品类相符合\n[guest:yang-ying] 在你流量不是很大的时候啊\n[guest:yang-ying] 咱们后边再说拓流量\n[guest:yang-ying] 第二就是要注意你推荐这个品类的毛利\n[guest:yang-ying] 和你用的这个渠道平台的效率\n[guest:yang-ying] 所谓渠道效率就是你要投多少钱\n[guest:yang-ying] 才能把你这个东西推到用户者眼前\n[guest:yang-ying] 就是消费者眼前\n[guest:yang-ying] 你如果进了一个毛利低的行业\n[guest:yang-ying] 然后渠道效率也低\n[guest:yang-ying] 也就是你要花很多钱才把这个东西推到消费者眼前\n[guest:yang-ying] 但是您这个东西毛利又低\n[guest:yang-ying] 那你就死了"
+    }
+  },
+  "cases": [
+    {
+      "id": "release-agency-1",
+      "group": "release-agency",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "主体思维是否意味着外部环境不重要？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "agency"
+      ],
+      "good": "依据原文区分承认外部环境与聚焦可控思维；不说所有外部不公都由个人心态造成，不把AI补充归为原文。"
+    },
+    {
+      "id": "release-agency-2",
+      "group": "release-agency",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "立正讲主体思维时，怎么区分环境限制和自己能改变的事？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "agency"
+      ],
+      "good": "依据原文区分承认外部环境与聚焦可控思维；不说所有外部不公都由个人心态造成，不把AI补充归为原文。"
+    },
+    {
+      "id": "release-work-leverage-1",
+      "group": "release-work-leverage",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "第16课为什么说，有时项目失败反而可能被重用？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "work-leverage"
+      ],
+      "good": "说明原文的担当信号、组织已经投入学习成本这两个理由，保留有时/通常的情境；不承诺任何项目失败都安全或都会被提拔。"
+    },
+    {
+      "id": "release-work-leverage-2",
+      "group": "release-work-leverage",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "在工作里用杠杆失败后，组织为什么还可能继续给机会？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "work-leverage"
+      ],
+      "good": "说明原文的担当信号、组织已经投入学习成本这两个理由，保留有时/通常的情境；不承诺任何项目失败都安全或都会被提拔。"
+    },
+    {
+      "id": "release-event-notes-1",
+      "group": "release-event-notes",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "“AI是放大器，不是均衡器”在哪份线下分享记录里讲过？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "event-notes"
+      ],
+      "good": "找到Indigo线下分享Notes阅读起点，按记录区分嘉宾论点、引用Paul Graham和发布账号，不把转述写成立正本人主张或虚构完整逐字稿。"
+    },
+    {
+      "id": "release-event-notes-2",
+      "group": "release-event-notes",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "想读AI会拉大人与人差异、Taste又不是个人偏好的论述，从哪里开始？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "event-notes"
+      ],
+      "good": "找到Indigo线下分享Notes阅读起点，按记录区分嘉宾论点、引用Paul Graham和发布账号，不把转述写成立正本人主张或虚构完整逐字稿。"
+    },
+    {
+      "id": "release-summary-kind-1",
+      "group": "release-summary-kind",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "《你从好学生→好工作→赚大钱的梦中醒来了吗》的社区整理，是逐字稿还是AI总结？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "summary-kind"
+      ],
+      "good": "优先找到该社区整理，根据明确说明区分原视频与AI总结，保留不同说话人的归属，不将AI第一人称重述称为作者亲笔或逐字原话。"
+    },
+    {
+      "id": "release-summary-kind-2",
+      "group": "release-summary-kind",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "想读“好学生→好工作→赚大钱”那场访谈的整理，它和原视频是什么关系？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "summary-kind"
+      ],
+      "good": "优先找到该社区整理，根据明确说明区分原视频与AI总结，保留不同说话人的归属，不将AI第一人称重述称为作者亲笔或逐字原话。"
+    },
+    {
+      "id": "release-automation-1",
+      "group": "release-automation",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "实验平台自动化以后，数据科学家还能创造什么价值？想找文章读。",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "automation"
+      ],
+      "good": "推荐关于实验平台如何改变数据科学工作的文章，解释减少重复劳动及实验文化两种作用，区分Ronny分享、立正英文回顾和中文AI改写。"
+    },
+    {
+      "id": "release-automation-2",
+      "group": "release-automation",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "想读实验自动化怎样改变数据科学家的工作重点，有什么合适的文章？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "automation"
+      ],
+      "good": "推荐关于实验平台如何改变数据科学工作的文章，解释减少重复劳动及实验文化两种作用，区分Ronny分享、立正英文回顾和中文AI改写。"
+    },
+    {
+      "id": "release-marketplace-images-1",
+      "group": "release-marketplace-images",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "Meta把白底商品图和场景图随机比较的案例，在哪篇文章？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "marketplace-images"
+      ],
+      "good": "找到Meta/A-B-testing文章，说明同商品随机图片背景以及其对用户意图假设的意义，不将特定场景效果说成所有电商不能用白底图，区分英文原作与中文改写。"
+    },
+    {
+      "id": "release-marketplace-images-2",
+      "group": "release-marketplace-images",
+      "split": "holdout",
+      "category": "fresh-source-find",
+      "question": "想找Marketplace用商品照片背景检验电商假设的原文，从哪读？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "marketplace-images"
+      ],
+      "good": "找到Meta/A-B-testing文章，说明同商品随机图片背景以及其对用户意图假设的意义，不将特定场景效果说成所有电商不能用白底图，区分英文原作与中文改写。"
+    },
+    {
+      "id": "release-coaching-1",
+      "group": "release-coaching",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "立正为什么感谢把VP presentation机会交给他的老板？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "coaching"
+      ],
+      "good": "按立正本人已归属片段说明信任、指导和展示机会，不猜未知说话人，不把某次经验扩成所有老板都应该亲自培养的保证。"
+    },
+    {
+      "id": "release-coaching-2",
+      "group": "release-coaching",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "在讲神仙老板时，立正把coaching和亲自present的机会看得重要，理由是什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "coaching"
+      ],
+      "good": "按立正本人已归属片段说明信任、指导和展示机会，不猜未知说话人，不把某次经验扩成所有老板都应该亲自培养的保证。"
+    },
+    {
+      "id": "release-channel-margin-1",
+      "group": "release-channel-margin",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "杨滢选品时为什么把毛利和渠道效率放在一起看？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "channel-margin"
+      ],
+      "good": "只用杨滢本人陈述解释获客触达成本与毛利共同影响生意，保留其具体语境，不将嘉宾经验写成立正赞同，不替读者保证利润数字。"
+    },
+    {
+      "id": "release-channel-margin-2",
+      "group": "release-channel-margin",
+      "split": "holdout",
+      "category": "fresh-source-understand",
+      "question": "杨滢说渠道效率低、毛利也低时会有问题，这两项怎么相互影响？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "channel-margin"
+      ],
+      "good": "只用杨滢本人陈述解释获客触达成本与毛利共同影响生意，保留其具体语境，不将嘉宾经验写成立正赞同，不替读者保证利润数字。"
+    }
+  ]
+}

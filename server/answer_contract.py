@@ -125,8 +125,12 @@ def evidence_annotation(passage) -> dict:
 
 
 def model_evidence(passage) -> dict:
+    attribution = evidence_annotation(passage)
+    note = passage.source.get("attribution_note", "")
+    if note and note not in attribution["notes"]:
+        attribution["notes"].append(note)
     return {"id": passage.source["id"], "title": passage.source["title"],
             "author": passage.source.get("author", "未标明"),
             "source_type": passage.source.get("source_type", "未标明"),
             "date": passage.source.get("date", ""), "excerpt": passage.evidence.get("excerpt", ""),
-            "attribution": evidence_annotation(passage), "discovery_only": passage.discovery}
+            "attribution": attribution, "discovery_only": passage.discovery}

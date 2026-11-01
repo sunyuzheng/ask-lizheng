@@ -1,0 +1,671 @@
+{
+  "schema_version": 1,
+  "measured_date": "2026-11-01",
+  "context_commit": "7095f8de26f393966a36a5e2b9286084e1893000",
+  "baseline_commit": "9f813e97626709e0a271468162828aa11c0a0d1f",
+  "candidate_server_sha256": "96227101f9a2ac75d744bad67d617ec89648e2831cc51c4422e521f87d28b81c",
+  "answer_model": "deepseek-v4-flash",
+  "backup_model": "gpt-5",
+  "judge_model": "gpt-5",
+  "repeats": 3,
+  "evidence_id_version": 2,
+  "method": "Fixed public source anchors; repeated direct production generation; blinded paired judging with public source IDs mapped to actual excerpts. Group-weighted scores. Invalid generations and judgments listed separately, not scored as successes. Fresh16 was frozen before its first embeddings/generation and was not used to change this release. These are model-judged samples, not a guarantee for traffic or an independent human review.",
+  "datasets": {
+    "development": {
+      "fixture": "tests/fixtures/evidence-benchmark.json",
+      "fixture_sha256": "aa257964de9f301767a06ee849d9e1276eb71d62c364d06f1a67bb2e62ec7eae",
+      "query_vector_sha256": "c340e72bbc17b1bfb724580dd1e68b27af2cd19440c99c874294dad2ed46293c",
+      "generation": {
+        "baseline": {
+          "runs": 132,
+          "completed": 131,
+          "failures": [
+            {
+              "id": "wanglu-2",
+              "repeat": 0,
+              "error": "invalid_answer"
+            }
+          ],
+          "expected_status_mismatches": [
+            {
+              "id": "compound-1",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "compound-1",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "compound-1",
+              "repeat": 2,
+              "status": "clarify"
+            },
+            {
+              "id": "ethan-1",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "ethan-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-1",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "strategy-1",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "strategy-1",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "strategy-1",
+              "repeat": 2,
+              "status": "clarify"
+            },
+            {
+              "id": "wanglu-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "wanglu-2",
+              "repeat": 2,
+              "status": "clarify"
+            }
+          ],
+          "median_local_seconds": 5.503
+        },
+        "candidate": {
+          "runs": 132,
+          "completed": 129,
+          "failures": [
+            {
+              "id": "growth-2",
+              "repeat": 0,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "wanglu-2",
+              "repeat": 1,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "wanglu-2",
+              "repeat": 2,
+              "error": "invalid_answer"
+            }
+          ],
+          "expected_status_mismatches": [
+            {
+              "id": "ethan-1",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "ethan-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "overfit-2",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "overfit-2",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "wanglu-2",
+              "repeat": 0,
+              "status": "clarify"
+            }
+          ],
+          "median_local_seconds": 5.594
+        }
+      },
+      "paired_runs": 132,
+      "judged_runs": 128,
+      "missing_or_failed_judgments": [
+        {
+          "id": "growth-2",
+          "repeat": 0,
+          "error": "generation_failed"
+        },
+        {
+          "id": "wanglu-2",
+          "repeat": 0,
+          "error": "generation_failed"
+        },
+        {
+          "id": "wanglu-2",
+          "repeat": 1,
+          "error": "generation_failed"
+        },
+        {
+          "id": "wanglu-2",
+          "repeat": 2,
+          "error": "generation_failed"
+        }
+      ],
+      "group_mean_scores": {
+        "baseline": {
+          "relevance": 3.8833,
+          "faithfulness": 3.9364,
+          "attribution": 4.5288,
+          "time": 4.8485,
+          "limitations": 4.1303,
+          "readability": 4.3924
+        },
+        "candidate": {
+          "relevance": 3.9242,
+          "faithfulness": 4.4515,
+          "attribution": 4.7045,
+          "time": 4.9015,
+          "limitations": 4.5788,
+          "readability": 4.2803
+        }
+      },
+      "group_mean_score_deltas": {
+        "relevance": 0.0409,
+        "faithfulness": 0.5152,
+        "attribution": 0.1758,
+        "time": 0.053,
+        "limitations": 0.4485,
+        "readability": -0.1121
+      },
+      "judge_flagged_critical_events": {
+        "baseline": 51,
+        "candidate": 19
+      },
+      "private_report_sha256": {
+        "answers-baseline-dev": "03b8469a83c7db409bffdb004d2a07f62e372dcc4d2fc1a94a0b5c51214729c9",
+        "answers-source-only-dev": "54cc743df99f0703233867cebed856bf9690c272b1e659e394fa07b54673bbbd",
+        "judgments-source-only-dev": "d4722f7122b9c4bfb098fd3abd6e80f1d261496c8df47d5ce88e5c02b6e1c7be"
+      }
+    },
+    "original_reserved": {
+      "fixture": "tests/fixtures/evidence-benchmark.json",
+      "fixture_sha256": "aa257964de9f301767a06ee849d9e1276eb71d62c364d06f1a67bb2e62ec7eae",
+      "query_vector_sha256": "bf7cc29ac7cb90ef5c3c53f136bba0cd7afbfe744c454866029ccddc9f7b5e73",
+      "generation": {
+        "baseline": {
+          "runs": 48,
+          "completed": 48,
+          "failures": [],
+          "expected_status_mismatches": [
+            {
+              "id": "invest-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "invest-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "invest-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-1",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "ryo-2",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "ryo-2",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "ryo-2",
+              "repeat": 2,
+              "status": "clarify"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "yale-1",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "yale-1",
+              "repeat": 2,
+              "status": "clarify"
+            }
+          ],
+          "median_local_seconds": 5.679
+        },
+        "candidate": {
+          "runs": 48,
+          "completed": 48,
+          "failures": [],
+          "expected_status_mismatches": [
+            {
+              "id": "invest-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "invest-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "invest-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "liujia-2",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-1",
+              "repeat": 2,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 0,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "testing-2",
+              "repeat": 2,
+              "status": "unsupported"
+            }
+          ],
+          "median_local_seconds": 5.793
+        }
+      },
+      "paired_runs": 48,
+      "judged_runs": 48,
+      "missing_or_failed_judgments": [],
+      "group_mean_scores": {
+        "baseline": {
+          "relevance": 3.0417,
+          "faithfulness": 3.5833,
+          "attribution": 4.4167,
+          "time": 4.8333,
+          "limitations": 4.0208,
+          "readability": 3.875
+        },
+        "candidate": {
+          "relevance": 3.4167,
+          "faithfulness": 4.4792,
+          "attribution": 4.5,
+          "time": 4.875,
+          "limitations": 4.5625,
+          "readability": 4.0833
+        }
+      },
+      "group_mean_score_deltas": {
+        "relevance": 0.375,
+        "faithfulness": 0.8958,
+        "attribution": 0.0833,
+        "time": 0.0417,
+        "limitations": 0.5417,
+        "readability": 0.2083
+      },
+      "judge_flagged_critical_events": {
+        "baseline": 29,
+        "candidate": 8
+      },
+      "private_report_sha256": {
+        "answers-baseline-holdout": "08935138ec37a695cbdacd8786824b374fb0846fe3789d6ca0cfb3843dd8f642",
+        "answers-source-only-holdout": "d8038f587906db7ce3a733fa7ff01596209e836c2bf3428db1ebcacb31ef5800",
+        "judgments-source-only-holdout": "a14b58a6cd51de4d7f2a174e925233552d8b86f2b8616983546f0893eda597fb"
+      }
+    },
+    "fresh_release": {
+      "fixture": "tests/fixtures/evidence-release-holdout.json",
+      "fixture_sha256": "bc5eed7d121a8228ea5885c9aed9eaaf7501738faacd95a87595385457957ae0",
+      "query_vector_sha256": "a227449bc2c1aa2699a690ce1f970e160517e1e107f677a805d08642ea3223c8",
+      "generation": {
+        "baseline": {
+          "runs": 48,
+          "completed": 43,
+          "failures": [
+            {
+              "id": "release-automation-1",
+              "repeat": 1,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "release-automation-2",
+              "repeat": 0,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "release-event-notes-2",
+              "repeat": 2,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "release-marketplace-images-1",
+              "repeat": 1,
+              "error": "invalid_answer"
+            },
+            {
+              "id": "release-summary-kind-2",
+              "repeat": 0,
+              "error": "invalid_answer"
+            }
+          ],
+          "expected_status_mismatches": [
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 1,
+              "status": "clarify"
+            },
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 2,
+              "status": "clarify"
+            }
+          ],
+          "median_local_seconds": 6.018
+        },
+        "candidate": {
+          "runs": 48,
+          "completed": 47,
+          "failures": [
+            {
+              "id": "release-event-notes-1",
+              "repeat": 2,
+              "error": "invalid_answer"
+            }
+          ],
+          "expected_status_mismatches": [
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 0,
+              "status": "clarify"
+            },
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 1,
+              "status": "unsupported"
+            },
+            {
+              "id": "release-work-leverage-1",
+              "repeat": 2,
+              "status": "clarify"
+            }
+          ],
+          "median_local_seconds": 5.839
+        }
+      },
+      "paired_runs": 48,
+      "judged_runs": 42,
+      "missing_or_failed_judgments": [
+        {
+          "id": "release-automation-1",
+          "repeat": 1,
+          "error": "generation_failed"
+        },
+        {
+          "id": "release-automation-2",
+          "repeat": 0,
+          "error": "generation_failed"
+        },
+        {
+          "id": "release-event-notes-1",
+          "repeat": 2,
+          "error": "generation_failed"
+        },
+        {
+          "id": "release-event-notes-2",
+          "repeat": 2,
+          "error": "generation_failed"
+        },
+        {
+          "id": "release-marketplace-images-1",
+          "repeat": 1,
+          "error": "generation_failed"
+        },
+        {
+          "id": "release-summary-kind-2",
+          "repeat": 0,
+          "error": "generation_failed"
+        }
+      ],
+      "group_mean_scores": {
+        "baseline": {
+          "relevance": 3.675,
+          "faithfulness": 3.2729,
+          "attribution": 4.2667,
+          "time": 4.7,
+          "limitations": 3.6292,
+          "readability": 4.2562
+        },
+        "candidate": {
+          "relevance": 3.9208,
+          "faithfulness": 4.1375,
+          "attribution": 4.35,
+          "time": 4.975,
+          "limitations": 4.5812,
+          "readability": 4.2562
+        }
+      },
+      "group_mean_score_deltas": {
+        "relevance": 0.2458,
+        "faithfulness": 0.8646,
+        "attribution": 0.0833,
+        "time": 0.275,
+        "limitations": 0.9521,
+        "readability": 0.0
+      },
+      "judge_flagged_critical_events": {
+        "baseline": 40,
+        "candidate": 19
+      },
+      "private_report_sha256": {
+        "answers-fresh-baseline": "a892422fa2edae8227e93455879ed5bb67831ffd895c6f16af99879c1dc69320",
+        "answers-fresh-candidate": "ebb7705309953fec21f22e5d79aa76980ab00689ebc0c57c36ec2051ae0174fd",
+        "judgments-fresh": "babb4c6abfb4ef62a82e4465f2912e483329bda3ca7ad20556a852fc6b762f63"
+      }
+    }
+  },
+  "totals": {
+    "questions": 76,
+    "groups": 38,
+    "planned_answer_runs_per_version": 228,
+    "generation": {
+      "baseline": {
+        "runs": 228,
+        "completed": 222,
+        "failures": 6,
+        "median_local_seconds": 5.628
+      },
+      "candidate": {
+        "runs": 228,
+        "completed": 224,
+        "failures": 4,
+        "median_local_seconds": 5.678
+      }
+    },
+    "judged_pairs": 218,
+    "group_mean_score_deltas": {
+      "relevance": 0.1544,
+      "faithfulness": 0.6689,
+      "attribution": 0.1368,
+      "time": 0.0974,
+      "limitations": 0.5741,
+      "readability": -0.0211
+    },
+    "judge_flagged_critical_events": {
+      "baseline": 120,
+      "candidate": 46
+    }
+  }
+}

@@ -249,7 +249,7 @@ def answer_payload(model: str, request: dict, passages: list[Passage]) -> dict:
         "model": model, "stream": model in {"grok-4.5", "deepseek-v4-flash"}, "temperature": .35, "max_tokens": 4000,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps({**request, "sources": [model_evidence(passage) for passage in passages]}, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps({**{key: value for key, value in request.items() if key != "reasoning_cards"}, "sources": [model_evidence(passage) for passage in passages]}, ensure_ascii=False)},
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "public_context_answer", "strict": True, "schema": strict_schema()}},
     }

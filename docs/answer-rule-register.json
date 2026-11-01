@@ -142,7 +142,7 @@
       "topic": "判断卡导航非证据",
       "criterion": "faithfulness",
       "type": "boundary",
-      "action": "keep"
+      "action": "server-navigation-only"
     },
     {
       "id": "P21",
@@ -604,7 +604,7 @@
       "topic": "卡片非证据",
       "criterion": "faithfulness",
       "type": "boundary",
-      "action": "centralize"
+      "action": "exclude-card-claims-from-model-input"
     },
     {
       "id": "K2",

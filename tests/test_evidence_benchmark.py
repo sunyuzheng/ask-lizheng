@@ -53,6 +53,16 @@ def test_paraphrase_group_cannot_cross_dev_holdout(tmp_path):
         bench.load_fixture(path)
 
 
+def test_release_questions_use_new_gold_files_and_keep_quotation_budgets():
+    root = Path(__file__).resolve().parents[1]
+    original = bench.load_fixture(root / "tests/fixtures/evidence-benchmark.json")
+    release = bench.load_fixture(root / "tests/fixtures/evidence-release-holdout.json")
+    assert len(release["cases"]) == 16 and len({c["group"] for c in release["cases"]}) == 8
+    assert {r["path"] for r in original["refs"].values()}.isdisjoint(r["path"] for r in release["refs"].values())
+    assert all(len(r.get("context", "")) + sum(map(len, r["quotes"])) <= 450
+               for f in (original, release) for r in f["refs"].values())
+
+
 def test_implementation_modules_are_isolated_even_in_one_process(tmp_path):
     roots = []
     for marker in ("before", "after"):
@@ -91,6 +101,63 @@ def test_missing_cache_never_calls_embeddings_and_refreshed_vectors_are_shared(t
     cache.write_text(json.dumps(value))
     with pytest.raises(ValueError, match="another embedding"):
         asyncio.run(bench.vectors(impl, cases, cache))
+
+
+def test_public_vector_seed_is_an_exact_projection_of_the_two_public_fixtures():
+    root = Path(__file__).resolve().parents[1]
+    seed = json.loads(bench.PUBLIC_VECTOR_SEED.read_text())
+    assert set(seed) == {"schema_version", "model", "dimensions", "queries"}
+    assert seed["schema_version"] == 1 and seed["model"] == semantic.EMBEDDING_MODEL
+    assert seed["dimensions"] == semantic.DIMENSIONS
+    cases = [c for filename in ("evidence-benchmark.json", "evidence-release-holdout.json")
+             for c in bench.load_fixture(root / "tests/fixtures" / filename)["cases"]]
+    queries = {bench.digest(bench.semantic_query(c, semantic).encode()): bench.semantic_query(c, semantic) for c in cases}
+    assert len(cases) == len(queries) == len(seed["queries"]) == 76
+    assert set(queries) == set(seed["queries"])
+    for key, query in queries.items():
+        row = seed["queries"][key]
+        assert set(row) == {"query", "vector"} and row["query"] == query
+        assert len(bench.decode(row["vector"], seed["dimensions"])) == semantic.DIMENSIONS
+
+
+def test_missing_default_cache_reads_seed_without_writing_and_custom_missing_still_fails(tmp_path, monkeypatch):
+    cache, seed_path = tmp_path / ".local/default.json", tmp_path / "seed.json"
+    monkeypatch.setattr(bench, "DEFAULT_CACHE", cache)
+    monkeypatch.setattr(bench, "PUBLIC_VECTOR_SEED", seed_path)
+    row = case()
+    query = bench.semantic_query(row, semantic)
+    value = array("f", [1.0] + [0.0] * (semantic.DIMENSIONS - 1))
+    seed = {"schema_version": 1, "model": semantic.EMBEDDING_MODEL, "dimensions": semantic.DIMENSIONS,
+            "queries": {bench.digest(query.encode()): {"query": query, "vector": bench.encode(value)}}}
+    seed_path.write_text(json.dumps(seed))
+    original = seed_path.read_bytes()
+    result, _ = asyncio.run(bench.vectors(SimpleNamespace(semantic=semantic), [row], cache))
+    assert result[row["id"]] == value and not cache.exists() and seed_path.read_bytes() == original
+    with pytest.raises(ValueError, match="Missing cached"):
+        asyncio.run(bench.vectors(SimpleNamespace(semantic=semantic), [row], tmp_path / "custom-missing.json"))
+
+
+def test_refresh_from_seed_writes_only_private_cache_and_never_adds_seed_queries(tmp_path, monkeypatch):
+    cache, seed_path = tmp_path / ".local/default.json", tmp_path / "seed.json"
+    monkeypatch.setattr(bench, "DEFAULT_CACHE", cache)
+    monkeypatch.setattr(bench, "PUBLIC_VECTOR_SEED", seed_path)
+    first, second = case("first"), {**case("second"), "question": "另一个公开合成问题"}
+    query = bench.semantic_query(first, semantic)
+    value = array("f", [1.0] + [0.0] * (semantic.DIMENSIONS - 1))
+    seed_path.write_text(json.dumps({"schema_version": 1, "model": semantic.EMBEDDING_MODEL, "dimensions": semantic.DIMENSIONS,
+                                    "queries": {bench.digest(query.encode()): {"query": query, "vector": bench.encode(value)}}}))
+    original = seed_path.read_bytes()
+    calls = []
+    async def embed(client, token, texts, timeout):
+        calls.append(texts)
+        return [value for _ in texts], 1
+    fake = SimpleNamespace(**{name: getattr(semantic, name) for name in
+                           ("EMBEDDING_MODEL", "DIMENSIONS", "MAX_INPUT_BYTES", "MAX_BATCH", "_byte_windows")},
+                           request_embeddings=embed)
+    result, _ = asyncio.run(bench.vectors(SimpleNamespace(semantic=fake), [first, second], cache, True, object(), "test-token"))
+    assert set(result) == {"first", "second"} and calls == [[bench.semantic_query(second, semantic)]]
+    assert len(json.loads(cache.read_text())["queries"]) == 2
+    assert cache.stat().st_mode & 0o777 == 0o600 and seed_path.read_bytes() == original
 
 
 def test_path_hit_and_hidden_document_text_do_not_count_as_model_evidence():
