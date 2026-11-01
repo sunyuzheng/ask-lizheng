@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import tempfile
 import zlib
 from array import array
@@ -128,6 +129,9 @@ def _write(connection: sqlite3.Connection, rows, meta: dict) -> None:
 class Store:
     def __init__(self, connection: sqlite3.Connection):
         self.connection = connection
+        # check_same_thread=False permits access, but execute/fetch and the
+        # statement cache must still be serialized on one Python connection.
+        self._read_lock = threading.RLock()
         self.connection.execute("PRAGMA cache_size=-4096")  # at most 4 MB of pages held by SQLite
         self._cache: OrderedDict[str, tuple[array, array, array]] = OrderedDict()
 
@@ -137,36 +141,52 @@ class Store:
         return cls(connection)
 
     def meta(self, key: str, default=None):
-        row = self.connection.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        with self._read_lock:
+            row = self.connection.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return json.loads(row[0]) if row else default
 
     def briefs(self) -> list:
         return self.meta("briefs", [])
 
     def fields(self, i: int) -> dict:
-        row = self.connection.execute("SELECT data FROM docs WHERE i = ?", (i,)).fetchone()
+        with self._read_lock:
+            row = self.connection.execute("SELECT data FROM docs WHERE i = ?", (i,)).fetchone()
         if row is None:
             raise IndexError(i)
         return json.loads(zlib.decompress(row[0]))
 
     def source_fields(self, source_id: str):
-        for i, data in self.connection.execute("SELECT i,data FROM docs WHERE source_id=? ORDER BY i", (source_id,)):
+        with self._read_lock:
+            rows = self.connection.execute("SELECT i,data FROM docs WHERE source_id=? ORDER BY i", (source_id,)).fetchall()
+        for i, data in rows:
             yield i, json.loads(zlib.decompress(data))
 
     def all_fields(self):
-        for (data,) in self.connection.execute("SELECT data FROM docs ORDER BY i"):
-            yield json.loads(zlib.decompress(data))
+        with self._read_lock:
+            cursor = self.connection.execute("SELECT data FROM docs ORDER BY i")
+        while True:
+            with self._read_lock:
+                rows = cursor.fetchmany(32)
+            if not rows: break
+            for (data,) in rows:
+                yield json.loads(zlib.decompress(data))
 
     def find(self, path: str, document_id: str) -> int | None:
-        row = self.connection.execute("SELECT i FROM docs WHERE path = ? AND id = ? ORDER BY i LIMIT 1", (path, document_id)).fetchone()
+        with self._read_lock:
+            row = self.connection.execute("SELECT i FROM docs WHERE path = ? AND id = ? ORDER BY i LIMIT 1", (path, document_id)).fetchone()
         return row[0] if row else None
 
     def first_with_source(self, source_id: str) -> int | None:
-        row = self.connection.execute("SELECT i FROM docs WHERE source_id = ? ORDER BY i LIMIT 1", (source_id,)).fetchone()
+        with self._read_lock:
+            row = self.connection.execute("SELECT i FROM docs WHERE source_id = ? ORDER BY i LIMIT 1", (source_id,)).fetchone()
         return row[0] if row else None
 
     def postings(self, term: str) -> tuple[array, array, array]:
         """The passages whose body contains the term (ascending), how often, and those with it in the title."""
+        with self._read_lock:
+            return self._postings(term)
+
+    def _postings(self, term: str) -> tuple[array, array, array]:
         cached = self._cache.get(term)
         if cached is not None:
             self._cache.move_to_end(term)

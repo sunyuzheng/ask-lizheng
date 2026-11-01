@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .answers import BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
 from .query_context import uses_previous_question
+from .answer_contract import VERSION as ANSWER_CONTRACT_VERSION, engine_fingerprint
 from .retrieval import ContextIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
@@ -282,6 +283,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         ready = bool(os.getenv("AI_BUILDER_TOKEN"))
         model = os.getenv("AI_MODEL", DEFAULT_MODEL)
         return {**application.state.index.metadata(), "model_ready": ready, "semantic_ready": application.state.semantic.ready,
+                "answer_contract_version": ANSWER_CONTRACT_VERSION, "answer_engine_sha256": engine_fingerprint(),
                 "model": model, "reasoning_effort": model_options(model).get("reasoning_effort"), "mode": "live" if ready else "search-only",
                 # Writes the answer when the model has written nothing in time (answers.BACKUP_MODELS).
                 "backup_model": BACKUP_MODELS.get(model),

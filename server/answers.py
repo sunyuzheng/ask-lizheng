@@ -123,8 +123,6 @@ def completed_sections(content: str, passages: list[Passage]) -> list[AnswerSect
                         partial = ModelAnswer(status="answered", summary="回答仍在生成。", sections=[section], followups=[], clarifying_questions=[])
                         normalize_source_bindings(partial, passages)
                         validate_answer(partial, passages)
-                        if misattributed(partial, passages):
-                            return sections
                     except (ValueError, TypeError):
                         return sections
                     sections.append(section)
@@ -319,12 +317,6 @@ async def answer_with(client: httpx.AsyncClient, token: str, model: str, request
                 raise InvalidAnswer("输出不是完整、有效且符合 schema 的 JSON；请检查所有字段及数量和长度限制。") from None
             normalize_source_bindings(answer, passages)
             validate_answer(answer, passages)
-            # Speaker attribution is an evidence boundary on every attempt.
-            if sentences := misattributed(answer, passages):
-                if attempt or deadline - time.monotonic() <= REWRITE_SECONDS:
-                    raise ProviderFailure("invalid_answer")
-                raise InvalidAnswer("有句子将未确认的发言归给了具体人物：" + "；".join(f"「{item[:80]}」" for item in sentences[:2])
-                                    + "。节目参与者不等于片段说话人。只将明确归属的发言写成该人的观点；说话人未确认时介绍讨论内容，不指定是谁说的。推荐理由与后续问题也按此处理。其余内容保持不变。")
             return answer
         except InvalidAnswer as exc:
             if not attempt:
@@ -408,8 +400,6 @@ def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
 
 # Sources that carry 立正's own view: his published writing and his solo talks.
 OWN_VIEW_ORIGINS = frozenset({"yuzheng-published-text", "yuzheng-spoken-source"})
-# With less time left, source-number wording can fall back; speaker misattribution cannot.
-REWRITE_SECONDS = 40
 
 
 def host_names(passages: list[Passage]) -> list[str]:
@@ -429,7 +419,12 @@ def attribution_fields(answer: ModelAnswer, passages: list[Passage]) -> list[tup
 
 
 def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
-    """Reject named claims without a corresponding author or fragment speaker."""
+    """Legacy OFFLINE diagnostic; semantic regex flags must never gate production.
+
+    In particular it misreads denials and clearly attributed quotations inside
+    authored articles. The common model contract and semantic eval own judgment;
+    the server owns immutable source labels, source IDs and snapshot bindings.
+    """
     evidence = {passage.source["id"]: passage.evidence for passage in passages}
     from .dialogue_evidence import supports_speaker
     non_stance_acts = {"question", "introduction", "acknowledgement", "joke", "reported-other"}

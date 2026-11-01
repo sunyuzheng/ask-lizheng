@@ -6,9 +6,19 @@ Pydantic schema. These criteria describe outcomes, not a claim that validators p
 from __future__ import annotations
 
 import json
+import hashlib
+from functools import lru_cache
+from pathlib import Path
 
-VERSION = "2026-11-02.1"
+VERSION = "2026-11-01.2"
 GOAL = "根据可核对的公开原文，帮助读者理解问题、作有条件的应用判断，或找到值得读的资料。"
+
+
+@lru_cache(maxsize=1)
+def engine_fingerprint() -> str:
+    """Same code identity as offline evaluation, independent of deployment-provider labels."""
+    root = Path(__file__).resolve().parent
+    return hashlib.sha256(b"".join(p.name.encode() + b"\0" + p.read_bytes() for p in sorted(root.glob("*.py")))).hexdigest()
 
 # The IDs also own the offline rubric. 'server' names only mechanical coverage, not full proof.
 CRITERIA = {
@@ -22,7 +32,7 @@ CRITERIA = {
     },
     "attribution": {
         "instruction": "按片段或连续对话中逐段的归属标注核对谁在说话，并区分作者、发布者、转述对象。嘉宾的专业判断可以用于解释问题，必须归给嘉宾；不需要立正认可才有用。问立正怎么看时，先明确他本人表达了什么，再用相关嘉宾观点解释背景、分歧或形成判断的过程。提问、玩笑、假设、转述不自动证明主张；发布、邀请、客套附和也不证明赞同。只有原文中立正针对具体判断明确认可，才说他认可这项判断，并保留他的限定与不同意见；不能把一次认可扩大为认可嘉宾全部观点。连续对话中拿不准的关系保持未确认。AI 翻译、整理和同源副本不增加独立证据。归属标注只说明候选资格，仍须读具体句子。",
-        "server": ["attribution_guard"], "judge": True,
+        "server": [], "judge": True,
     },
     "time": {
         "instruction": "保留原文的时间和适用范围。旧材料不能证明现在的职位、价格、权益或立场；相关来源有变化或冲突时，把差异说明白。",
@@ -105,6 +115,10 @@ def evidence_annotation(passage) -> dict:
     elif e.get("dialogue_units"):
         basis = "连续原始对话；每段分别标注说话人、归属方法与言语行为"
         notes.append("按同一发表版本的字幕顺序保留相邻发言；剪辑版可能有剪接。只按眼前各段的归属使用，未确认的不猜。认可、追问、反对及其范围须读上下文判断，不能由节目目录或相邻位置推出。")
+        methods = {u.get("speaker_status") for u in e["dialogue_units"]}
+        if "audio-voice-match" in methods: notes.append("标签“声纹”是自动声音匹配，非人工逐句听校。")
+        if "reviewed-source-attribution" in methods: notes.append("标签“文字”是指定单元的来源归属核对，非全文听校。")
+        if any(u.get("speaker_id") == "unknown" for u in e["dialogue_units"]): notes.append("“待定”表示该段说话人未确认，各段不视为同一个匿名人。")
     elif sid and sid != "unknown" and status in {"audio-voice-match", "reviewed-source-attribution"}:
         basis = f"片段说话人：{speaker or sid}；性质：{act or '未标明'}"
         notes.append("声纹自动比对，非人工逐句听校" if status == "audio-voice-match" else "指定片段的来源归属已核对，非全文逐句听校")

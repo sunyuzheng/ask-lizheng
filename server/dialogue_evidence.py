@@ -41,7 +41,7 @@ def window(units, terms, weights, budget=2400, *, center_time=None):
     return units[start:end]
 
 
-def render(units):
+def render(units, *, compact=False):
     groups = []
     for u in units:
         known = u.get("speaker_status") in ATTRIBUTED and u.get("speaker_id") not in {None, "", "unknown"}
@@ -53,5 +53,10 @@ def render(units):
             groups[-1][2].append(u["text"])
         else:
             groups.append((key, int(u["start_seconds"]), [u["text"]]))
-    return "\n".join(f"[{s // 3600:02}:{s % 3600 // 60:02}:{s % 60:02}] {key[0]}（{key[1]}；{key[2]}）：" + " ".join(text)
+    def label(key):
+        if not compact: return f"{key[0]}（{key[1]}；{key[2]}）"
+        if key[1] == "未确认": return "待定"
+        method = "声纹" if key[1] == "声纹自动比对" else "文字"
+        return f"{key[0]}/{method}/{key[2]}"
+    return "\n".join(f"[{s // 3600:02}:{s % 3600 // 60:02}:{s % 60:02}] {label(key)}：" + " ".join(text)
                      for key, s, text in groups)

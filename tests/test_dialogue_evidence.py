@@ -33,6 +33,17 @@ def test_window_is_contiguous_balanced_and_does_not_join_distant_agreement():
     assert sum(len(u["text"]) for u in selected) <= 300
 
 
+def test_compact_model_labels_preserve_every_word_order_and_uncertain_speaker():
+    units=[unit(1,"guest:alpha","First exact words."),unit(2,"unknown","Uncertain words.",status="unresolved"),
+           unit(3,"yuzheng","A qualified response.",status="audio-voice-match")]
+    full,compact=render(units),render(units,compact=True)
+    for value in (full,compact):
+        assert all(u["text"] in value for u in units)
+        assert [value.index(u["text"]) for u in units] == sorted(value.index(u["text"]) for u in units)
+    assert "待定" in compact and "yuzheng/声纹/陈述" in compact
+    assert len(compact)<len(full)
+
+
 @pytest.mark.parametrize("act", ["question","acknowledgement","joke","reported-other","introduction"])
 def test_host_attribution_guard_does_not_upgrade_a_question_or_polite_response(act):
     a = answers.ModelAnswer.model_validate({"status":"answered","summary":"立正认为这个条件成立。[S1]",

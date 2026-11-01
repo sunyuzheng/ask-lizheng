@@ -751,7 +751,7 @@ class ContextIndex:
             if getattr(doc, "dialogue_units", None):
                 from .dialogue_evidence import render, window
                 units = window(doc.dialogue_units, excerpt_terms, excerpt_weights, center_time=target_seconds)
-                evidence.update(dialogue_units=units, excerpt=render(units))
+                evidence.update(dialogue_units=units, excerpt=render(units, compact=True))
                 shown = window(units, excerpt_terms, excerpt_weights, budget=400, center_time=target_seconds)
                 source["excerpt"] = plain_text(render(shown))[:500]
                 source["fragment_id"] = f"{doc.source_id}#{units[0]['id']}-{units[-1]['id']}"

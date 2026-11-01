@@ -30,6 +30,12 @@ def test_complete_example_validates_and_all_judged_outcomes_have_one_rubric():
     assert set(answers.strict_schema()["required"]) == set(answer.model_dump())
 
 
+def test_public_engine_identity_matches_the_offline_evaluation_code_hash():
+    from pathlib import Path
+    from scripts.evidence_eval import implementation_hash
+    assert contract.engine_fingerprint() == implementation_hash(Path(__file__).resolve().parents[1])
+
+
 def test_audit_register_covers_all97_rules_without_creating_extra_criteria():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]

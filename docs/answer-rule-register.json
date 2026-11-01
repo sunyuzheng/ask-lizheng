@@ -548,14 +548,14 @@
       "topic": "立正归属检查",
       "criterion": "attribution",
       "type": "heuristic",
-      "action": "visible-unit-attribution-guard"
+      "action": "offline-diagnostic-not-production-semantic-gate"
     },
     {
       "id": "V7",
       "topic": "嘉宾归属检查",
       "criterion": "attribution",
       "type": "heuristic",
-      "action": "visible-unit-attribution-guard"
+      "action": "offline-diagnostic-not-production-semantic-gate"
     },
     {
       "id": "V8",

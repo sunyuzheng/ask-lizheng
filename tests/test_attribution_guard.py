@@ -1,4 +1,4 @@
-"""Synthetic provider regressions for fail-closed source attribution."""
+"""Structural production checks and explicitly offline attribution diagnostics."""
 from __future__ import annotations
 
 import asyncio
@@ -40,48 +40,38 @@ def clock(monkeypatch):
     return now
 
 
-def test_both_attempts_misattributed_fail_closed(passages, clock):
+@pytest.mark.parametrize("denial", ["这是一位嘉宾的观点，不是立正本人的判断。", "这里明确区分了嘉宾的判断与立正的观点，没有替他表示赞同。"])
+def test_semantic_regex_cannot_reject_a_correct_attribution_denial(passages, clock, monkeypatch, denial):
     sid = guest_id(passages)
     calls = []
-    def provider(request):
-        payload = json.loads(request.content)
-        calls.append(payload)
-        if len(calls) == 2:
-            assert "未确认的发言" in payload["messages"][-1]["content"]
-        return response(answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。"))
-    with pytest.raises(answers.ProviderFailure) as exc:
-        generate(provider, passages)
-    assert exc.value.code == "invalid_answer"
-    assert len(calls) == 2
-
-
-def test_first_attempt_can_be_repaired_once(passages, clock):
-    sid = guest_id(passages)
-    calls = []
-    def provider(request):
-        payload = json.loads(request.content)
-        calls.append(payload)
-        if len(calls) == 1:
-            return response(answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。"))
-        assert "未确认的发言" in payload["messages"][-1]["content"]
-        return response(answer_for(sid, f"一位作者提到，先评估生活约束 [{sid}]。"))
-    result = generate(provider, passages)
-    assert "立正" not in result.sections[0].body
-    assert len(calls) == 2
-
-
-@pytest.mark.parametrize("remaining", [40.0, 1.0])
-def test_insufficient_repair_budget_rejects_without_retry(passages, clock, remaining):
-    sid = guest_id(passages)
-    calls = []
+    def forbidden(*args): raise AssertionError("semantic regex reached production")
+    monkeypatch.setattr(answers, "misattributed", forbidden)
     def provider(request):
         calls.append(request)
-        clock[0] = 180.0 - remaining
-        return response(answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。"))
-    with pytest.raises(answers.ProviderFailure) as exc:
-        generate(provider, passages)
-    assert exc.value.code == "invalid_answer"
-    assert len(calls) == 1
+        return response(answer_for(sid, denial + f"[{sid}]"))
+    result=generate(provider,passages)
+    assert result.sections[0].body == denial + f"[{sid}]"
+    assert len(calls)==1
+
+
+def test_nonexistent_source_still_requires_structural_repair(passages, clock):
+    calls=[];sid=passages[0].source["id"]
+    def provider(request):
+        calls.append(request)
+        return response(answer_for("S99" if len(calls)==1 else sid,"结构检查。"))
+    result=generate(provider,passages)
+    assert result.sections[0].source_ids == [sid]
+    assert len(calls)==2
+
+
+@pytest.mark.parametrize("remaining", [40.0,1.0])
+def test_valid_denial_does_not_spend_remaining_budget_on_a_guessy_rewrite(passages,clock,remaining):
+    sid=guest_id(passages);calls=[]
+    def provider(request):
+        calls.append(request);clock[0]=180.0-remaining
+        return response(answer_for(sid,f"这是嘉宾的论点，不是立正本人的判断。[{sid}]"))
+    assert generate(provider,passages).status == "answered"
+    assert len(calls)==1
 
 
 @pytest.mark.parametrize("origin", ["yuzheng-published-text", "yuzheng-spoken-source"])
@@ -98,18 +88,16 @@ def test_own_source_named_answer_passes_without_repair(passages, clock, origin):
     assert len(calls) == 1
 
 
-def test_misattributed_stream_section_is_never_exposed(passages):
-    sid = guest_id(passages)
-    answer = answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。")
-    assert answers.completed_sections(answer.model_dump_json(), passages) == []
+def test_correct_denial_streams_without_semantic_regex(passages,monkeypatch):
+    sid=guest_id(passages);answer=answer_for(sid,f"这是嘉宾观点，不是立正本人的判断。[{sid}]")
+    def forbidden(*args): raise AssertionError("semantic regex reached partial production validation")
+    monkeypatch.setattr(answers,"misattributed",forbidden)
+    assert answers.completed_sections(answer.model_dump_json(),passages) == answer.sections
 
 
-def test_stream_keeps_prior_valid_section_but_not_misattributed_section(passages):
-    sid = guest_id(passages)
-    answer = answer_for(sid, f"一位作者提到，先评估生活约束 [{sid}]。")
-    wrong = answer_for(sid, f"立正提到，先评估生活约束 [{sid}]。").sections[0]
-    answer.sections.append(wrong)
-    assert answers.completed_sections(answer.model_dump_json(), passages) == [answer.sections[0]]
+def test_stream_still_blocks_an_unknown_source_binding(passages):
+    answer=answer_for("S99","不存在的出处。")
+    assert answers.completed_sections(answer.model_dump_json(),passages) == []
 
 
 @pytest.mark.parametrize("field", ["body", "followup", "reason", "indirect-followup"])

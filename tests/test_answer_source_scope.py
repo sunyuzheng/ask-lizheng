@@ -40,7 +40,7 @@ def test_guest_and_host_speech_can_share_context_without_sharing_ownership(conte
     assert any(supports_speaker(p.evidence,"guest:synthetic") for p in contextual)
     assert any(supports_speaker(p.evidence,"yuzheng") for p in contextual)
     for p in contextual:
-        assert "说话人待定" in p.evidence["excerpt"]
+        assert "待定" in p.evidence["excerpt"]
         assert "提问" in p.evidence["excerpt"]
         assert len(p.source["excerpt"]) <= 500
         assert p.source["speaker_id"] == "unknown"

@@ -447,7 +447,7 @@ def test_invalid_source_gets_one_targeted_repair(context_pack, monkeypatch):
         assert len(attempts) == 2
 
 
-def test_naming_yuzheng_for_another_speaker_gets_one_rewrite(context_pack, monkeypatch):
+def test_attribution_denial_is_not_rewritten_by_a_semantic_regex(context_pack, monkeypatch):
     monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
     attempts = []
     def provider(request):
@@ -455,16 +455,13 @@ def test_naming_yuzheng_for_another_speaker_gets_one_rewrite(context_pack, monke
         evidence = json.loads(body["messages"][1]["content"])["sources"]
         guest = next(item["id"] for item in evidence if item.get("author") == "Guest Author")
         attempts.append(body)
-        if len(attempts) == 1:
-            answer = answer_for(guest, f"立正提到，职业选择要评估生活约束 [{guest}]。")
-        else:
-            assert "未确认的发言" in body["messages"][-1]["content"]
-            answer = answer_for(guest, f"一位作者提到，职业选择要评估生活约束 [{guest}]。")
+        assert "明确认可" in body["messages"][0]["content"]
+        answer = answer_for(guest, f"这是一位作者的观点，不是立正本人的判断。[{guest}]")
         return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         result = events(client.post("/api/ask", json={"question": "职业选择要评估生活约束吗", "intent": "find"}))[-1][1]
-        assert result["status"] == "answered" and "立正" not in result["sections"][0]["body"]
-        assert len(attempts) == 2
+        assert result["status"] == "answered" and "不是立正本人的判断" in result["sections"][0]["body"]
+        assert len(attempts) == 1
 
 
 def test_a_second_naming_slip_keeps_the_answer(index):
