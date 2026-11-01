@@ -366,7 +366,7 @@ async def judge(args, token: str, client=None) -> dict:
             shown = {label: views[side][0] for label, side in order.items()}
             row["source_mapping"] = {side: views[side][1] for side in values}
             content = {"question": case["question"], "context": case.get("context", ""), "history": case.get("history", []),
-                       "intent": case["intent"], "expect": case["expect"], "good": case["good"],
+                       "intent": case["intent"], "expect": case["expect"], "good": case.get("good", ""),
                        "independent_gold": gold_evidence(fixture, case, ROOT / "data/context"), "answers": shown}
             # judge_evidence only emits the original excerpts with corrected labels;
             # full messages and mapping audit remain private and out of the blind input.

@@ -54,10 +54,16 @@ def test_judge_requires_the_common_rubric_and_concrete_critical_errors(monkeypat
         bench.validate_judgment(value)
 
 
-def test_paired_judge_sees_gold_and_actual_inputs_once_per_repeat(tmp_path, monkeypatch):
+@pytest.mark.parametrize("optional_guidance", [True, False])
+def test_paired_judge_sees_gold_and_actual_inputs_once_per_repeat(tmp_path, monkeypatch, optional_guidance):
     monkeypatch.setattr(bench, "ROOT", tmp_path)
     monkeypatch.setattr(bench, "rubric", lambda: {criterion: criterion for criterion in CRITERIA})
     gold = fixture(tmp_path / "data/context")
+    if not optional_guidance:
+        content = json.loads(gold.read_text())
+        for row in content["cases"]:
+            row.pop("good", None)
+        gold.write_text(json.dumps(content, ensure_ascii=False))
     output = tmp_path / ".local/judge.json"
     reports = {}
     for side in ("baseline", "candidate"):
