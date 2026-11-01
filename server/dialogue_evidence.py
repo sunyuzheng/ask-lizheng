@@ -7,6 +7,15 @@ ACT_LABELS = {"statement":"陈述", "question":"提问", "introduction":"介绍"
               "joke":"玩笑", "reported-other":"转述", "unclassified":"未分类"}
 
 
+def attributed_unit(unit):
+    return (unit.get("speaker_status") in ATTRIBUTED
+            and unit.get("speaker_id") not in {None, "", "unknown"})
+
+
+def has_attributed_statement(units):
+    return any(attributed_unit(u) and u.get("speech_act") == "statement" for u in units)
+
+
 def supports_speaker(evidence, speaker_id, *, stance=True):
     units = evidence.get("dialogue_units")
     if units:
@@ -41,18 +50,19 @@ def window(units, terms, weights, budget=2400, *, center_time=None):
     return units[start:end]
 
 
-def render(units, *, compact=False):
+def render(units, *, compact=False, attributed_only=False):
     groups = []
     for u in units:
-        known = u.get("speaker_status") in ATTRIBUTED and u.get("speaker_id") not in {None, "", "unknown"}
+        known = attributed_unit(u)
         name = (u.get("speaker_name") or u["speaker_id"]) if known else "说话人待定"
         method = "声纹自动比对" if u.get("speaker_status") == "audio-voice-match" else "来源文字归属已核对" if known else "未确认"
         act = u.get("speech_act", "未分类")
         key = (name, method, ACT_LABELS.get(act, act))
+        text = u["text"] if known or not attributed_only else "〔未确认发言；正文保留在原稿，此处不提供归属依据〕"
         if groups and groups[-1][0] == key:
-            groups[-1][2].append(u["text"])
+            if known or not attributed_only: groups[-1][2].append(text)
         else:
-            groups.append((key, int(u["start_seconds"]), [u["text"]]))
+            groups.append((key, int(u["start_seconds"]), [text]))
     def label(key):
         if not compact: return f"{key[0]}（{key[1]}；{key[2]}）"
         if key[1] == "未确认": return "待定"

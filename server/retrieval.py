@@ -21,6 +21,7 @@ from .names import NameIndex
 from .query_context import uses_previous_question
 from .semantic import MIN_SIMILARITY, embedding_segment
 from .store import SCHEMA as STORE_SCHEMA, Store, build as build_store
+from .dialogue_evidence import has_attributed_statement
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 # A timed line: "[hh:mm:ss](link)" where a transcript keeps its links, "[hh:mm:ss]" in structured
@@ -126,7 +127,7 @@ def is_answer_material(doc) -> bool:
     """May inform an answer; eligibility to represent a person's stance is narrower."""
     return has_body_text(doc) and (is_yuzheng_basis(doc) or
         (getattr(doc, "data_layer", "") == "raw" and
-         (bool(getattr(doc, "dialogue_units", None)) or
+         (has_attributed_statement(getattr(doc, "dialogue_units", []) or []) or
           (getattr(doc, "speaker_status", "") in ATTRIBUTED and getattr(doc, "speech_act", "") == "statement"))))
 
 
@@ -237,7 +238,7 @@ def searchable(doc) -> tuple[str, str]:
 
 def brief(doc) -> list:
     flags = ((FLAG_DISCOVERY if is_discovery(doc) else 0) | (FLAG_BODY if has_body_text(doc) else 0)
-             | (FLAG_DIALOGUE if getattr(doc, "dialogue_units", None) and doc.data_layer == "raw" else 0)
+             | (FLAG_DIALOGUE if has_attributed_statement(getattr(doc, "dialogue_units", []) or []) and doc.data_layer == "raw" else 0)
              | (FLAG_BASIS if is_yuzheng_basis(doc) else 0)
              | (FLAG_STATEMENT if (getattr(doc, "data_layer", "") == "raw" and getattr(doc, "speaker_status", "") in ATTRIBUTED
                                    and getattr(doc, "speech_act", "") == "statement" and has_body_text(doc)) else 0))
@@ -751,7 +752,7 @@ class ContextIndex:
             if getattr(doc, "dialogue_units", None):
                 from .dialogue_evidence import render, window
                 units = window(doc.dialogue_units, excerpt_terms, excerpt_weights, center_time=target_seconds)
-                evidence.update(dialogue_units=units, excerpt=render(units, compact=True))
+                evidence.update(dialogue_units=units, excerpt=render(units, compact=True, attributed_only=True))
                 shown = window(units, excerpt_terms, excerpt_weights, budget=400, center_time=target_seconds)
                 source["excerpt"] = plain_text(render(shown))[:500]
                 source["fragment_id"] = f"{doc.source_id}#{units[0]['id']}-{units[-1]['id']}"

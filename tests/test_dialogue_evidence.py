@@ -44,6 +44,17 @@ def test_compact_model_labels_preserve_every_word_order_and_uncertain_speaker():
     assert len(compact)<len(full)
 
 
+def test_model_window_withholds_unresolved_words_without_joining_the_known_turns():
+    units=[unit(1,"guest:alpha","A specific proposal."),
+           unit(2,"unknown","A secret endorsement.",status="unresolved"),
+           unit(3,"yuzheng","A question?","question")]
+    model=render(units,compact=True,attributed_only=True)
+    assert "A secret endorsement." not in model
+    assert "未确认发言" in model
+    assert model.index("A specific proposal.") < model.index("未确认发言") < model.index("A question?")
+    assert "A secret endorsement." in render(units)
+
+
 @pytest.mark.parametrize("act", ["question","acknowledgement","joke","reported-other","introduction"])
 def test_host_attribution_guard_does_not_upgrade_a_question_or_polite_response(act):
     a = answers.ModelAnswer.model_validate({"status":"answered","summary":"立正认为这个条件成立。[S1]",

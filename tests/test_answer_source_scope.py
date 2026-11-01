@@ -55,6 +55,18 @@ def test_own_question_stays_context_and_cannot_establish_own_view(context_pack):
     assert all(not supports_speaker(p.evidence,"yuzheng") for p in result)
 
 
+def test_unresolved_speech_is_discoverable_but_never_answer_evidence(context_pack):
+    p=dialogue(context_pack);data=json.loads(p.read_text())
+    for u in data["units"]:
+        u.update(speaker_id="unknown",speaker_name="",speaker_status="unresolved")
+    p.write_text(json.dumps(data,ensure_ascii=False));ix=ContextIndex(context_pack);ix.load()
+    assert not ix.retrieve("归属探针",intent="understand")
+    found=ix.retrieve("归属探针",intent="find")
+    assert found
+    assert all("这一段尚未确认说话人" not in p.evidence["excerpt"] for p in found)
+    assert any("这一段尚未确认说话人" in p.source["excerpt"] for p in found)
+
+
 def test_named_guest_without_own_speech_returns_programme_entry(context_pack):
     source_file(context_pack, "corpus/videos", "solo.md", {"id": "solo-own", "title": "合成自讲",
         "source_type": "video-transcript", "source_url": "https://example.org/solo",

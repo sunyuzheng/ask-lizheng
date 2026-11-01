@@ -10,7 +10,7 @@ import hashlib
 from functools import lru_cache
 from pathlib import Path
 
-VERSION = "2026-11-01.2"
+VERSION = "2026-11-01.3"
 GOAL = "根据可核对的公开原文，帮助读者理解问题、作有条件的应用判断，或找到值得读的资料。"
 
 
@@ -118,7 +118,7 @@ def evidence_annotation(passage) -> dict:
         methods = {u.get("speaker_status") for u in e["dialogue_units"]}
         if "audio-voice-match" in methods: notes.append("标签“声纹”是自动声音匹配，非人工逐句听校。")
         if "reviewed-source-attribution" in methods: notes.append("标签“文字”是指定单元的来源归属核对，非全文听校。")
-        if any(u.get("speaker_id") == "unknown" for u in e["dialogue_units"]): notes.append("“待定”表示该段说话人未确认，各段不视为同一个匿名人。")
+        if any(u.get("speaker_id") == "unknown" for u in e["dialogue_units"]): notes.append("“待定”位置的正文已留在原稿，不提供给回答模型；它标记对话中的缺口，各段不视为同一个匿名人。不能跨过缺口补写发言或赞同关系。")
     elif sid and sid != "unknown" and status in {"audio-voice-match", "reviewed-source-attribution"}:
         basis = f"片段说话人：{speaker or sid}；性质：{act or '未标明'}"
         notes.append("声纹自动比对，非人工逐句听校" if status == "audio-voice-match" else "指定片段的来源归属已核对，非全文逐句听校")
