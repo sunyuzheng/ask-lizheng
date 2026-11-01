@@ -72,4 +72,8 @@ python scripts/answer_benchmark.py judge --baseline .local/answers-baseline.json
 
 ## 生产发布
 
-待记录最终提交、容器门禁及只读线上验收。
+已发布代码提交 [f6f7b61](https://github.com/sunyuzheng/ask-lizheng/commit/f6f7b61a0f94ac149f679635c3f5225fc077d106)。[最终代码CI](https://github.com/sunyuzheng/ask-lizheng/actions/runs/41336222821)通过539项Python、21项Node、公开资料验证、前端/Docker构建；256MB容器2秒就绪，运行峰值110MB。
+
+Builder发布按固定线上配置执行，模型为DeepSeek V4 Flash、备用gpt-5，额度、记录与Ops开关保持启用。平台最终返回`HEALTHY`。2026-11-01T18:30:50+00:00 的只读验收通过：公开首页、后端health、后端meta、首页代理meta，以及8份来源的实际检索结果。资料commit为`7095f8d`，语义索引和模型均就绪，Ops启用且不保存处境原文。检索结果与本地最终代码逐字段一致，且与旧代码结果不同；没有提交公开测试提问。
+
+发布前后GitHub main均核对为完整`f6f7b61a0f94ac149f679635c3f5225fc077d106`。平台没有回传部署commit字段，不能以该字段单独证明镜像身份；分支核对、健康部署及新旧行为比对是本次实际拥有的验收证据。之后的提交仅补记本段与机器可读验收结果，不修改运行文件。

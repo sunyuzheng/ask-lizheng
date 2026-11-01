@@ -667,5 +667,26 @@
       "baseline": 120,
       "candidate": 46
     }
+  },
+  "production": {
+    "expected_code_commit": "f6f7b61a0f94ac149f679635c3f5225fc077d106",
+    "tested_server_fingerprint": "96227101f9a2ac75d744bad67d617ec89648e2831cc51c4422e521f87d28b81c",
+    "platform_status": "HEALTHY",
+    "platform_reported_deployment_commit": null,
+    "verified_at": "2026-11-01T18:30:50+00:00",
+    "ci_run": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41336222821",
+    "python_tests": 539,
+    "node_tests": 21,
+    "container_limit_mb": 256,
+    "container_peak_resident_mb": 110,
+    "context_commit": "7095f8de26f393966a36a5e2b9286084e1893000",
+    "model": "deepseek-v4-flash",
+    "backup_model": "gpt-5",
+    "public_site_status": 200,
+    "frontend_meta_status": 200,
+    "exact_search_comparisons": 1,
+    "search_differs_from_baseline": true,
+    "no_public_test_question_submitted": true,
+    "private_receipt_sha256": "0d8658aef6f89aa4359438edb6c89a8b208e1236fe0823135d2938c396accc47"
   }
 }
