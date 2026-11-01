@@ -25,6 +25,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from server.query_context import uses_previous_question
+from server.dialogue_evidence import ATTRIBUTED
 
 DEFAULT_FIXTURE = ROOT / "tests/fixtures/evidence-benchmark.json"
 DEFAULT_CACHE = ROOT / ".local/rules-revision-20261101/query-vectors.json"
@@ -232,15 +233,39 @@ def prepare_case(impl, index, semantic, case: dict, vector: array) -> dict:
             "retrieval_ms": round((time.perf_counter() - started) * 1000, 3)}
 
 
+def attributed_anchor(passage, quote: str, speaker_id: str | None = None, *, excerpt: str | None = None) -> bool:
+    """Literal visibility plus actual turn ownership, not a mixed window's outer speaker label."""
+    anchor = normalize(quote)
+    visible = passage.evidence.get("excerpt", "") if excerpt is None else excerpt
+    if anchor not in normalize(visible):
+        return False
+    if not speaker_id:
+        return True
+    units = passage.evidence.get("dialogue_units")
+    if not units:
+        return (passage.evidence.get("speaker_id") == speaker_id
+                and passage.evidence.get("speaker_status") in ATTRIBUTED)
+    spans, current = [], []
+    for unit in units:
+        if (unit.get("speaker_id") == speaker_id
+                and unit.get("speaker_status") in ATTRIBUTED):
+            current.append(unit["text"])
+        else:
+            if current: spans.append(" ".join(current))
+            current = []
+    if current: spans.append(" ".join(current))
+    return any(anchor in normalize(span) for span in spans)
+
+
 def evidence_metrics(impl, index, case: dict, refs: dict, prepared: dict) -> dict:
     passages = prepared["passages"]
     reference_rows = {}
     for ref_id in case["reference_ids"]:
         ref = refs[ref_id]
-        matching = [p for p in passages if p.evidence.get("source_path") == ref["path"]
-                    and (not ref.get("speaker_id") or p.evidence.get("speaker_id") == ref["speaker_id"])]
-        excerpts = [normalize(impl.answers.model_evidence(p).get("excerpt", "")) for p in matching]
-        hits = [any(normalize(quote) in excerpt for excerpt in excerpts) for quote in ref["quotes"]]
+        matching = [p for p in passages if p.evidence.get("source_path") == ref["path"]]
+        hits = [any(attributed_anchor(p, quote, ref.get("speaker_id"),
+                                     excerpt=impl.answers.model_evidence(p).get("excerpt", ""))
+                    for p in matching) for quote in ref["quotes"]]
         reference_rows[ref_id] = {"path_hit": any(p.evidence.get("source_path") == ref["path"] for p in passages),
                                   "anchor_hits": hits, "any_anchor_hit": any(hits), "all_anchors_hit": all(hits)}
     participants = index.participant_entities(index.retrieval_query(case["question"], case.get("history", [])))

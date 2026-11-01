@@ -96,6 +96,7 @@ def test_paired_judge_sees_gold_and_actual_inputs_once_per_repeat(tmp_path, monk
     for payload in captured:
         shown = json.loads(payload["messages"][1]["content"])
         assert set(shown["answers"]) == {"A", "B"}
+        assert all("evidence_state" not in v for v in shown["answers"].values())
         assert all("model_messages" not in v["actual_model_input"] for v in shown["answers"].values())
         assert all(v["actual_model_input"]["sources"] == v["answer"]["sources"] for v in shown["answers"].values())
         assert shown["independent_gold"][0]["anchors"] == ["乙的独立证据。"]

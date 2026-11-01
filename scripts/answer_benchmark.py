@@ -43,8 +43,7 @@ def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
         # Deterministic navigation/clarification has no answering-model input.
         # Its public source snapshots are the evidence actually displayed.
         return {"answer": copy.deepcopy(public), "actual_model_input": {
-                    "route": route, "sources": copy.deepcopy(public_sources)},
-                "evidence_state": run["evidence_state"]}, {
+                    "route": route, "sources": copy.deepcopy(public_sources)}}, {
                     "basis": "public_result_sources", "public_to_retrieval": {}, "unreferenced_to_retrieval": {}}
 
     actual = saved_input["sources"]
@@ -83,8 +82,7 @@ def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
             label = "U" + str(len(unused) + 1)
             unused[label] = original
         aligned.append({**copy.deepcopy(source), "id": label})
-    return {"answer": copy.deepcopy(public), "actual_model_input": {"route": route, "sources": aligned},
-            "evidence_state": run["evidence_state"]}, {
+    return {"answer": copy.deepcopy(public), "actual_model_input": {"route": route, "sources": aligned}}, {
                 "basis": "exact_saved_source_snapshot_identity", "public_to_retrieval": public_to_retrieval,
                 "unreferenced_to_retrieval": unused}
 

@@ -194,3 +194,27 @@ def test_group_weighting_and_pairing_do_not_count_paraphrases_as_independent():
 def test_corrupt_query_vectors_are_rejected(value):
     with pytest.raises(ValueError):
         bench.decode(bench.encode(value), 1)
+
+
+def test_mixed_window_anchor_uses_actual_cue_owner_and_delivered_text():
+    from types import SimpleNamespace
+    from scripts.evidence_eval import attributed_anchor
+    units=[{'speaker_id':'yuzheng','speaker_status':'audio-voice-match','text':'明确的目标原句。'},
+           {'speaker_id':'guest:alpha','speaker_status':'reviewed-source-attribution','text':'另一位的原句。'}]
+    passage=SimpleNamespace(evidence={'speaker_id':'unknown','excerpt':'明确的目标原句。另一位的原句。','dialogue_units':units})
+    assert attributed_anchor(passage,'明确的目标原句。','yuzheng')
+    assert not attributed_anchor(passage,'另一位的原句。','yuzheng')
+    units[0]['speaker_status']='unresolved'
+    assert not attributed_anchor(passage,'明确的目标原句。','yuzheng')
+    units[0]['speaker_status']='audio-voice-match';passage.evidence['excerpt']='没有提供目标正文。'
+    assert not attributed_anchor(passage,'明确的目标原句。','yuzheng')
+
+
+def test_anchor_never_joins_a_speakers_distant_turns():
+    from types import SimpleNamespace
+    from scripts.evidence_eval import attributed_anchor
+    passage=SimpleNamespace(evidence={'speaker_id':'unknown','excerpt':'首句尾句','dialogue_units':[
+        {'speaker_id':'yuzheng','speaker_status':'audio-voice-match','text':'首句'},
+        {'speaker_id':'guest:alpha','speaker_status':'audio-voice-match','text':'插入的另一位'},
+        {'speaker_id':'yuzheng','speaker_status':'audio-voice-match','text':'尾句'}]})
+    assert not attributed_anchor(passage,'首句尾句','yuzheng')
