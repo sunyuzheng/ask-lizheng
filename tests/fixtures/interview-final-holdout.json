@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+  "method": "Final code frozen at engine 8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c before any queries. Four public dialogue files chosen by fixed path hash seed interview-final-freeze-8298-v1, excluding every earlier gold file and every guest identity in those files; middle 25-unit windows must contain a confirmed guest statement. Questions and source-unit gold fixed before embedding, retrieval, generation or judging. No later code tuning on this set. Not a random production-traffic sample.",
+  "refs": {
+    "chase": {
+      "path": "corpus/dialogues/youtube-w0QB45tLDM8.json",
+      "sha256": "6feffbf8433524dab190a427acae2e7ccd0a0afad62e39fae27c43119bcfda31",
+      "unit_ids": [
+        "youtube-w0QB45tLDM8#cue-722",
+        "youtube-w0QB45tLDM8#cue-723",
+        "youtube-w0QB45tLDM8#cue-724",
+        "youtube-w0QB45tLDM8#cue-725",
+        "youtube-w0QB45tLDM8#cue-726",
+        "youtube-w0QB45tLDM8#cue-727",
+        "youtube-w0QB45tLDM8#cue-728",
+        "youtube-w0QB45tLDM8#cue-729",
+        "youtube-w0QB45tLDM8#cue-730",
+        "youtube-w0QB45tLDM8#cue-731",
+        "youtube-w0QB45tLDM8#cue-732",
+        "youtube-w0QB45tLDM8#cue-733",
+        "youtube-w0QB45tLDM8#cue-734",
+        "youtube-w0QB45tLDM8#cue-735",
+        "youtube-w0QB45tLDM8#cue-736",
+        "youtube-w0QB45tLDM8#cue-737",
+        "youtube-w0QB45tLDM8#cue-738",
+        "youtube-w0QB45tLDM8#cue-739",
+        "youtube-w0QB45tLDM8#cue-740",
+        "youtube-w0QB45tLDM8#cue-741",
+        "youtube-w0QB45tLDM8#cue-742",
+        "youtube-w0QB45tLDM8#cue-743",
+        "youtube-w0QB45tLDM8#cue-744",
+        "youtube-w0QB45tLDM8#cue-745",
+        "youtube-w0QB45tLDM8#cue-746"
+      ],
+      "quotes": [
+        "已经不再受流动性跟attention影响之后"
+      ],
+      "notes": "只解释访谈当时的有条件判断，不把历史估值或入场条件写成当前行情或投资保证。"
+    },
+    "cooper": {
+      "path": "corpus/dialogues/youtube-gG6IRuwtmJ4.json",
+      "sha256": "7b34da2e0181b0784d8a49fc7d1719f5d1bef89a269691f8bc8caf4fa0ba7a2a",
+      "unit_ids": [
+        "youtube-gG6IRuwtmJ4#cue-644",
+        "youtube-gG6IRuwtmJ4#cue-645",
+        "youtube-gG6IRuwtmJ4#cue-646",
+        "youtube-gG6IRuwtmJ4#cue-647",
+        "youtube-gG6IRuwtmJ4#cue-648",
+        "youtube-gG6IRuwtmJ4#cue-649",
+        "youtube-gG6IRuwtmJ4#cue-650",
+        "youtube-gG6IRuwtmJ4#cue-651",
+        "youtube-gG6IRuwtmJ4#cue-652",
+        "youtube-gG6IRuwtmJ4#cue-653",
+        "youtube-gG6IRuwtmJ4#cue-654",
+        "youtube-gG6IRuwtmJ4#cue-655",
+        "youtube-gG6IRuwtmJ4#cue-656",
+        "youtube-gG6IRuwtmJ4#cue-657",
+        "youtube-gG6IRuwtmJ4#cue-658",
+        "youtube-gG6IRuwtmJ4#cue-659",
+        "youtube-gG6IRuwtmJ4#cue-660",
+        "youtube-gG6IRuwtmJ4#cue-661",
+        "youtube-gG6IRuwtmJ4#cue-662",
+        "youtube-gG6IRuwtmJ4#cue-663",
+        "youtube-gG6IRuwtmJ4#cue-664",
+        "youtube-gG6IRuwtmJ4#cue-665",
+        "youtube-gG6IRuwtmJ4#cue-666",
+        "youtube-gG6IRuwtmJ4#cue-667",
+        "youtube-gG6IRuwtmJ4#cue-668"
+      ],
+      "quotes": [
+        "Top3或者稳定排在第一的这么一个Gas大户"
+      ],
+      "notes": "区分立正的概括与嘉宾拒绝这种说法；未知说话人的话不补给嘉宾。OpenSea的规模描述只属于当时的例子。"
+    },
+    "wei": {
+      "path": "corpus/dialogues/youtube-99-5ptPiHJ0.json",
+      "sha256": "e1ea76a4fc5b12607ac0432630bbb004dca90a513650efa9043663a6edddb289",
+      "unit_ids": [
+        "youtube-99-5ptPiHJ0#cue-1004",
+        "youtube-99-5ptPiHJ0#cue-1005",
+        "youtube-99-5ptPiHJ0#cue-1006",
+        "youtube-99-5ptPiHJ0#cue-1007",
+        "youtube-99-5ptPiHJ0#cue-1008",
+        "youtube-99-5ptPiHJ0#cue-1009",
+        "youtube-99-5ptPiHJ0#cue-1010",
+        "youtube-99-5ptPiHJ0#cue-1011",
+        "youtube-99-5ptPiHJ0#cue-1012",
+        "youtube-99-5ptPiHJ0#cue-1013",
+        "youtube-99-5ptPiHJ0#cue-1014",
+        "youtube-99-5ptPiHJ0#cue-1015",
+        "youtube-99-5ptPiHJ0#cue-1016",
+        "youtube-99-5ptPiHJ0#cue-1017",
+        "youtube-99-5ptPiHJ0#cue-1018",
+        "youtube-99-5ptPiHJ0#cue-1019",
+        "youtube-99-5ptPiHJ0#cue-1020",
+        "youtube-99-5ptPiHJ0#cue-1021",
+        "youtube-99-5ptPiHJ0#cue-1022",
+        "youtube-99-5ptPiHJ0#cue-1023",
+        "youtube-99-5ptPiHJ0#cue-1024",
+        "youtube-99-5ptPiHJ0#cue-1025",
+        "youtube-99-5ptPiHJ0#cue-1026",
+        "youtube-99-5ptPiHJ0#cue-1027",
+        "youtube-99-5ptPiHJ0#cue-1028"
+      ],
+      "quotes": [
+        "他靠整个那个 community 推销的"
+      ],
+      "notes": "解释当时转型和个人机会的关系，不推出成功都靠运气，也不把历史业务状态写成今天状态。"
+    },
+    "kevin": {
+      "path": "corpus/dialogues/youtube-vwoj6fHdxNI.json",
+      "sha256": "73cfc16795777f519d2b57e5a6132f59af607b9ac81bb4ba55c54c77310d3826",
+      "unit_ids": [
+        "youtube-vwoj6fHdxNI#cue-5",
+        "youtube-vwoj6fHdxNI#cue-6",
+        "youtube-vwoj6fHdxNI#cue-7",
+        "youtube-vwoj6fHdxNI#cue-8",
+        "youtube-vwoj6fHdxNI#cue-9",
+        "youtube-vwoj6fHdxNI#cue-10",
+        "youtube-vwoj6fHdxNI#cue-11",
+        "youtube-vwoj6fHdxNI#cue-12",
+        "youtube-vwoj6fHdxNI#cue-13",
+        "youtube-vwoj6fHdxNI#cue-14",
+        "youtube-vwoj6fHdxNI#cue-15",
+        "youtube-vwoj6fHdxNI#cue-16",
+        "youtube-vwoj6fHdxNI#cue-17",
+        "youtube-vwoj6fHdxNI#cue-18",
+        "youtube-vwoj6fHdxNI#cue-19",
+        "youtube-vwoj6fHdxNI#cue-20",
+        "youtube-vwoj6fHdxNI#cue-21",
+        "youtube-vwoj6fHdxNI#cue-22",
+        "youtube-vwoj6fHdxNI#cue-23",
+        "youtube-vwoj6fHdxNI#cue-24",
+        "youtube-vwoj6fHdxNI#cue-25",
+        "youtube-vwoj6fHdxNI#cue-26",
+        "youtube-vwoj6fHdxNI#cue-27",
+        "youtube-vwoj6fHdxNI#cue-28",
+        "youtube-vwoj6fHdxNI#cue-29"
+      ],
+      "quotes": [
+        "得到这个结果就可以我觉得就是push the frontier of knowledge"
+      ],
+      "notes": "失败指结果不是预想的，并非学不到东西；经验比例不当作普遍成功率。分别保留主持人与嘉宾的发言。"
+    }
+  },
+  "cases": [
+    {
+      "id": "final-chase-1",
+      "group": "final-chase",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "Chase在访谈里把“第一波之后”和相对公允估值联系起来，具体条件是什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "chase"
+      ]
+    },
+    {
+      "id": "final-chase-2",
+      "group": "final-chase",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "Chase为什么认为，一项代币仍有价值还不够，还要看流动性和attention的影响？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "chase"
+      ]
+    },
+    {
+      "id": "final-cooper-1",
+      "group": "final-cooper",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "卢蔚（Cooper）同意把Web3说成Web2的一个特殊种类吗？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "cooper"
+      ]
+    },
+    {
+      "id": "final-cooper-2",
+      "group": "final-cooper",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "Cooper为什么拿OpenSea来讨论Web2和Web3的技术关系？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "cooper"
+      ]
+    },
+    {
+      "id": "final-wei-1",
+      "group": "final-wei",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "魏慧回忆在Lululemon做架构负责人的节点时，为什么强调时机？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "wei"
+      ]
+    },
+    {
+      "id": "final-wei-2",
+      "group": "final-wei",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "魏慧说她加入Lululemon时，品牌的生意方式和转型需求是什么样的？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "wei"
+      ]
+    },
+    {
+      "id": "final-kevin-1",
+      "group": "final-kevin",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "Kevin Chen说博士阶段大部分时间在失败，这里的失败指什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "kevin"
+      ]
+    },
+    {
+      "id": "final-kevin-2",
+      "group": "final-kevin",
+      "split": "holdout",
+      "category": "final-unseen-dialogue",
+      "question": "Kevin Chen为什么把从失败里学经验、改下一次做法看得重要？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "kevin"
+      ]
+    }
+  ]
+}

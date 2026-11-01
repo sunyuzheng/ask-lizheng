@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-01",
+  "baseline_commit": "f71985b415302973049ed6be49a7cc0d0abd3d8d",
+  "engine_sha256": "8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c",
+  "generation_context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
+  "release_context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+  "release_manifest_sha256": "681a1c494e4da6e02155e0f481104704864c35725ffb913484f3fca8a56106a1",
+  "cases": 104,
+  "groups": 52,
+  "repeats": 3,
+  "answer_model": "deepseek-v4-flash",
+  "backup_model": "gpt-5",
+  "judge_model": "gpt-5",
+  "generation": {
+    "baseline": {
+      "attempts": 312,
+      "validated": 305,
+      "failures": [
+        {
+          "id": "s0-bayesian-2",
+          "repeat": 2,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s0-freedom-1",
+          "repeat": 1,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s0-wanglu-2",
+          "repeat": 2,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s0-yale-1",
+          "repeat": 1,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s1-release-event-notes-1",
+          "repeat": 2,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s1-release-summary-kind-2",
+          "repeat": 2,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s2-embodied-guest-2",
+          "repeat": 0,
+          "error": "invalid_answer"
+        }
+      ],
+      "status_mismatches": 50,
+      "median_seconds": 5.8635
+    },
+    "candidate": {
+      "attempts": 312,
+      "validated": 310,
+      "failures": [
+        {
+          "id": "s1-release-automation-1",
+          "repeat": 2,
+          "error": "invalid_answer"
+        },
+        {
+          "id": "s2-fake-work-2",
+          "repeat": 2,
+          "error": "invalid_answer"
+        }
+      ],
+      "status_mismatches": 18,
+      "median_seconds": 8.295
+    }
+  },
+  "paired_judgments": {
+    "attempted": 312,
+    "valid": 303,
+    "unjudged": [
+      {
+        "id": "s0-bayesian-2",
+        "repeat": 2,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s0-freedom-1",
+        "repeat": 1,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s0-wanglu-2",
+        "repeat": 2,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s0-yale-1",
+        "repeat": 1,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s1-release-automation-1",
+        "repeat": 2,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s1-release-event-notes-1",
+        "repeat": 2,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s1-release-summary-kind-2",
+        "repeat": 2,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s2-embodied-guest-2",
+        "repeat": 0,
+        "error": "generation_failed"
+      },
+      {
+        "id": "s2-fake-work-2",
+        "repeat": 2,
+        "error": "generation_failed"
+      }
+    ],
+    "retried_invalid_judgments": [
+      [
+        "s0-ethan-1",
+        2
+      ],
+      [
+        "s0-lifecycle-1",
+        0
+      ],
+      [
+        "s0-strategy-1",
+        1
+      ]
+    ],
+    "group_mean_score_deltas": {
+      "relevance": 0.6935897435897436,
+      "faithfulness": 0.17884615384615385,
+      "attribution": 0.06666666666666667,
+      "time": 0.013461538461538462,
+      "limitations": -0.05256410256410257,
+      "readability": 0.27884615384615385
+    },
+    "preferences": {
+      "baseline": 97,
+      "candidate": 202,
+      "tie": 4
+    },
+    "task_fulfillment": {
+      "baseline": {
+        "complete": 132,
+        "partial": 118,
+        "failed": 53
+      },
+      "candidate": {
+        "complete": 203,
+        "partial": 77,
+        "failed": 23
+      }
+    },
+    "critical_error_events": {
+      "baseline": 91,
+      "candidate": 73
+    },
+    "critical_regression_pairs": 54
+  },
+  "subsets": {
+    "original_60": {
+      "pairs": 180,
+      "judged": 176,
+      "group_mean_score_deltas": {
+        "relevance": 0.4477777777777778,
+        "faithfulness": 0.04777777777777777,
+        "attribution": -0.07666666666666666,
+        "time": -0.019999999999999997,
+        "limitations": -0.21222222222222223,
+        "readability": 0.24
+      }
+    },
+    "prior_release_16": {
+      "pairs": 48,
+      "judged": 45,
+      "group_mean_score_deltas": {
+        "relevance": 0.5708333333333333,
+        "faithfulness": 0.42083333333333334,
+        "attribution": 0.020833333333333336,
+        "time": -0.07083333333333333,
+        "limitations": 0.14166666666666666,
+        "readability": 0.24166666666666667
+      }
+    },
+    "interview_dev_16": {
+      "pairs": 48,
+      "judged": 46,
+      "group_mean_score_deltas": {
+        "relevance": 1.6958333333333333,
+        "faithfulness": 0.2916666666666667,
+        "attribution": 0.6166666666666667,
+        "time": 0.19166666666666665,
+        "limitations": 0.2708333333333333,
+        "readability": 0.4625
+      }
+    },
+    "reserved_interviews_12": {
+      "pairs": 36,
+      "judged": 36,
+      "group_mean_score_deltas": {
+        "relevance": 0.75,
+        "faithfulness": 0.3611111111111111,
+        "attribution": 0.1111111111111111,
+        "time": 0.05555555555555555,
+        "limitations": 0.05555555555555555,
+        "readability": 0.2777777777777778
+      }
+    }
+  },
+  "streaming_observation": {
+    "baseline": {
+      "runs": 12,
+      "median_total_seconds": 4.2315000000000005,
+      "first_section_observed_runs": 9,
+      "median_first_section_seconds": 2.398
+    },
+    "candidate": {
+      "runs": 12,
+      "median_total_seconds": 6.612500000000001,
+      "first_section_observed_runs": 10,
+      "median_first_section_seconds": 4.184
+    }
+  },
+  "source_parity": {
+    "schema_version": 1,
+    "generation_context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
+    "release_context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+    "engine_sha256": "8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c",
+    "cases": 104,
+    "identical_answering_candidate_messages": 104,
+    "differences": [],
+    "method": "Exact production candidate-message bytes and route, same cached question vectors. Source change only merges an existing guest identity; gold raw bodies remain hash-verified. Selector and answer prompts use these same candidate messages/metadata."
+  },
+  "verification": {
+    "ci": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41359324125",
+    "python_tests": 564,
+    "node_tests": 21,
+    "container_mb": 256,
+    "resident_peak_mb": 115,
+    "ready_seconds": 2,
+    "final_release_ci": null,
+    "production": null
+  },
+  "report_sha256": {
+    "release-answers-old.json": "541b637a50fdd2fb51ed31f0388d05fd4852b944b3d077664065e0a8f76d5d2b",
+    "release-answers-selected.json": "b6ba3666d84053c2d9190400aac356354457c83f46de7a93b218d3b640259d81",
+    "judgments-selected.json": "7f9234fa978bad84c1e93b78f6dda9af8b9bbd7fee9b655b6f2319e4f8c6b1c3",
+    "judgments-selected-retry.json": "d04395849e59a296af4d537e7afa4822da3d3bacd821e697b292ea1c87fbf7a2",
+    "judgments-selected-final.json": "eb3c1289f629451326bd2390d3aa7ca8402f5c3739e6d651ea67919c87582b5a",
+    "source-parity.json": "c2140200a893b5b6a2d3766096ea7310880667ff9536ef7501731c4aa6eb3ae6",
+    "stream-latency-selected.json": "128a59dd022537a2b1041c060ae6da714c138dedd082b88d60f5d58ff266a901"
+  },
+  "limits": [
+    "Single blinded LLM judge, repeated answer samples; curated source-derived tasks, not a production accuracy estimate.",
+    "Existing regression topics have mixed outcomes; old 60-case attribution and limitation scores slightly decline.",
+    "Extra planning call increased the observed median first section by 1.786 seconds and total by 2.381 seconds in the small interleaved sample; the proposed 1-second threshold was not met.",
+    "Recorded source attribution may be automatic; ASR and voice identification are not human hearing verification.",
+    "Old public answer snapshots are preserved; no public test questions or visitor quota/archive writes were used."
+  ]
+}

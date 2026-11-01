@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
+  "context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
   "selection": "源文件排除既有评测后，以固定sha256种子排序取前六份，在原稿中段制题；冻结后首次用于验收，不按检索结果选题。",
   "refs": {
     "layoff": {
