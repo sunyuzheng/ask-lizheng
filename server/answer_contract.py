@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-VERSION = "2026-11-01.1"
+VERSION = "2026-11-02.1"
 GOAL = "根据可核对的公开原文，帮助读者理解问题、作有条件的应用判断，或找到值得读的资料。"
 
 # The IDs also own the offline rubric. 'server' names only mechanical coverage, not full proof.
@@ -21,7 +21,7 @@ CRITERIA = {
         "server": ["source_ids", "body_sources"], "judge": True,
     },
     "attribution": {
-        "instruction": "按片段的归属标注核对谁在说话，并区分作者、发布者、转述对象。一个人的提问、玩笑、假设或对他人的引述，不自动证明他的主张。说明嘉宾的观点不等于立正赞同；AI 翻译、整理和同源副本不增加独立证据。归属标注只说明候选资格，仍须读具体句子。",
+        "instruction": "按片段或连续对话中逐段的归属标注核对谁在说话，并区分作者、发布者、转述对象。嘉宾的专业判断可以用于解释问题，必须归给嘉宾；不需要立正认可才有用。问立正怎么看时，先明确他本人表达了什么，再用相关嘉宾观点解释背景、分歧或形成判断的过程。提问、玩笑、假设、转述不自动证明主张；发布、邀请、客套附和也不证明赞同。只有原文中立正针对具体判断明确认可，才说他认可这项判断，并保留他的限定与不同意见；不能把一次认可扩大为认可嘉宾全部观点。连续对话中拿不准的关系保持未确认。AI 翻译、整理和同源副本不增加独立证据。归属标注只说明候选资格，仍须读具体句子。",
         "server": ["attribution_guard"], "judge": True,
     },
     "time": {
@@ -102,6 +102,9 @@ def evidence_annotation(passage) -> dict:
     act = e.get("speech_act", "")
     if passage.discovery:
         basis = "仅用于发现资料，无正文立场依据"
+    elif e.get("dialogue_units"):
+        basis = "连续原始对话；每段分别标注说话人、归属方法与言语行为"
+        notes.append("按同一发表版本的字幕顺序保留相邻发言；剪辑版可能有剪接。只按眼前各段的归属使用，未确认的不猜。认可、追问、反对及其范围须读上下文判断，不能由节目目录或相邻位置推出。")
     elif sid and sid != "unknown" and status in {"audio-voice-match", "reviewed-source-attribution"}:
         basis = f"片段说话人：{speaker or sid}；性质：{act or '未标明'}"
         notes.append("声纹自动比对，非人工逐句听校" if status == "audio-voice-match" else "指定片段的来源归属已核对，非全文逐句听校")
@@ -115,9 +118,9 @@ def evidence_annotation(passage) -> dict:
     if act in {"question", "introduction", "acknowledgement", "joke", "reported-other"}: notes.append("该言语行为不独立证明说话人的主张")
     if layer == "derived" or e.get("generation_method", "").startswith("ai-"):
         notes.append("派生或AI处理材料，不增加独立证据；翻译保留原说话人")
-    if e.get("yuzheng_stance_weight") in {"not-evidence", "secondary-only"}:
+    if not e.get("dialogue_units") and e.get("yuzheng_stance_weight") in {"not-evidence", "secondary-only"}:
         notes.append("不能独立作为立正立场的依据")
-    if e.get("transcript_quality") in {"uncorrected-asr", "source-unverified"}:
+    if e.get("transcript_quality") in {"uncorrected-asr", "source-unverified", "publisher-captions-unverified", "platform-auto-captions-unverified"}:
         notes.append("字幕未经逐字核实，重要数字、人名和术语须保留不确定性")
     if e.get("source_visibility") == "members-only" and e.get("text_access") == "public":
         notes.append("原视频需会员观看；文字稿已公开，可直接阅读")

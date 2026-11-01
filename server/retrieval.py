@@ -37,6 +37,7 @@ SOURCE_ACCESS_FIELDS = (
 # per quotation, and other authors' rights-retained work gets no more than that.
 OPEN_LICENSES = frozenset({"CC-BY-4.0", "CC0-1.0", "MIT"})
 SEMANTIC_LIMIT = 24
+FUSION_K = 40
 SOURCE_ATTRIBUTION_FIELDS = (
     "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id", "source_snapshot_sha256", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act", "content_origin", "generation_method",
 )
@@ -121,6 +122,14 @@ def is_participant_statement(doc, participants) -> bool:
             and getattr(doc, "speech_act", "") == "statement" and has_body_text(doc))
 
 
+def is_answer_material(doc) -> bool:
+    """May inform an answer; eligibility to represent a person's stance is narrower."""
+    return has_body_text(doc) and (is_yuzheng_basis(doc) or
+        (getattr(doc, "data_layer", "") == "raw" and
+         (bool(getattr(doc, "dialogue_units", None)) or
+          (getattr(doc, "speaker_status", "") in ATTRIBUTED and getattr(doc, "speech_act", "") == "statement"))))
+
+
 @dataclass
 class Passage:
     source: dict
@@ -135,6 +144,20 @@ def ordered_terms(module, text: str) -> list[str]:
     restart, and could find different sources (found 2026-10-15)."""
     lowered = text.lower()
     return sorted(module.query_terms(text), key=lambda term: (-len(term), lowered.find(term), term))
+
+
+def channel_ranks(indexes, briefs):
+    """Rank sources first, preserving the order of their individual windows.
+
+    Many projections/windows of one programme must not consume all the ranks
+    ahead of another source. This changes relevance, never evidence ownership.
+    """
+    families, windows = {}, {}
+    for index in indexes:
+        family = briefs[index].family
+        families.setdefault(family, len(families) + 1)
+        n = windows[family] = windows.get(family, 0) + 1
+        yield index, families[family] + (n - 1) / n
 
 
 class Brief(NamedTuple):
@@ -154,11 +177,11 @@ class Brief(NamedTuple):
     length: int
 
 
-FLAG_DISCOVERY, FLAG_BODY, FLAG_BASIS, FLAG_STATEMENT = 1, 2, 4, 8
+FLAG_DISCOVERY, FLAG_BODY, FLAG_BASIS, FLAG_STATEMENT, FLAG_DIALOGUE = 1, 2, 4, 8, 16
 ATTRIBUTED = frozenset({"reviewed-source-attribution", "audio-voice-match"})
 STORE_FILE = "ask.sqlite"
 # The stored values derive from these files: a change to any of them builds the store again.
-STORE_SOURCES = ("retrieval.py", "store.py", "context_architecture.py", "semantic.py")
+STORE_SOURCES = ("retrieval.py", "store.py", "context_architecture.py", "semantic.py", "dialogue_evidence.py")
 
 
 # What the page says of the material (2026-10-15, the owner asked it to say how much there is): its
@@ -208,11 +231,13 @@ def store_code() -> str:
 def searchable(doc) -> tuple[str, str]:
     """The lowercased body and title a passage is searched by."""
     return plain_text(doc.text).lower(), (doc.title + " " + doc.section + " " + getattr(doc, "participant_names", "")
-                                         + " " + getattr(doc, "participant_aliases", "") + " " + getattr(doc, "source_context", "")).lower()
+                                         + " " + getattr(doc, "participant_aliases", "") + " " + getattr(doc, "source_context", "")
+                                         + " " + getattr(doc, "programme_description", "")).lower()
 
 
 def brief(doc) -> list:
     flags = ((FLAG_DISCOVERY if is_discovery(doc) else 0) | (FLAG_BODY if has_body_text(doc) else 0)
+             | (FLAG_DIALOGUE if getattr(doc, "dialogue_units", None) and doc.data_layer == "raw" else 0)
              | (FLAG_BASIS if is_yuzheng_basis(doc) else 0)
              | (FLAG_STATEMENT if (getattr(doc, "data_layer", "") == "raw" and getattr(doc, "speaker_status", "") in ATTRIBUTED
                                    and getattr(doc, "speech_act", "") == "statement" and has_body_text(doc)) else 0))
@@ -469,21 +494,14 @@ class ContextIndex:
         history = history or []
         query = self.retrieval_query(question, history)
         participants = self.participant_entities(query)
-        # An answer rests on his own sources. When the question asks about someone else's view and
-        # not his, that person may also speak for themselves, through their own attributed
-        # statements, never through anyone else's.
-        speakers = participants if not self.names_host(query) else set()
-        # A question about their view hears only them, so his words never pass for theirs; with
-        # no attributed statement of theirs, the answer rests on his sources as usual.
-        own_voice = intent != "find" and bool(speakers & self.attributed_speakers)
         def admitted(row: Brief) -> bool:
             if not row.flags & (FLAG_DISCOVERY | FLAG_BODY):
                 return False
             if intent == "find":
                 return True
-            if own_voice:
-                return bool(speakers) and bool(row.flags & FLAG_STATEMENT) and row.speaker_id in speakers
-            return bool(row.flags & FLAG_BASIS)
+            # Relevance and claim ownership are different questions. Guest speech
+            # and dialogue context may inform an answer without becoming his view.
+            return bool(row.flags & (FLAG_BASIS | FLAG_STATEMENT | FLAG_DIALOGUE))
         eligible = {i for i, row in enumerate(briefs) if admitted(row)}
         def field(item, key):
             return str(item.get(key, "")) if isinstance(item, dict) else str(getattr(item, key, ""))
@@ -496,8 +514,10 @@ class ContextIndex:
         linked = self.architecture.linked_candidates(card_ids) if self.architecture else []
         auxiliary = (context + " " + prior)[:1200]
         module = self.search_module
-        focused_query = QUESTION_FILLERS.sub(" ", query[:600])
+        focused_query = QUESTION_FILLERS.sub(" ", self.names.without_speaker_names(query[:600], "yuzheng"))
         primary = [term for term in ordered_terms(module, focused_query) if term not in STOP_TERMS][:70]
+        substantive = [term for term in primary if len(term) > 1]
+        primary = substantive or primary
         extra = [term for term in ordered_terms(module, auxiliary) if term not in STOP_TERMS][:45]
         aliases = " ".join(expansion for cues, expansion in CONCEPTS if any(cue in (query + " " + context).lower() for cue in cues))
         expanded = [term for term in ordered_terms(module, aliases) if term not in STOP_TERMS][:45]
@@ -571,27 +591,48 @@ class ContextIndex:
         ranked.sort(key=lambda row: (-row[0], briefs[row[1]].title))
         # Reciprocal rank fusion preserves exact-word matches while admitting
         # paraphrases. Curated links bring the basis and scope contrast together.
-        fused = {index: 1 / (40 + rank) for rank, (_, index) in enumerate(ranked, 1)}
+        fused = {index: 1 / (FUSION_K + rank) for index, rank in channel_ranks((i for _, i in ranked), briefs)}
         lexical_indexes = set(fused)
         # The semantic list ranks the whole index; this question's source purpose picks from it
         # before any cut, so the closest eligible passages arrive however many others rank above.
-        semantic = [candidate for candidate in semantic_candidates or []
-                    if candidate["docindex"] in eligible and candidate["score"] >= MIN_SIMILARITY][:SEMANTIC_LIMIT]
+        semantic, semantic_families = [], {}
+        for candidate in semantic_candidates or []:
+            i = candidate["docindex"]
+            if i not in eligible or candidate["score"] < MIN_SIMILARITY: continue
+            family = briefs[i].family
+            if semantic_families.get(family, 0) >= 3: continue
+            semantic_families[family] = semantic_families.get(family, 0) + 1
+            semantic.append(candidate)
+            if len(semantic) == SEMANTIC_LIMIT: break
         segment_by_index = {}
-        for rank, candidate in enumerate(semantic, 1):
+        ranks = dict(channel_ranks((c["docindex"] for c in semantic), briefs))
+        for candidate in semantic:
             index = candidate["docindex"]
-            fused[index] = fused.get(index, 0) + 1 / (40 + rank)
+            fused[index] = fused.get(index, 0) + 1 / (FUSION_K + ranks[index])
             # Keep the established paragraph path for dual-channel candidates.
             # A window guides candidates admitted only by semantic retrieval.
             if index not in lexical_indexes and type(candidate.get("segment")) is int and candidate["segment"] >= 0:
                 segment_by_index[index] = candidate["segment"]
         focus_by_index = {}
-        for candidate in linked:
+        for rank, candidate in enumerate(linked, 1):
             index = candidate["docindex"]
             if index not in eligible:
                 continue
             focus_by_index[index] = candidate["focus_terms"]
-            fused[index] = fused.get(index, 0) + .055 * candidate["weight"]
+            # Navigation is one ranked retrieval channel, alongside lexical and
+            # semantic evidence. A curated link has no fixed priority over all
+            # actual text matches.
+            fused[index] = fused.get(index, 0) + 1 / (FUSION_K + rank)
+        # Rank fusion discards how specifically a window matches the topic.
+        # Restore a bounded IDF coverage signal; semantic paraphrases retain
+        # their full original score even without literal overlap.
+        topic_terms = [t for t in primary if frequencies.get(t, 0)]
+        topic_weight = sum(weights[t] for t in topic_terms)
+        if topic_weight:
+            for index in fused:
+                coverage = sum(weights[t] for t in topic_terms
+                               if index in in_body[t] or index in in_title[t]) / topic_weight
+                fused[index] *= 1 + coverage
         ranked = sorted(((score, index) for index, score in fused.items()),
                         key=lambda row: (not participant_match(row[1]), -row[0], briefs[row[1]].title))
         if intent == "find" and len(participants) > 1:
@@ -615,6 +656,30 @@ class ContextIndex:
         passages = []
         for score, index in ranked:
             row = briefs[index]
+            doc = self.documents[index]
+            target_seconds = None
+            # Read the surrounding exchange when a speaker-only projection wins.
+            # Its published unit IDs/timebase, not the roster, bind attribution.
+            if intent != "find" and row.flags & FLAG_STATEMENT and not getattr(doc, "dialogue_units", None):
+                _, stamp, _ = self._excerpt(doc, primary, weights, semantic_segment=segment_by_index.get(index))
+                anchors = list(TIMESTAMP.finditer(doc.text))
+                if anchors:
+                    def match_value(n):
+                        body = doc.text[anchors[n].end():anchors[n + 1].start() if n + 1 < len(anchors) else len(doc.text)].lower()
+                        return sum(weights.get(t, 1) * min(body.count(t), 2) for t in primary)
+                    best = max(range(len(anchors)), key=match_value)
+                    if match_value(best): stamp = timed_label(anchors[best])
+                if stamp:
+                    seconds = sum(int(n) * m for n, m in zip(stamp.split(":"), (3600, 60, 1)))
+                    for context_index, fields in self.store.source_fields(doc.source_id):
+                        units = fields.get("dialogue_units") or []
+                        times = [sum(int(n) * m for n, m in zip(timed_label(a).split(":"), (3600,60,1)))
+                                 for a in TIMESTAMP.finditer(fields.get("text", ""))] if units else []
+                        if times and times[0] <= seconds <= times[-1]:
+                            index, row = context_index, briefs[context_index]
+                            doc = self.documents[index]
+                            target_seconds = seconds
+                            break
             family = row.family
             speaker = row.speaker_id
             layer = row.data_layer
@@ -626,14 +691,13 @@ class ContextIndex:
                     continue
                 if speaker in owners:
                     overlap = getattr(module, "raw_windows_overlap", None)
-                    if ((speaker == "unknown" and family in named_families) or overlap is None):
+                    if ((speaker == "unknown" and family in named_families and not row.flags & FLAG_DIALOGUE) or overlap is None):
                         continue
                     doc = self.documents[index]
                     if (not getattr(doc, "fragment_id", "") or not getattr(doc, "source_snapshot_sha256", "")
                             or any(overlap(doc, old) for old in selected_raw.get(family, [])
                                    if getattr(old, "speaker_id", "") == speaker)):
                         continue
-            doc = self.documents[index]
             url = doc.original_source_url if doc.source_type == "video-translation" and doc.original_source_url else doc.source_url
             if urlparse(url).scheme not in {"http", "https"}:
                 continue
@@ -684,6 +748,18 @@ class ContextIndex:
                         "generation_method": doc.generation_method,
                         "rights_scope": getattr(doc, "rights_scope", ""), "license": getattr(doc, "license", ""),
                         "discovery_only": is_discovery(doc), "section": doc.section}
+            if getattr(doc, "dialogue_units", None):
+                from .dialogue_evidence import render, window
+                units = window(doc.dialogue_units, excerpt_terms, excerpt_weights, center_time=target_seconds)
+                evidence.update(dialogue_units=units, excerpt=render(units))
+                shown = window(units, excerpt_terms, excerpt_weights, budget=400, center_time=target_seconds)
+                source["excerpt"] = plain_text(render(shown))[:500]
+                source["fragment_id"] = f"{doc.source_id}#{units[0]['id']}-{units[-1]['id']}"
+                first = int(shown[0]["start_seconds"])
+                source["timecode"] = f"{first // 3600:02}:{first % 3600 // 60:02}:{first % 60:02}"
+                if getattr(doc, "timestamp_mode", "") != "display-only" and url.startswith("https://www.youtube.com/watch?v="):
+                    source["url"] = url.split("&t=", 1)[0] + f"&t={first}s"
+                evidence.update({k: v for k, v in source.items() if k != "excerpt"})
             passages.append(Passage(source, evidence, is_discovery(doc)))
             if len(passages) >= limit:
                 break

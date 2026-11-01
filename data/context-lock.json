@@ -1,18 +1,18 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
-  "snapshot_at": "2026-10-16",
-  "release_manifest_sha256": "f656380f1db268cdb629f7ca194ed10834a7fc9fdb9918bc6e685a388a731c6a",
-  "files": 1747,
+  "snapshot_at": "2026-11-01",
+  "release_manifest_sha256": "fc3f83bcc775aa2e12f40a6b3e365181178869c5cb605b9f19ec944ab0da59e9",
+  "files": 1755,
   "counts": {
-    "structured_public_dialogues": 370,
-    "structured_dialogue_cues": 299475,
-    "guest_entities": 152,
-    "guest_sources": 406,
-    "guest_appearances": 425,
-    "guest_slug_routes": 156,
+    "structured_public_dialogues": 375,
+    "structured_dialogue_cues": 307682,
+    "guest_entities": 158,
+    "guest_sources": 411,
+    "guest_appearances": 431,
+    "guest_slug_routes": 162,
     "guest_articles": 23,
     "guest_redirects": 3,
-    "guest_public_raw_records": 370,
+    "guest_public_raw_records": 375,
     "guest_introductions": 154,
     "community_posts_catalog": 252,
     "community_posts_full_text": 252,
@@ -26,13 +26,13 @@
     "community_comments_reviewed": 2519,
     "knowledge_bank_catalog": 169,
     "knowledge_bank_full_text": 36,
-    "video_catalog": 761,
+    "video_catalog": 767,
     "video_transcripts": 428,
-    "video_dialogue_transcripts": 331,
+    "video_dialogue_transcripts": 337,
     "video_metadata_only": 11,
     "member_video_transcripts": 218,
     "member_video_solo_reviewed": 45,
-    "known_guest_videos": 387,
+    "known_guest_videos": 393,
     "external_guest_appearances": 32,
     "english_community_catalog": 50,
     "english_community_full_text_files": 49,
@@ -43,9 +43,9 @@
   "licenses": {
     "CC-BY-4.0": 945,
     "CC0-1.0": 44,
-    "LicenseRef-Lizheng-Reference-Use-1.0": 624,
+    "LicenseRef-Lizheng-Reference-Use-1.0": 629,
     "LicenseRef-Original-Rights-Retained": 69,
-    "MIT": 58
+    "MIT": 61
   },
-  "source_commit": "7095f8de26f393966a36a5e2b9286084e1893000"
+  "source_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7"
 }

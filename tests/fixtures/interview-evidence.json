@@ -1,0 +1,512 @@
+{
+  "schema_version": 1,
+  "context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
+  "method": "由已发表原稿选取独立连续上下文，再编制问题；未使用被测系统的答案生成标准。",
+  "refs": {
+    "embodied-host": {
+      "path": "corpus/dialogues/youtube-y6kRa1vGAwA.json",
+      "sha256": "f6732481773c364c29096e61a35425e01af7ee8c8670b2120287f00480543ea0",
+      "quotes": [
+        "我之前在MIT(麻省理工学院)采访了一个教授"
+      ],
+      "notes": "应区别主持人对物理进步速度的警惕与嘉宾的技术判断，不要求强行推荐某一期。",
+      "unit_ids": [
+        "cue-1069",
+        "cue-1070",
+        "cue-1071",
+        "cue-1072",
+        "cue-1073",
+        "cue-1074",
+        "cue-1075",
+        "cue-1076",
+        "cue-1077",
+        "cue-1078",
+        "cue-1079",
+        "cue-1080",
+        "cue-1081",
+        "cue-1082",
+        "cue-1083",
+        "cue-1084",
+        "cue-1085",
+        "cue-1086",
+        "cue-1087",
+        "cue-1088",
+        "cue-1089",
+        "cue-1090",
+        "cue-1091",
+        "cue-1092",
+        "cue-1093",
+        "cue-1094",
+        "cue-1095",
+        "cue-1096",
+        "cue-1097",
+        "cue-1098",
+        "cue-1099",
+        "cue-1100",
+        "cue-1101"
+      ]
+    },
+    "embodied-guest": {
+      "path": "corpus/dialogues/youtube-y6kRa1vGAwA.json",
+      "sha256": "f6732481773c364c29096e61a35425e01af7ee8c8670b2120287f00480543ea0",
+      "quotes": [
+        "Embodied AI(具身AI)吧"
+      ],
+      "notes": "相关专业观点可以归给嘉宾；泛化、鲁棒性、性能不能冒充主持人的完整理论。",
+      "unit_ids": [
+        "cue-833",
+        "cue-834",
+        "cue-835",
+        "cue-836",
+        "cue-837",
+        "cue-838",
+        "cue-839",
+        "cue-840",
+        "cue-841",
+        "cue-842",
+        "cue-843",
+        "cue-844",
+        "cue-845",
+        "cue-846",
+        "cue-847",
+        "cue-848",
+        "cue-849",
+        "cue-850",
+        "cue-851",
+        "cue-852",
+        "cue-853",
+        "cue-854",
+        "cue-855",
+        "cue-856",
+        "cue-857",
+        "cue-858",
+        "cue-859",
+        "cue-860",
+        "cue-861",
+        "cue-862",
+        "cue-863",
+        "cue-864",
+        "cue-865",
+        "cue-866",
+        "cue-867"
+      ]
+    },
+    "world-model-agreement": {
+      "path": "corpus/dialogues/youtube-y6kRa1vGAwA.json",
+      "sha256": "f6732481773c364c29096e61a35425e01af7ee8c8670b2120287f00480543ea0",
+      "quotes": [
+        "我觉得很多人有不同的定义"
+      ],
+      "notes": "具体认可状态与干预预测前后状态，仍保留直觉、计算做法及抽象尺度的讨论；局部认可不能扩张。",
+      "unit_ids": [
+        "cue-1302",
+        "cue-1303",
+        "cue-1304",
+        "cue-1305",
+        "cue-1306",
+        "cue-1307",
+        "cue-1308",
+        "cue-1309",
+        "cue-1310",
+        "cue-1311",
+        "cue-1312",
+        "cue-1313",
+        "cue-1314",
+        "cue-1315",
+        "cue-1316",
+        "cue-1317",
+        "cue-1318",
+        "cue-1319",
+        "cue-1320",
+        "cue-1321",
+        "cue-1322",
+        "cue-1323",
+        "cue-1324",
+        "cue-1325",
+        "cue-1326",
+        "cue-1327",
+        "cue-1328",
+        "cue-1329",
+        "cue-1330",
+        "cue-1331",
+        "cue-1332",
+        "cue-1333",
+        "cue-1334",
+        "cue-1335"
+      ]
+    },
+    "host-question": {
+      "path": "corpus/dialogues/youtube-y6kRa1vGAwA.json",
+      "sha256": "f6732481773c364c29096e61a35425e01af7ee8c8670b2120287f00480543ea0",
+      "quotes": [
+        "或者说一个large general(又大又通用)的policy(策略)"
+      ],
+      "notes": "主持人的提问不能作为本人主张；原问题也不代表嘉宾接受此概括。",
+      "unit_ids": [
+        "cue-820",
+        "cue-821",
+        "cue-822",
+        "cue-823",
+        "cue-824",
+        "cue-825",
+        "cue-826",
+        "cue-827",
+        "cue-828",
+        "cue-829",
+        "cue-830",
+        "cue-831",
+        "cue-832",
+        "cue-833",
+        "cue-834",
+        "cue-835",
+        "cue-836",
+        "cue-837",
+        "cue-838",
+        "cue-839",
+        "cue-840"
+      ]
+    },
+    "enterprise": {
+      "path": "corpus/dialogues/youtube-KpQwWNkyEsQ.json",
+      "sha256": "84b64a02d9b30a6f9f4d6b67e0e2cd8df57c19f175a2ef2f4eca97d1ad15e695",
+      "quotes": [
+        "模型本身，并不会做任何事。 Models by themselves don't do anything."
+      ],
+      "notes": "开头是同一节目高光，与正片不算独立证据；宝马数据字典、任务完成与业务评分的区别归给嘉宾。",
+      "unit_ids": [
+        "cue-1",
+        "cue-2",
+        "cue-3",
+        "cue-4",
+        "cue-5",
+        "cue-6",
+        "cue-7",
+        "cue-8",
+        "cue-9",
+        "cue-10",
+        "cue-11",
+        "cue-12",
+        "cue-13",
+        "cue-14",
+        "cue-15"
+      ]
+    },
+    "optimization": {
+      "path": "corpus/dialogues/youtube-gQzvscl6Y2I.json",
+      "sha256": "f0f6882145f527f13fd3e26aa98b7a35398a07623ec67013c920c4077a3d492f",
+      "quotes": [
+        "我怎么把个人的利益最大化"
+      ],
+      "notes": "保留嘉宾利他与主持人的追问，不能把追问改成无条件认同。",
+      "unit_ids": [
+        "cue-251",
+        "cue-252",
+        "cue-253",
+        "cue-254",
+        "cue-255",
+        "cue-256",
+        "cue-257",
+        "cue-258",
+        "cue-259",
+        "cue-260",
+        "cue-261",
+        "cue-262",
+        "cue-263",
+        "cue-264",
+        "cue-265",
+        "cue-266",
+        "cue-267",
+        "cue-268",
+        "cue-269",
+        "cue-270",
+        "cue-271",
+        "cue-272",
+        "cue-273",
+        "cue-274",
+        "cue-275",
+        "cue-276",
+        "cue-277",
+        "cue-278",
+        "cue-279",
+        "cue-280",
+        "cue-281",
+        "cue-282",
+        "cue-283",
+        "cue-284",
+        "cue-285",
+        "cue-286",
+        "cue-287",
+        "cue-288",
+        "cue-289",
+        "cue-290",
+        "cue-291",
+        "cue-292",
+        "cue-293",
+        "cue-294",
+        "cue-295",
+        "cue-296",
+        "cue-297",
+        "cue-298",
+        "cue-299",
+        "cue-300"
+      ]
+    },
+    "fake-work": {
+      "path": "corpus/dialogues/youtube-ur-HjD422ig.json",
+      "sha256": "fb092f96f04e22c8b2d8cfa5f2be750ea98e996d52b5c7ab9aa9786a70da2f8e",
+      "quotes": [
+        "所以在这个阶段我认为它是一个规模问题"
+      ],
+      "notes": "这段是嘉宾谈权力结构与向上表演，节目主持人的经历是另外的证据。",
+      "unit_ids": [
+        "cue-481",
+        "cue-482",
+        "cue-483",
+        "cue-484",
+        "cue-485",
+        "cue-486",
+        "cue-487",
+        "cue-488",
+        "cue-489",
+        "cue-490",
+        "cue-491",
+        "cue-492",
+        "cue-493",
+        "cue-494",
+        "cue-495",
+        "cue-496",
+        "cue-497",
+        "cue-498"
+      ]
+    },
+    "fake-work-host": {
+      "path": "corpus/dialogues/youtube-ur-HjD422ig.json",
+      "sha256": "fb092f96f04e22c8b2d8cfa5f2be750ea98e996d52b5c7ab9aa9786a70da2f8e",
+      "quotes": [
+        "如果说你觉得能不拿到"
+      ],
+      "notes": "保留本人对表演型工作的解释，不能把几乎改成全部，注意他举的例外。",
+      "unit_ids": [
+        "cue-56",
+        "cue-57",
+        "cue-58",
+        "cue-59",
+        "cue-60",
+        "cue-61",
+        "cue-62",
+        "cue-63",
+        "cue-64",
+        "cue-65",
+        "cue-66",
+        "cue-67",
+        "cue-68",
+        "cue-69",
+        "cue-70",
+        "cue-71",
+        "cue-72",
+        "cue-73",
+        "cue-74",
+        "cue-75",
+        "cue-76",
+        "cue-77",
+        "cue-78",
+        "cue-79",
+        "cue-80"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "embodied-host-1",
+      "group": "embodied-host",
+      "split": "dev",
+      "category": "interview-embodied-host",
+      "question": "立正对具身智能怎么看？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "embodied-host"
+      ]
+    },
+    {
+      "id": "embodied-host-2",
+      "group": "embodied-host",
+      "split": "dev",
+      "category": "interview-embodied-host",
+      "question": "立正为什么提醒不要把软件的进步速度套到机器人上？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "embodied-host"
+      ]
+    },
+    {
+      "id": "embodied-guest-1",
+      "group": "embodied-guest",
+      "split": "dev",
+      "category": "interview-embodied-guest",
+      "question": "郑昌熙认为机器人要迈过哪几个门槛？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "embodied-guest"
+      ]
+    },
+    {
+      "id": "embodied-guest-2",
+      "group": "embodied-guest",
+      "split": "dev",
+      "category": "interview-embodied-guest",
+      "question": "具身智能离通用机器人还有哪些关键障碍？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "embodied-guest"
+      ]
+    },
+    {
+      "id": "world-model-agreement-1",
+      "group": "world-model-agreement",
+      "split": "dev",
+      "category": "interview-world-model-agreement",
+      "question": "立正和郑昌熙对世界模型的定义是完全一致的吗？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "world-model-agreement"
+      ]
+    },
+    {
+      "id": "world-model-agreement-2",
+      "group": "world-model-agreement",
+      "split": "dev",
+      "category": "interview-world-model-agreement",
+      "question": "立正说同意郑昌熙，是不是就表示完全接受他的世界模型思路？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "world-model-agreement"
+      ]
+    },
+    {
+      "id": "host-question-1",
+      "group": "host-question",
+      "split": "dev",
+      "category": "interview-host-question",
+      "question": "立正是不是主张机器人应该放弃泛化？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "host-question"
+      ]
+    },
+    {
+      "id": "host-question-2",
+      "group": "host-question",
+      "split": "dev",
+      "category": "interview-host-question",
+      "question": "立正问“泛化尺度小一点”，能说明他支持这个路线吗？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "host-question"
+      ]
+    },
+    {
+      "id": "enterprise-1",
+      "group": "enterprise",
+      "split": "dev",
+      "category": "interview-enterprise",
+      "question": "Marco Casalaina如何解释企业AI落地的难点？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "enterprise"
+      ]
+    },
+    {
+      "id": "enterprise-2",
+      "group": "enterprise",
+      "split": "dev",
+      "category": "interview-enterprise",
+      "question": "AI给了完整的结果，为什么仍可能没有完成业务任务？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "enterprise"
+      ]
+    },
+    {
+      "id": "optimization-1",
+      "group": "optimization",
+      "split": "dev",
+      "category": "interview-optimization",
+      "question": "夏淳为什么反对把人生完全当成优化题？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "optimization"
+      ]
+    },
+    {
+      "id": "optimization-2",
+      "group": "optimization",
+      "split": "dev",
+      "category": "interview-optimization",
+      "question": "立正对“利他是不是另一种优化”有什么追问？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "optimization"
+      ]
+    },
+    {
+      "id": "fake-work-1",
+      "group": "fake-work",
+      "split": "dev",
+      "category": "interview-fake-work",
+      "question": "杨天楠为什么说假工作不只是大公司的问题？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "fake-work"
+      ]
+    },
+    {
+      "id": "fake-work-2",
+      "group": "fake-work",
+      "split": "dev",
+      "category": "interview-fake-work",
+      "question": "创业公司小，是不是就不会有表演型工作？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "fake-work"
+      ]
+    },
+    {
+      "id": "fake-work-host-1",
+      "group": "fake-work-host",
+      "split": "dev",
+      "category": "interview-fake-work-host",
+      "question": "立正怎么定义fake work？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "fake-work-host"
+      ]
+    },
+    {
+      "id": "fake-work-host-2",
+      "group": "fake-work-host",
+      "split": "dev",
+      "category": "interview-fake-work-host",
+      "question": "立正是否认为自己以前所有的工作都没有价值？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "fake-work-host"
+      ]
+    }
+  ]
+}

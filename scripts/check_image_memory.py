@@ -14,6 +14,7 @@ peak resident memory (VmHWM, which leaves out the page cache the kernel can recl
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import sys
 import time
@@ -25,6 +26,7 @@ CEILING_MB = 200
 PORT = 18765
 NAME = "ask-lizheng-memory-check"
 SEARCHES = ("跟着 AI 做出工具，换个需求就不会了，怎样练自己的判断？", "大厂还是创业", "AI coding 零基础怎么开始", "日活不涨该拉新还是留存")
+DIALOGUE_SEARCHES = ("世界模型与通用机器人", "嘉宾访谈里的创业选择", "对谈中怎样区分提问和观点")
 
 
 def docker(*args: str, check: bool = True) -> str:
@@ -65,6 +67,12 @@ def main() -> int:
             sources = get("/api/search?q=" + urllib.parse.quote(question), timeout=30)["sources"]
             if not sources:
                 raise SystemExit(f"No source found for {question!r}.")
+        # Dialogue retrieval now reads bound neighbouring turns. Exercise the
+        # actual service's three simultaneous retrievals before measuring HWM.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            results = list(pool.map(lambda q: get("/api/search?q=" + urllib.parse.quote(q), timeout=30), DIALOGUE_SEARCHES))
+        if any(not result.get("sources") for result in results):
+            raise SystemExit("A concurrent dialogue search returned no sources.")
         status = docker("exec", NAME, "cat", "/proc/1/status")
         peak = next(int(line.split()[1]) for line in status.splitlines() if line.startswith("VmHWM:")) / 1024
         current = next(int(line.split()[1]) for line in status.splitlines() if line.startswith("VmRSS:")) / 1024

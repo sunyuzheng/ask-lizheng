@@ -6,6 +6,7 @@ import pytest
 
 from server.answers import model_evidence
 from server.retrieval import ContextIndex, is_yuzheng_basis
+from server.dialogue_evidence import supports_speaker
 from server.semantic import embedding_inputs
 from test_backend import context_pack, source_file
 from test_dialogue_layers import dialogue
@@ -35,8 +36,8 @@ def test_same_speaker_nonoverlapping_windows_survive_across_independent_families
     assert Counter(p.evidence["source_family"] for p in passages) == {
         "window-family-alpha": 3, "window-family-beta": 3}
     assert len({p.source["fragment_id"] for p in passages}) == 6
-    assert all(is_yuzheng_basis(index.documents[p.evidence["docindex"]]) for p in passages)
-    assert all(p.source["speaker_id"] == "yuzheng" for p in passages)
+    assert all(supports_speaker(p.evidence, "yuzheng") for p in passages)
+    assert all(p.source["speaker_id"] == "unknown" for p in passages)  # mixed-source envelope
     assert [p.evidence["document_id"] for p in passages] == [
         p.evidence["document_id"] for p in index.retrieve("窗口合成探针", limit=12, intent="understand")]
 
@@ -65,7 +66,7 @@ def test_repeat_windows_fail_closed_without_proven_independence(context_pack, mu
     index = window_index(context_pack)
     documents = list(index.documents)
     for i, doc in enumerate(documents):
-        if doc.source_family.startswith("window-family-") and doc.speaker_id == "yuzheng":
+        if doc.source_family.startswith("window-family-"):
             if mutation == "overlap":
                 doc.fragment_id = f"{doc.source_id}#cue-1-{doc.source_id}#cue-9"
             elif mutation == "cross-snapshot":

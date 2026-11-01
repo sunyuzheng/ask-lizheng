@@ -149,6 +149,10 @@ class Store:
             raise IndexError(i)
         return json.loads(zlib.decompress(row[0]))
 
+    def source_fields(self, source_id: str):
+        for i, data in self.connection.execute("SELECT i,data FROM docs WHERE source_id=? ORDER BY i", (source_id,)):
+            yield i, json.loads(zlib.decompress(data))
+
     def all_fields(self):
         for (data,) in self.connection.execute("SELECT data FROM docs ORDER BY i"):
             yield json.loads(zlib.decompress(data))

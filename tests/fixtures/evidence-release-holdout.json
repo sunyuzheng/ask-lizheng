@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "context_commit": "7095f8de26f393966a36a5e2b9286084e1893000",
+  "context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
   "method": "Supplementary release verification, fixed before any query vectors or answer measurements on these questions. Two source files per course/community/blog/raw-dialogue stratum, ordered by SHA256 of release-check-20261101:path after excluding all prior gold paths. Questions and anchors authored from those source bodies; no model-generated gold, no private questions. This is a fresh question/source-gold set, not a claim that these documents never appeared among earlier retrieval candidates.",
   "selection_seed": "release-check-20261101",
   "refs": {

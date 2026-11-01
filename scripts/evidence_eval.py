@@ -118,6 +118,14 @@ def load_fixture(path: Path, context_root: Path | None = None) -> dict:
             body = source_body(target, ref.get("speaker_id") if target.suffix == ".json" else None)
             if any(normalize(quote) not in body for quote in ref["quotes"]):
                 raise ValueError("Gold anchor does not occur in its declared public source or speaker")
+            if ref.get("unit_ids"):
+                if target.suffix != ".json": raise ValueError("Gold unit IDs require a raw dialogue")
+                units = json.loads(target.read_text())["units"]
+                ids = ref["unit_ids"]
+                ordered = [u["id"] for u in units]
+                if (not isinstance(ids, list) or not ids or len(ids) > 300 or not all(isinstance(i, str) for i in ids) or len(ids) != len(set(ids))
+                        or ids[0] not in ordered or ordered[ordered.index(ids[0]):ordered.index(ids[0])+len(ids)] != ids):
+                    raise ValueError("Gold units must form an exact contiguous public source window")
             if ref.get("context"):
                 if target.suffix == ".md":
                     valid = normalize(ref["context"]) in body
@@ -236,7 +244,7 @@ def evidence_metrics(impl, index, case: dict, refs: dict, prepared: dict) -> dic
                                   "anchor_hits": hits, "any_anchor_hit": any(hits), "all_anchors_hit": all(hits)}
     participants = index.participant_entities(index.retrieval_query(case["question"], case.get("history", [])))
     host = index.names_host(index.retrieval_query(case["question"], case.get("history", [])))
-    eligible = [case["intent"] == "find" or p.discovery or impl.retrieval.is_yuzheng_basis(index.documents[p.evidence["docindex"]])
+    eligible = [case["intent"] == "find" or p.discovery or getattr(impl.retrieval, "is_answer_material", impl.retrieval.is_yuzheng_basis)(index.documents[p.evidence["docindex"]])
                 or (not host and impl.retrieval.is_participant_statement(index.documents[p.evidence["docindex"]], participants))
                 for p in passages]
     families = Counter(p.evidence.get("source_family", "") for p in passages)

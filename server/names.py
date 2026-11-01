@@ -65,6 +65,20 @@ class NameIndex:
     def speaker_names(self, speaker_id: str) -> list[str]:
         return list(self.speakers.get(speaker_id, []))
 
+    def without_speaker_names(self, text: str, speaker_id: str) -> str:
+        """Identity selects claim ownership; it is not a topic relevance signal."""
+        text = unicodedata.normalize("NFKC", text)
+        for name in sorted(self.speaker_names(speaker_id), key=len, reverse=True):
+            name = unicodedata.normalize("NFKC", name)
+            pattern = re.escape(name)
+            if name.isascii(): pattern = r"(?<![A-Za-z0-9])" + pattern + r"(?![A-Za-z0-9])"
+            def replace(match):
+                if name.isascii() and re.fullmatch(r"[A-Za-z0-9]+", name):
+                    if not self._standing(text, match.start(), match.end(), self.key(name), {speaker_id}): return match.group()
+                return " "
+            text = re.sub(pattern, replace, text, flags=re.I)
+        return text
+
     def resolve(self, text: str) -> set[str]:
         """Entity IDs the text names, keeping namesakes apart by their qualifiers."""
         flat, origin = [], []
@@ -114,7 +128,10 @@ class NameIndex:
                         return {identity for identity in identities
                                 if any(qualifier.startswith(word_key) for qualifier in self.qualifiers.get(identity, ()))}
             return identities
-        if len(key) <= 3 and all(HAN.match(char) for char in key):
+        # Full three-character aliases can occur after arbitrary Chinese
+        # verbs/prepositions. The conservative boundary guard remains for short
+        # aliases that are especially prone to matching inside another name.
+        if len(key) <= 2 and all(HAN.match(char) for char in key):
             if end < len(text) and HAN.match(text[end]) and text[end] not in HAN_AFTER:
                 return set()
             if start and HAN.match(text[start - 1]) and text[start - 1] not in HAN_BEFORE:

@@ -171,7 +171,7 @@ def _verify_projection(root: Path, doc, records: dict, cache: dict):
     fields = (
         "id", "source_id", "path", "title", "section", "text", "source_type", "source_url", "source_family", "timestamp_mode",
         "data_layer", "speaker_id", "speaker_name", "speaker_status", "fragment_id",
-        "source_snapshot_sha256", "content_origin", "evidence_role", "yuzheng_stance_weight",
+        "source_snapshot_sha256", "content_origin", "evidence_role", "yuzheng_stance_weight", "dialogue_units", "source_context", "programme_description",
         "speaker_classification", "author", "original_author", "generation_method", "participant_names", "participant_entity_ids", "participant_aliases", "participant_metadata_basis", "speech_act",
     )
     if canonical is None or any(getattr(doc, field, None) != getattr(canonical, field, None) for field in fields):

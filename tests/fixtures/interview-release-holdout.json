@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "context_commit": "669e330d4bb42e2f718af64f0775e5dd8f68cbf7",
+  "selection": "源文件排除既有评测后，以固定sha256种子排序取前六份，在原稿中段制题；冻结后首次用于验收，不按检索结果选题。",
+  "refs": {
+    "layoff": {
+      "path": "corpus/dialogues/youtube-4haSIlR8Fy4.json",
+      "sha256": "cb53639b5bb291153c277cfeeb39f0e3fd48f4c5832a9e79ea91474373fedfba",
+      "quotes": [
+        "因为这个上个星期老板才说的嘛"
+      ],
+      "unit_ids": [
+        "youtube-4haSIlR8Fy4#cue-576",
+        "youtube-4haSIlR8Fy4#cue-577",
+        "youtube-4haSIlR8Fy4#cue-578",
+        "youtube-4haSIlR8Fy4#cue-579",
+        "youtube-4haSIlR8Fy4#cue-580",
+        "youtube-4haSIlR8Fy4#cue-581",
+        "youtube-4haSIlR8Fy4#cue-582",
+        "youtube-4haSIlR8Fy4#cue-583",
+        "youtube-4haSIlR8Fy4#cue-584",
+        "youtube-4haSIlR8Fy4#cue-585",
+        "youtube-4haSIlR8Fy4#cue-586",
+        "youtube-4haSIlR8Fy4#cue-587",
+        "youtube-4haSIlR8Fy4#cue-588",
+        "youtube-4haSIlR8Fy4#cue-589",
+        "youtube-4haSIlR8Fy4#cue-590",
+        "youtube-4haSIlR8Fy4#cue-591",
+        "youtube-4haSIlR8Fy4#cue-592",
+        "youtube-4haSIlR8Fy4#cue-593",
+        "youtube-4haSIlR8Fy4#cue-594",
+        "youtube-4haSIlR8Fy4#cue-595",
+        "youtube-4haSIlR8Fy4#cue-596",
+        "youtube-4haSIlR8Fy4#cue-597",
+        "youtube-4haSIlR8Fy4#cue-598",
+        "youtube-4haSIlR8Fy4#cue-599",
+        "youtube-4haSIlR8Fy4#cue-600"
+      ],
+      "notes": "只说明这次经历，不推出所有老板都说谎。"
+    },
+    "pricing": {
+      "path": "corpus/dialogues/youtube-fPollnUVitg.json",
+      "sha256": "930826e046df6fbb2c61b8919b0abf97af227d1772def6239c1a58df3d8a73f3",
+      "quotes": [
+        "或者broader value（更大的价值）"
+      ],
+      "unit_ids": [
+        "youtube-fPollnUVitg#cue-170",
+        "youtube-fPollnUVitg#cue-171",
+        "youtube-fPollnUVitg#cue-172",
+        "youtube-fPollnUVitg#cue-173",
+        "youtube-fPollnUVitg#cue-174",
+        "youtube-fPollnUVitg#cue-175",
+        "youtube-fPollnUVitg#cue-176",
+        "youtube-fPollnUVitg#cue-177",
+        "youtube-fPollnUVitg#cue-178",
+        "youtube-fPollnUVitg#cue-179",
+        "youtube-fPollnUVitg#cue-180",
+        "youtube-fPollnUVitg#cue-181",
+        "youtube-fPollnUVitg#cue-182",
+        "youtube-fPollnUVitg#cue-183",
+        "youtube-fPollnUVitg#cue-184",
+        "youtube-fPollnUVitg#cue-185",
+        "youtube-fPollnUVitg#cue-186",
+        "youtube-fPollnUVitg#cue-187",
+        "youtube-fPollnUVitg#cue-188",
+        "youtube-fPollnUVitg#cue-189",
+        "youtube-fPollnUVitg#cue-190",
+        "youtube-fPollnUVitg#cue-191",
+        "youtube-fPollnUVitg#cue-192",
+        "youtube-fPollnUVitg#cue-193",
+        "youtube-fPollnUVitg#cue-194"
+      ],
+      "notes": "是比较投入回报与目标人群的条件，不保证收益，也不把讨论中的提问写成既定事实。"
+    },
+    "interactive": {
+      "path": "corpus/dialogues/youtube-rVnrixEfNMM.json",
+      "sha256": "032edced2fd823e436248483fb8dbce94bab9a6da0c1bafbfaf9eda31be67bcd",
+      "quotes": [
+        "中国其实现在你看快看上面"
+      ],
+      "unit_ids": [
+        "youtube-rVnrixEfNMM#cue-272",
+        "youtube-rVnrixEfNMM#cue-273",
+        "youtube-rVnrixEfNMM#cue-274",
+        "youtube-rVnrixEfNMM#cue-275",
+        "youtube-rVnrixEfNMM#cue-276",
+        "youtube-rVnrixEfNMM#cue-277",
+        "youtube-rVnrixEfNMM#cue-278",
+        "youtube-rVnrixEfNMM#cue-279",
+        "youtube-rVnrixEfNMM#cue-280",
+        "youtube-rVnrixEfNMM#cue-281",
+        "youtube-rVnrixEfNMM#cue-282",
+        "youtube-rVnrixEfNMM#cue-283",
+        "youtube-rVnrixEfNMM#cue-284",
+        "youtube-rVnrixEfNMM#cue-285",
+        "youtube-rVnrixEfNMM#cue-286",
+        "youtube-rVnrixEfNMM#cue-287",
+        "youtube-rVnrixEfNMM#cue-288",
+        "youtube-rVnrixEfNMM#cue-289",
+        "youtube-rVnrixEfNMM#cue-290",
+        "youtube-rVnrixEfNMM#cue-291",
+        "youtube-rVnrixEfNMM#cue-292",
+        "youtube-rVnrixEfNMM#cue-293",
+        "youtube-rVnrixEfNMM#cue-294",
+        "youtube-rVnrixEfNMM#cue-295",
+        "youtube-rVnrixEfNMM#cue-296"
+      ],
+      "notes": "旧节目讨论的例子，不推断今天产品仍在运营。"
+    },
+    "audience": {
+      "path": "corpus/dialogues/youtube-dmUTGbe6d00.json",
+      "sha256": "31005a972ed77c093213734081a9b7c175cbad169e5a57f13244732825830167",
+      "quotes": [
+        "就比如说我今天没有表现好我就会觉得"
+      ],
+      "unit_ids": [
+        "youtube-dmUTGbe6d00#cue-497",
+        "youtube-dmUTGbe6d00#cue-498",
+        "youtube-dmUTGbe6d00#cue-499",
+        "youtube-dmUTGbe6d00#cue-500",
+        "youtube-dmUTGbe6d00#cue-501",
+        "youtube-dmUTGbe6d00#cue-502",
+        "youtube-dmUTGbe6d00#cue-503",
+        "youtube-dmUTGbe6d00#cue-504",
+        "youtube-dmUTGbe6d00#cue-505",
+        "youtube-dmUTGbe6d00#cue-506",
+        "youtube-dmUTGbe6d00#cue-507",
+        "youtube-dmUTGbe6d00#cue-508",
+        "youtube-dmUTGbe6d00#cue-509",
+        "youtube-dmUTGbe6d00#cue-510",
+        "youtube-dmUTGbe6d00#cue-511",
+        "youtube-dmUTGbe6d00#cue-512",
+        "youtube-dmUTGbe6d00#cue-513",
+        "youtube-dmUTGbe6d00#cue-514",
+        "youtube-dmUTGbe6d00#cue-515",
+        "youtube-dmUTGbe6d00#cue-516",
+        "youtube-dmUTGbe6d00#cue-517",
+        "youtube-dmUTGbe6d00#cue-518",
+        "youtube-dmUTGbe6d00#cue-519",
+        "youtube-dmUTGbe6d00#cue-520",
+        "youtube-dmUTGbe6d00#cue-521"
+      ],
+      "notes": "虚拟人物的公开发言归她，不补写幕后真人身份。"
+    },
+    "incentives": {
+      "path": "corpus/dialogues/youtube-3R-wxLm3G7M.json",
+      "sha256": "2376526a9702d9b1c9418c1c16ddd2e130863a77b88fe168ff5b7f47c7fbb740",
+      "quotes": [
+        "所以说当时我第一点是"
+      ],
+      "unit_ids": [
+        "youtube-3R-wxLm3G7M#cue-431",
+        "youtube-3R-wxLm3G7M#cue-432",
+        "youtube-3R-wxLm3G7M#cue-433",
+        "youtube-3R-wxLm3G7M#cue-434",
+        "youtube-3R-wxLm3G7M#cue-435",
+        "youtube-3R-wxLm3G7M#cue-436",
+        "youtube-3R-wxLm3G7M#cue-437",
+        "youtube-3R-wxLm3G7M#cue-438",
+        "youtube-3R-wxLm3G7M#cue-439",
+        "youtube-3R-wxLm3G7M#cue-440",
+        "youtube-3R-wxLm3G7M#cue-441",
+        "youtube-3R-wxLm3G7M#cue-442",
+        "youtube-3R-wxLm3G7M#cue-443",
+        "youtube-3R-wxLm3G7M#cue-444",
+        "youtube-3R-wxLm3G7M#cue-445",
+        "youtube-3R-wxLm3G7M#cue-446",
+        "youtube-3R-wxLm3G7M#cue-447",
+        "youtube-3R-wxLm3G7M#cue-448",
+        "youtube-3R-wxLm3G7M#cue-449",
+        "youtube-3R-wxLm3G7M#cue-450",
+        "youtube-3R-wxLm3G7M#cue-451",
+        "youtube-3R-wxLm3G7M#cue-452",
+        "youtube-3R-wxLm3G7M#cue-453",
+        "youtube-3R-wxLm3G7M#cue-454",
+        "youtube-3R-wxLm3G7M#cue-455"
+      ],
+      "notes": "只整理特定创业场景的讨论，不把不领工资推广为普适建议。"
+    },
+    "content": {
+      "path": "corpus/dialogues/youtube-h3UY4Jb2uJE.json",
+      "sha256": "500797ceb85641a144d2e391be50557e8282ae63fb120c63890621a28be2c24a",
+      "quotes": [
+        "就是你跟别人产生共鸣"
+      ],
+      "unit_ids": [
+        "youtube-h3UY4Jb2uJE#cue-317",
+        "youtube-h3UY4Jb2uJE#cue-318",
+        "youtube-h3UY4Jb2uJE#cue-319",
+        "youtube-h3UY4Jb2uJE#cue-320",
+        "youtube-h3UY4Jb2uJE#cue-321",
+        "youtube-h3UY4Jb2uJE#cue-322",
+        "youtube-h3UY4Jb2uJE#cue-323",
+        "youtube-h3UY4Jb2uJE#cue-324",
+        "youtube-h3UY4Jb2uJE#cue-325",
+        "youtube-h3UY4Jb2uJE#cue-326",
+        "youtube-h3UY4Jb2uJE#cue-327",
+        "youtube-h3UY4Jb2uJE#cue-328",
+        "youtube-h3UY4Jb2uJE#cue-329",
+        "youtube-h3UY4Jb2uJE#cue-330",
+        "youtube-h3UY4Jb2uJE#cue-331",
+        "youtube-h3UY4Jb2uJE#cue-332",
+        "youtube-h3UY4Jb2uJE#cue-333",
+        "youtube-h3UY4Jb2uJE#cue-334",
+        "youtube-h3UY4Jb2uJE#cue-335",
+        "youtube-h3UY4Jb2uJE#cue-336",
+        "youtube-h3UY4Jb2uJE#cue-337",
+        "youtube-h3UY4Jb2uJE#cue-338",
+        "youtube-h3UY4Jb2uJE#cue-339",
+        "youtube-h3UY4Jb2uJE#cue-340",
+        "youtube-h3UY4Jb2uJE#cue-341"
+      ],
+      "notes": "别人的观点归本人；主持人追问洞见来历不自动证明全面认可。"
+    }
+  },
+  "cases": [
+    {
+      "id": "layoff-1",
+      "group": "layoff",
+      "split": "holdout",
+      "category": "reserved-interview-layoff",
+      "question": "老猫回忆的裁员经历里，为什么“老板说团队安全”并没有变成保证？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "layoff"
+      ]
+    },
+    {
+      "id": "layoff-2",
+      "group": "layoff",
+      "split": "holdout",
+      "category": "reserved-interview-layoff",
+      "question": "老猫收到HR会议邀请前，团队得到了怎样的说法？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "layoff"
+      ]
+    },
+    {
+      "id": "pricing-1",
+      "group": "pricing",
+      "split": "holdout",
+      "category": "reserved-interview-pricing",
+      "question": "立正谈课程价值时，为提高定价比较了哪两种做法？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "pricing"
+      ]
+    },
+    {
+      "id": "pricing-2",
+      "group": "pricing",
+      "split": "holdout",
+      "category": "reserved-interview-pricing",
+      "question": "能让学员提高10%，怎样还可能提高课程收费？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "pricing"
+      ]
+    },
+    {
+      "id": "interactive-1",
+      "group": "interactive",
+      "split": "holdout",
+      "category": "reserved-interview-interactive",
+      "question": "Richer举的Chapters互动游戏，与单向看故事有什么区别？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "interactive"
+      ]
+    },
+    {
+      "id": "interactive-2",
+      "group": "interactive",
+      "split": "holdout",
+      "category": "reserved-interview-interactive",
+      "question": "Richer谈网文IP改编时，互动游戏具体怎么让用户参与？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "interactive"
+      ]
+    },
+    {
+      "id": "audience-1",
+      "group": "audience",
+      "split": "holdout",
+      "category": "reserved-interview-audience",
+      "question": "星瞳为什么既从观众那里感到安心，也会有压力？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "audience"
+      ]
+    },
+    {
+      "id": "audience-2",
+      "group": "audience",
+      "split": "holdout",
+      "category": "reserved-interview-audience",
+      "question": "星瞳怎么看直播间观众的到来与离开？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "audience"
+      ]
+    },
+    {
+      "id": "incentives-1",
+      "group": "incentives",
+      "split": "holdout",
+      "category": "reserved-interview-incentives",
+      "question": "刘天强谈早期创业的期权激励时，这些建议建立在什么条件上？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "incentives"
+      ]
+    },
+    {
+      "id": "incentives-2",
+      "group": "incentives",
+      "split": "holdout",
+      "category": "reserved-interview-incentives",
+      "question": "刘天强提到拿股票、下一轮期权池和激励同事，怎样理解它们的关系？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "incentives"
+      ]
+    },
+    {
+      "id": "content-1",
+      "group": "content",
+      "split": "holdout",
+      "category": "reserved-interview-content",
+      "question": "Eula为什么觉得做内容仍有创新空间，而非只有复制前人？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "content"
+      ]
+    },
+    {
+      "id": "content-2",
+      "group": "content",
+      "split": "holdout",
+      "category": "reserved-interview-content",
+      "question": "Eula提到个人品牌、企业品牌与行业连接，是想说明什么机会？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "content"
+      ]
+    }
+  ]
+}

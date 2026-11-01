@@ -81,7 +81,13 @@ def test_pinned_structured_projection_rejects_text_and_owner_spoof(context_pack)
     with pytest.raises(SemanticIndexError, match="attribution differs"):
         prepare_index(context_pack, docs)
     unknown.speaker_id = "unknown"
+    original_text = unknown.text
     unknown.text += "捏造的逐字稿句子。"
+    with pytest.raises(SemanticIndexError, match="attribution differs"):
+        prepare_index(context_pack, docs)
+    unknown.text = original_text
+    prepare_index(context_pack, docs)
+    unknown.dialogue_units[0]["speaker_id"] = "invented-owner"
     with pytest.raises(SemanticIndexError, match="attribution differs"):
         prepare_index(context_pack, docs)
 
@@ -228,7 +234,10 @@ def test_reference_use_excerpt_stays_short_and_finds_the_matching_cue(context_pa
     index.load()
     passage = next(p for p in index.retrieve("独特匹配探针") if p.source.get("speaker_id") == "unknown")
     assert len(passage.source["excerpt"]) <= 500
-    assert "独特匹配探针" in passage.source["excerpt"] and passage.source["timecode"] == "00:00:15"
+    assert "独特匹配探针" in passage.source["excerpt"]
+    # The public link starts at the visible contiguous context, not a cue
+    # spliced out of the exchange.
+    assert passage.source["timecode"] == passage.source["excerpt"].split(" ",1)[0]
 
 
 def test_host_question_and_reported_attitude_are_preserved_without_stance_upgrade(context_pack):

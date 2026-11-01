@@ -72,6 +72,18 @@ def test_host_names_come_from_the_table(names):
     assert {"立正", "孙煜征", "Yuzheng Sun"} <= set(names.speaker_names("yuzheng"))
 
 
+def test_identity_is_removed_from_topic_terms_without_removing_another_latin_name(names):
+    assert "立正" not in names.without_speaker_names("立正对系统设计怎么看", "yuzheng")
+    assert "系统设计" in names.without_speaker_names("孙煜征对系统设计怎么看", "yuzheng")
+    assert "Yuzheng Sunzi" in names.without_speaker_names("Yuzheng Sunzi", "yuzheng")
+
+
+def test_full_chinese_alias_is_independent_of_the_preceding_verb():
+    reader = NameIndex.from_catalog({"entities": [{"entity_id":"guest:synthetic", "display_name":"张雨寒", "aliases":["张雨寒"]}]})
+    for question in ["关于张雨寒的观点", "我赞同张雨寒的观点", "能否总结张雨寒", "张雨寒怎么看"]:
+        assert reader.resolve(question) == {"guest:synthetic"}
+
+
 def test_a_reviewed_guest_statement_may_use_the_names_readers_use(index):
     passages = index.retrieve("校风 行胜于言 as an engineer build 一手的认识", limit=12, intent="find")
     target = next(p for p in passages if p.source.get("speaker_id") == "guest:lu-wei" and p.evidence.get("speech_act") == "statement")

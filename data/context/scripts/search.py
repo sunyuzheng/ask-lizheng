@@ -85,6 +85,9 @@ class Document:
     participant_aliases: str = ""
     participant_metadata_basis: str = ""
     speech_act: str = ""
+    # Contiguous raw units, never the programme roster or inferred endorsement.
+    dialogue_units: list | None = None
+    programme_description: str = ""
 
 
 def provenance_fields(meta: dict) -> dict[str, str]:
@@ -516,6 +519,8 @@ def apply_guest_catalog(documents: list[Document]) -> list[Document]:
             rows.append(row["entity_id"])
     for doc in documents:
         source = doc.source_id if doc.source_id in sources else by_url.get(doc.source_family)
+        description = sources.get(source, {}).get("description", "")
+        doc.programme_description = description[:2000]
         ids = participants.get(source, [])
         if not ids:
             continue
@@ -626,7 +631,7 @@ def parse_raw_dialogue(path: Path) -> list[Document]:
     def sized(rows):
         chunk, size = [], 0
         for unit in rows:
-            if chunk and size + len(unit["text"]) > 2600:
+            if chunk and (size + len(unit["text"]) > 2600 or unit["start_seconds"] < chunk[-1]["start_seconds"]):
                 yield chunk
                 chunk, size = [], 0
             chunk.append(unit); size += len(unit["text"])
@@ -645,6 +650,22 @@ def parse_raw_dialogue(path: Path) -> list[Document]:
                       author="说话人待核", original_author="说话人待核",
                       content_origin="mixed-or-unresolved-speech", evidence_role="speaker-attributed-speech",
                       yuzheng_stance_weight="not-evidence")
+        # Keep adjacent voices available to consumers. A speaker-only projection
+        # cannot establish what somebody was responding to.
+        begin = speech.index(chunk[0])
+        finish = begin + len(chunk)
+        left, right, n = begin, finish, 0
+        while (left > 0 and speech[left - 1]["start_seconds"] <= speech[left]["start_seconds"]
+               and n + len(speech[left - 1]["text"]) <= 350):
+            left -= 1
+            n += len(speech[left]["text"])
+        n = 0
+        while (right < len(speech) and speech[right - 1]["start_seconds"] <= speech[right]["start_seconds"]
+               and n + len(speech[right]["text"]) <= 350):
+            n += len(speech[right]["text"])
+            right += 1
+        context = speech[left:right]
+        fields["dialogue_units"] = context
         documents.append(document(chunk, fields, fields["fragment_id"]))
     # Speaker chunks: one attributed speaker's units of one speech act, in order, split where the
     # attribution status changes. Only statement chunks can stand for the speaker's view.

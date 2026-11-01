@@ -530,10 +530,11 @@ def test_a_second_slip_reads_as_titles(index):
     validate_answer(answer, passages)
     result = assemble_answer(answer, passages)
     section = result["sections"][0]
+    first, second = (f"《{p.source['title']}》" for p in passages[:2])
     assert section["heading"] == "先看能力证据"
-    assert section["body"] == "《职业选择要看能力与作品》[S1]说得更直接：作品是能力的证据。这和《如何积累能力》[S2]的看法一致[S1][S2]。"
-    assert result["followups"] == ["《如何积累能力》讲的方法怎么用？"]
-    assert result["sources"][1]["reason"] == "可与《职业选择要看能力与作品》相互印证。"
+    assert section["body"] == f"{first}[S1]说得更直接：作品是能力的证据。这和{second}[S2]的看法一致[S1][S2]。"
+    assert result["followups"] == [f"{second}讲的方法怎么用？"]
+    assert result["sources"][1]["reason"] == f"可与{first}相互印证。"
     # A title is longer than its number; past the field's limit, only the mark stays.
     long = answer.model_copy(update={"summary": "能" * 340 + "，S1 也这样看。"})
     assert assemble_answer(long, passages)["summary"] == "能" * 340 + "，[S1]也这样看。"

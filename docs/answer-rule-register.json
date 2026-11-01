@@ -16,7 +16,7 @@
       "topic": "按用途选择依据",
       "criterion": "input_scope",
       "type": "boundary",
-      "action": "keep"
+      "action": "separate-relevance-from-attribution"
     },
     {
       "id": "P3",
@@ -296,28 +296,28 @@
       "topic": "立正依据资格",
       "criterion": "attribution",
       "type": "boundary",
-      "action": "keep"
+      "action": "allow-attributed-dialogue-context"
     },
     {
       "id": "R3",
       "topic": "嘉宾依据资格",
       "criterion": "attribution",
       "type": "boundary",
-      "action": "keep"
+      "action": "soft-person-routing"
     },
     {
       "id": "R4",
       "topic": "立正姓名作用域",
       "criterion": "attribution",
       "type": "boundary",
-      "action": "keep"
+      "action": "keep-host-attribution-without-source-exclusion"
     },
     {
       "id": "R5",
       "topic": "名字前后字表",
       "criterion": "attribution",
       "type": "heuristic",
-      "action": "retain-after-negative-controls"
+      "action": "catalogue-aliases-with-conservative-short-name-boundaries"
     },
     {
       "id": "R6",
@@ -401,7 +401,7 @@
       "topic": "语义窗口与门槛",
       "criterion": "faithfulness",
       "type": "implementation",
-      "action": "preserve-winning-window"
+      "action": "preserve-source-windows-and-diversify-candidates"
     },
     {
       "id": "R18",
@@ -422,7 +422,7 @@
       "topic": "卡片固定加分",
       "criterion": "relevance",
       "type": "heuristic",
-      "action": "ablate-rank-fusion"
+      "action": "rank-fusion-channel"
     },
     {
       "id": "R21",
@@ -450,14 +450,14 @@
       "topic": "模型阅读与展示预算",
       "criterion": "format",
       "type": "product-default",
-      "action": "retain-500-until-measured"
+      "action": "separate-model-reading-from-public-excerpts"
     },
     {
       "id": "R25",
       "topic": "词频截段",
       "criterion": "faithfulness",
       "type": "heuristic",
-      "action": "semantic-position-first"
+      "action": "preserve-matched-turn-when-reading-context"
     },
     {
       "id": "R26",
@@ -548,14 +548,14 @@
       "topic": "立正归属检查",
       "criterion": "attribution",
       "type": "heuristic",
-      "action": "all-visible-fields-backstop"
+      "action": "visible-unit-attribution-guard"
     },
     {
       "id": "V7",
       "topic": "嘉宾归属检查",
       "criterion": "attribution",
       "type": "heuristic",
-      "action": "all-visible-fields-backstop"
+      "action": "visible-unit-attribution-guard"
     },
     {
       "id": "V8",
@@ -653,7 +653,7 @@
       "topic": "回答真实效果",
       "criterion": "relevance",
       "type": "evaluation",
-      "action": "independent-paired-repeated-holdout"
+      "action": "independent-interview-context-and-repeated-paired-evaluation"
     },
     {
       "id": "E5",

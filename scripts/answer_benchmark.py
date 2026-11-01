@@ -52,6 +52,7 @@ def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
         raise ValueError("Actual model input has duplicate source IDs")
     by_id = {source["id"]: source for source in actual}
     snapshots = saved_input["source_snapshots"]
+    public_snapshots = saved_input.get("public_source_snapshots", snapshots)
     snapshot_ids = [source.get("id") for source in snapshots]
     if len(set(snapshot_ids)) != len(snapshot_ids) or set(actual_ids) != set(snapshot_ids):
         raise ValueError("Saved source snapshots do not match the actual input source IDs")
@@ -66,7 +67,7 @@ def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
     for source in public_sources:
         if any(key not in source for key in ("title", "url", "excerpt")):
             raise ValueError("Public source lacks a traceable source identity")
-        matches = [snapshot["id"] for snapshot in snapshots
+        matches = [snapshot["id"] for snapshot in public_snapshots
                    if all(snapshot.get(key, "") == source.get(key, "")
                           for key in stable if key in source)]
         if len(matches) != 1 or matches[0] in public_to_retrieval.values():
@@ -153,7 +154,8 @@ async def generate(args, token: str, client=None) -> dict:
         inputs[case_id] = {"route": value["route"], "request": request,
                            "model_messages": payload["messages"] if payload else [],
                            "sources": [impl.answers.model_evidence(p) for p in value["passages"]],
-                           "source_snapshots": [p.evidence for p in value["passages"]], "metrics": metrics[case_id]}
+                           "source_snapshots": [p.evidence for p in value["passages"]],
+                           "public_source_snapshots": [p.source for p in value["passages"]], "metrics": metrics[case_id]}
     report = {"schema_version": 1, "kind": "answer-generation", "implementation": str(impl.root),
               "implementation_sha256": evidence.implementation_hash(impl.root),
               "fixture_sha256": evidence.digest(args.fixture.read_bytes()), "context_commit": index.source_revision,
@@ -208,6 +210,10 @@ def gold_evidence(fixture: dict, case: dict, context_root: Path) -> list[dict]:
         ref = fixture["refs"][ref_id]
         body = evidence.source_body(context_root / ref["path"], ref.get("speaker_id"))
         excerpts = [ref["context"]] if ref.get("context") else []
+        if ref.get("unit_ids"):
+            units = json.loads((context_root / ref["path"]).read_text())["units"]
+            wanted = set(ref["unit_ids"])
+            excerpts = ["\n".join(f"[{u['speaker_id']}] {u['text']}" for u in units if u["id"] in wanted)]
         for quote in ref["quotes"]:
             anchor = evidence.normalize(quote)
             if any(anchor in evidence.normalize(text) for text in excerpts):

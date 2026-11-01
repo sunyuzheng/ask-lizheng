@@ -28,7 +28,7 @@ sys.path.insert(0, str(PROJECT))
 
 import httpx
 
-from server.retrieval import ContextIndex, is_participant_statement, is_yuzheng_basis
+from server.retrieval import ContextIndex, is_answer_material, is_participant_statement, is_yuzheng_basis
 from server.semantic import DIMENSIONS, EMBEDDING_MODEL, MAX_BATCH, SemanticIndex, request_embeddings
 
 FIXTURE = PROJECT / "tests/fixtures/retrieval-eval.json"
@@ -82,14 +82,12 @@ def evaluate(index: ContextIndex | None = None) -> dict:
             raise ValueError(f"{item['id']}: query vector is missing or stale; run --refresh-vectors")
         candidates = semantic._rank(decode(item["vector"]))
         passages = index.retrieve(item["question"], limit=12, semantic_candidates=candidates, intent=item["intent"])
-        eligible = [row for row in candidates if is_yuzheng_basis(index.documents[row["docindex"]])]
+        eligible = [row for row in candidates if is_answer_material(index.documents[row["docindex"]])]
         paths = {passage.evidence["source_path"] for passage in passages}
         rows.append({
             "id": item["id"],
             "passages": len(passages),
-            "all_eligible": all(is_yuzheng_basis(index.documents[p.evidence["docindex"]])
-                                or (not index.names_host(item["question"])
-                                    and is_participant_statement(index.documents[p.evidence["docindex"]], index.participant_entities(item["question"])))
+            "all_eligible": all(is_answer_material(index.documents[p.evidence["docindex"]])
                                 for p in passages),
             "eligible_semantic": len(eligible),
             "card": item.get("card"),

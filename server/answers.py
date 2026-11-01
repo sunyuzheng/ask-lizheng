@@ -431,6 +431,7 @@ def attribution_fields(answer: ModelAnswer, passages: list[Passage]) -> list[tup
 def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
     """Reject named claims without a corresponding author or fragment speaker."""
     evidence = {passage.source["id"]: passage.evidence for passage in passages}
+    from .dialogue_evidence import supports_speaker
     non_stance_acts = {"question", "introduction", "acknowledgement", "joke", "reported-other"}
     host = "|".join(re.escape(name) for name in host_names(passages))
     view_claim = re.compile(r"(?:" + host + r")(?:本人)?(?:认为|主张|觉得|相信|建议|赞同|支持|反对|强调|说(?:过|道)?|提到|指出|表示|写道|的(?:立场|观点|判断))", re.I)
@@ -451,13 +452,15 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
             denies_inference = claim and re.search(r"不能|无法|不足以|没有证据|尚不能", sentence[:claim.start()])
             if denies_inference:
                 continue
-            own = [evidence[c] for c in cited if evidence.get(c, {}).get("content_origin") in OWN_VIEW_ORIGINS]
+            own = [evidence[c] for c in cited if evidence.get(c, {}).get("content_origin") in OWN_VIEW_ORIGINS
+                   or supports_speaker(evidence.get(c, {}), "yuzheng")]
             if not own:
                 found.append(sentence.strip())
                 continue
             # A question carrying his speaker ID is not stance evidence.
-            supports_view = any(item.get("yuzheng_stance_weight") != "not-evidence"
-                                and item.get("speech_act") not in non_stance_acts for item in own)
+            supports_view = any(supports_speaker(item, "yuzheng") or
+                               (not item.get("dialogue_units") and item.get("yuzheng_stance_weight") != "not-evidence"
+                                and item.get("speech_act") not in non_stance_acts) for item in own)
             if claim and not denies_inference and not supports_view:
                 found.append(sentence.strip())
     # Programme names support discovery; only a fragment's speaker binding supports
@@ -483,11 +486,12 @@ def misattributed(answer: ModelAnswer, passages: list[Passage]) -> list[str]:
                 if not claim or re.search(r"不能|无法|不足以|没有证据|尚不能", sentence[:claim.start()]):
                     continue
                 # The fragment's speaker ID decides; a recorded name ("卢蔚（Cooper）") need not match the wording.
-                confirmed = any(p.source.get("speaker_id") not in (None, "", "unknown")
+                confirmed = any(any(supports_speaker(p.evidence, entity) for entity in entities)
+                                or (p.source.get("speaker_id") not in (None, "", "unknown")
                                 and p.source.get("speaker_status") != "unresolved"
                                 and p.evidence.get("speech_act") not in non_stance_acts
                                 and (p.source.get("speaker_id") in entities
-                                     or name.casefold() == str(p.source.get("speaker_name") or "").casefold())
+                                     or name.casefold() == str(p.source.get("speaker_name") or "").casefold()))
                                 for p in relevant)
                 if not confirmed and sentence.strip() not in found:
                     found.append(sentence.strip())
