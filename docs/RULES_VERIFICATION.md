@@ -80,3 +80,5 @@ Builder发布按固定线上配置执行，模型为DeepSeek V4 Flash、备用gp
 
 
 访谈资料与归属的后续修订见 [INTERVIEW_EVIDENCE.md](INTERVIEW_EVIDENCE.md)。维护者继续明确授权本轮系统实现及发布，采用相同的自审与验证责任；未扩大私有资料或访客授权范围。
+
+访谈后续修订完成104题三轮与另8道冻结代码后的新原文题验证；实际输入、补试、作废评分原因、延迟取舍及来源版本等价复核见 [INTERVIEW_EVIDENCE.md](INTERVIEW_EVIDENCE.md)。运行指纹 `8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c`；[最终资料与评测代码CI](https://github.com/sunyuzheng/ask-lizheng/actions/runs/41361994147)通过566项Python及21项Node，256MB容器2秒就绪、运行峰值115MB。此处是发布前自审记录；生产身份与只读验收写入机器可读记录。

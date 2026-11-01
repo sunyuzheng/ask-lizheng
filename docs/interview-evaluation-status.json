@@ -78,6 +78,7 @@
   "paired_judgments": {
     "attempted": 312,
     "valid": 303,
+    "judge_input_version": 3,
     "unjudged": [
       {
         "id": "s0-bayesian-2",
@@ -127,96 +128,92 @@
     ],
     "retried_invalid_judgments": [
       [
-        "s0-ethan-1",
-        2
-      ],
-      [
-        "s0-lifecycle-1",
+        "s0-liujia-1",
         0
       ],
       [
-        "s0-strategy-1",
-        1
+        "s1-release-coaching-1",
+        0
       ]
     ],
     "group_mean_score_deltas": {
-      "relevance": 0.6935897435897436,
-      "faithfulness": 0.17884615384615385,
-      "attribution": 0.06666666666666667,
-      "time": 0.013461538461538462,
-      "limitations": -0.05256410256410257,
-      "readability": 0.27884615384615385
+      "relevance": 0.6923076923076923,
+      "faithfulness": 0.1891025641025641,
+      "attribution": 0.14423076923076922,
+      "time": 0.03333333333333333,
+      "limitations": -0.008333333333333335,
+      "readability": 0.24615384615384617
     },
     "preferences": {
-      "baseline": 97,
-      "candidate": 202,
-      "tie": 4
+      "candidate": 196,
+      "baseline": 102,
+      "tie": 5
     },
     "task_fulfillment": {
       "baseline": {
-        "complete": 132,
-        "partial": 118,
-        "failed": 53
+        "complete": 140,
+        "partial": 112,
+        "failed": 51
       },
       "candidate": {
-        "complete": 203,
-        "partial": 77,
-        "failed": 23
+        "complete": 213,
+        "failed": 24,
+        "partial": 66
       }
     },
     "critical_error_events": {
-      "baseline": 91,
-      "candidate": 73
+      "baseline": 84,
+      "candidate": 66
     },
-    "critical_regression_pairs": 54
+    "critical_regression_pairs": 48
   },
   "subsets": {
     "original_60": {
       "pairs": 180,
       "judged": 176,
       "group_mean_score_deltas": {
-        "relevance": 0.4477777777777778,
-        "faithfulness": 0.04777777777777777,
-        "attribution": -0.07666666666666666,
-        "time": -0.019999999999999997,
-        "limitations": -0.21222222222222223,
-        "readability": 0.24
+        "relevance": 0.42666666666666664,
+        "faithfulness": 0.05333333333333333,
+        "attribution": -0.014444444444444447,
+        "time": -0.0022222222222222274,
+        "limitations": -0.13666666666666666,
+        "readability": 0.1511111111111111
       }
     },
     "prior_release_16": {
       "pairs": 48,
       "judged": 45,
       "group_mean_score_deltas": {
-        "relevance": 0.5708333333333333,
-        "faithfulness": 0.42083333333333334,
-        "attribution": 0.020833333333333336,
-        "time": -0.07083333333333333,
-        "limitations": 0.14166666666666666,
-        "readability": 0.24166666666666667
+        "relevance": 0.5375,
+        "faithfulness": 0.5625,
+        "attribution": 0.35,
+        "time": -0.025,
+        "limitations": 0.175,
+        "readability": 0.30833333333333335
       }
     },
     "interview_dev_16": {
       "pairs": 48,
       "judged": 46,
       "group_mean_score_deltas": {
-        "relevance": 1.6958333333333333,
-        "faithfulness": 0.2916666666666667,
-        "attribution": 0.6166666666666667,
-        "time": 0.19166666666666665,
-        "limitations": 0.2708333333333333,
-        "readability": 0.4625
+        "relevance": 1.7583333333333333,
+        "faithfulness": 0.3,
+        "attribution": 0.6416666666666667,
+        "time": 0.125,
+        "limitations": 0.36666666666666664,
+        "readability": 0.5791666666666666
       }
     },
     "reserved_interviews_12": {
       "pairs": 36,
       "judged": 36,
       "group_mean_score_deltas": {
-        "relevance": 0.75,
-        "faithfulness": 0.3611111111111111,
-        "attribution": 0.1111111111111111,
-        "time": 0.05555555555555555,
-        "limitations": 0.05555555555555555,
-        "readability": 0.2777777777777778
+        "relevance": 0.8055555555555556,
+        "faithfulness": 0.2222222222222222,
+        "attribution": -4.625929269271485e-18,
+        "time": 0.16666666666666669,
+        "limitations": -0.1111111111111111,
+        "readability": 0.19444444444444445
       }
     }
   },
@@ -232,6 +229,15 @@
       "median_total_seconds": 6.612500000000001,
       "first_section_observed_runs": 10,
       "median_first_section_seconds": 4.184
+    },
+    "paired_first_sections": {
+      "pairs": 8,
+      "medians": {
+        "baseline": 2.2675,
+        "candidate": 4.2684999999999995
+      },
+      "median_paired_difference_seconds": 2.2765000000000004,
+      "note": "Intersection only: both versions actually displayed a section. Completion timing uses all twelve question/repeat pairs."
     }
   },
   "source_parity": {
@@ -245,29 +251,104 @@
     "method": "Exact production candidate-message bytes and route, same cached question vectors. Source change only merges an existing guest identity; gold raw bodies remain hash-verified. Selector and answer prompts use these same candidate messages/metadata."
   },
   "verification": {
-    "ci": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41359324125",
-    "python_tests": 564,
+    "ci": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41361994147",
+    "python_tests": 566,
     "node_tests": 21,
     "container_mb": 256,
     "resident_peak_mb": 115,
     "ready_seconds": 2,
-    "final_release_ci": null,
+    "final_release_ci": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41361994147",
     "production": null
   },
   "report_sha256": {
     "release-answers-old.json": "541b637a50fdd2fb51ed31f0388d05fd4852b944b3d077664065e0a8f76d5d2b",
     "release-answers-selected.json": "b6ba3666d84053c2d9190400aac356354457c83f46de7a93b218d3b640259d81",
-    "judgments-selected.json": "7f9234fa978bad84c1e93b78f6dda9af8b9bbd7fee9b655b6f2319e4f8c6b1c3",
-    "judgments-selected-retry.json": "d04395849e59a296af4d537e7afa4822da3d3bacd821e697b292ea1c87fbf7a2",
-    "judgments-selected-final.json": "eb3c1289f629451326bd2390d3aa7ca8402f5c3739e6d651ea67919c87582b5a",
+    "judgments-unbiased-main.json": "612828f0fc913022271c6117351965c4af0d8e2575b927b2ecbd279027924d51",
+    "judgments-unbiased-final.json": "827ff228e2917d99923b272826f0c0446b1f82e91f04bb5b0f23302fe8fcfca2",
+    "judgments-unbiased-retry.json": "58cb56fa7dd7c21097f3120fcf49ad044bd0352305e534fb2d2f85b9f17b75ad",
+    "judgments-unbiased-retry-coaching.json": "7353f775103abb5a9ac744be48e148e97d1b5c2b5a6c3b314a9992397403aed2",
     "source-parity.json": "c2140200a893b5b6a2d3766096ea7310880667ff9536ef7501731c4aa6eb3ae6",
     "stream-latency-selected.json": "128a59dd022537a2b1041c060ae6da714c138dedd082b88d60f5d58ff266a901"
   },
   "limits": [
     "Single blinded LLM judge, repeated answer samples; curated source-derived tasks, not a production accuracy estimate.",
     "Existing regression topics have mixed outcomes; old 60-case attribution and limitation scores slightly decline.",
-    "Extra planning call increased the observed median first section by 1.786 seconds and total by 2.381 seconds in the small interleaved sample; the proposed 1-second threshold was not met.",
+    "Extra planning call increased observed total completion median by 2.381 seconds; first-section comparison uses only eight pairs with a section in both versions. Proposed one-second threshold was not met.",
     "Recorded source attribution may be automatic; ASR and voice identification are not human hearing verification.",
     "Old public answer snapshots are preserved; no public test questions or visitor quota/archive writes were used."
-  ]
+  ],
+  "final_unseen_8": {
+    "fixture": "tests/fixtures/interview-final-holdout.json",
+    "context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+    "engine_sha256": "8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c",
+    "generation": {
+      "baseline": {
+        "attempts": 24,
+        "validated": 24,
+        "failures": []
+      },
+      "candidate": {
+        "attempts": 24,
+        "validated": 23,
+        "failures": [
+          {
+            "id": "final-chase-1",
+            "repeat": 1,
+            "error": "invalid_answer"
+          }
+        ]
+      }
+    },
+    "judged_pairs": 23,
+    "unjudged": [
+      {
+        "id": "final-chase-1",
+        "repeat": 1,
+        "error": "generation_failed"
+      }
+    ],
+    "group_mean_score_deltas": {
+      "relevance": 0.575,
+      "faithfulness": 0.4416666666666667,
+      "attribution": 0.016666666666666677,
+      "time": 0.21666666666666667,
+      "limitations": 0.05,
+      "readability": 0.2583333333333333
+    },
+    "preferences": {
+      "candidate": 17,
+      "baseline": 6
+    },
+    "critical_error_events": {
+      "baseline": 5,
+      "candidate": 3
+    },
+    "report_sha256": {
+      "final-unseen-old.json": "e6bc224d0c096954055bf4c52a1558fc4f8f1b271d5617cd3272eb1005876084",
+      "final-unseen-new.json": "a27d59b9f221dde53a841437ed6551a1d597ac5a6215cbfa77328aadbb99ad1a",
+      "judgments-unbiased-fresh.json": "ee3f50ee08ff0c8e2205e924dff9b241d0e3905eb2721545354d724db2051b68"
+    },
+    "method": "Four new guest identities and source files excluded from all previous gold; selected by fixed path hash, middle raw units, questions frozen after code 8298 and before any new embedding/query/model run. Same final public release in both implementations. No further code tuning.",
+    "judge_input_version": 3
+  },
+  "actual_answer_model_evidence_visibility": {
+    "common_gold_cases": 98,
+    "counts": {
+      "baseline": {
+        "case_repeats": 294,
+        "path_available_to_answer_model": 228,
+        "literal_anchor_available_to_answer_model": 72
+      },
+      "candidate": {
+        "case_repeats": 294,
+        "path_available_to_answer_model": 244,
+        "literal_anchor_available_to_answer_model": 150
+      }
+    },
+    "note": "Same gold tasks requiring a model in both versions; selection-empty stays in denominator. Match actual delivered text and per-unit speaker ownership, never the mixed window header. Literal anchors are diagnostics, not answer correctness."
+  },
+  "superseded_judgments": {
+    "reason": "Program-computed evidence-state hints removed; mixed-window per-unit ownership fixed in literal coverage. All final numbers rejudged on identical generation outputs without those hints.",
+    "sha256": "eb3c1289f629451326bd2390d3aa7ca8402f5c3739e6d651ea67919c87582b5a"
+  }
 }
