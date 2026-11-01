@@ -376,16 +376,18 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         response = client.post("/api/ask", json={"question": "职业选择怎么做"})
         items = events(response)
-        assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "approach", "progress", "progress", "result"]
-        assert items[4][1]["sources"] and "尚不是完整回答" in items[4][1]["note"]
+        assert [event for event, _ in items] == ["progress", "sources", "progress", "sources", "progress", "sources", "approach", "progress", "progress", "result"]
+        approach = next(value for event, value in items if event == "approach")
+        assert approach["sources"] and "尚不是完整回答" in approach["note"]
         assert items[1][1]["provisional"] and items[1][1]["sources"][0]["excerpt"]
         # The answer map: every candidate by source id with its material key, and the chosen cards.
         for phase in (items[1][1], items[3][1]):
             assert phase["candidates"] and len(phase["candidates"]) >= len(phase["sources"])
             assert [row["id"] for row in phase["candidates"]][:len(phase["sources"])] == [source["id"] for source in phase["sources"]]
             assert all(set(row) == {"id", "key"} and not row["key"].startswith("corpus/") and not row["key"].endswith((".md", ".json")) for row in phase["candidates"])
-        assert isinstance(items[4][1]["cards"], list)
-        assert all(set(card) == {"id", "title", "source_ids"} for card in items[4][1]["cards"])
+        approach = next(value for event, value in items if event == "approach")
+        assert isinstance(approach["cards"], list)
+        assert all(set(card) == {"id", "title", "source_ids"} for card in approach["cards"])
         assert items[-2][1]["stage"] == "checking"
         assert items[-1][1]["status"] == "answered"
         assert items[-1][1]["sources"][0]["url"].startswith("https://")

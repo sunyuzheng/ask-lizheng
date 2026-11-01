@@ -181,6 +181,8 @@ def test_complete_validated_repeats_use_direct_production_functions_with_fake_pr
     def provider(request):
         payload = json.loads(request.content)
         requests.append(payload)
+        if "stream" not in payload:
+            return httpx.Response(200, json={"choices": [{"message": {"content": '{"source_ids":["S1"]}'}}]})
         value = {"status": "answered", "summary": "合成测试回答。", "sections": [
             {"heading": "合成测试判断", "body": "合成测试转述。[S1]", "source_ids": ["S1"], "kind": "synthesis"}],
                  "followups": [], "clarifying_questions": [], "limitations": "", "source_reasons": [], "slug": "synthetic-test"}
@@ -189,9 +191,11 @@ def test_complete_validated_repeats_use_direct_production_functions_with_fake_pr
         async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
             return await bench.generate(args, "private-test-token", client)
     report = asyncio.run(run())
-    assert len(requests) == 2 and report["summary"]["completed"] == 2
+    assert len(requests) == 4 and report["summary"]["completed"] == 2
     assert all(run["validated_model_answer"]["sections"] for run in report["runs"])
-    assert report["inputs"]["q"]["model_messages"] == requests[0]["messages"]
+    answer_requests = [r for r in requests if "stream" in r]
+    assert all(r["actual_input"]["model_messages"] == answer_requests[0]["messages"] for r in report["runs"])
+    assert all(len(r["actual_input"]["sources"]) == 1 for r in report["runs"])
     assert report["inputs"]["q"]["sources"]
     assert "private-test-token" not in output.read_text() and output.stat().st_mode & 0o777 == 0o600
 

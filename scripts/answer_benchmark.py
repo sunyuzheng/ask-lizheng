@@ -26,6 +26,7 @@ JUDGE_MODEL = "gpt-5"
 
 def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
     """Put actual excerpts in the public answer's ID space, with no added body text."""
+    saved_input = run.get("actual_input", saved_input)
     public = run["answer"]
     public_sources = public.get("sources", [])
     public_ids = [source["id"] for source in public_sources]
@@ -171,14 +172,29 @@ async def generate(args, token: str, client=None) -> dict:
             row = {"id": case_id, "group": case["group"], "split": case["split"], "category": case["category"], "repeat": repeat}
             try:
                 if value["route"] == "generate":
-                    answer = await impl.answers.generate_answer(provider, token, model, inputs[case_id]["request"],
-                                                                 value["passages"], backup=backup)
-                    row["validated_model_answer"] = answer.model_dump()
-                    result = impl.answers.assemble_answer(answer, value["passages"])
+                    passages = value["passages"]
+                    kwargs = {}
+                    if impl.selection is not None:
+                        deadline = time.monotonic() + impl.answers.ANSWER_BUDGET_SECONDS
+                        passages = await impl.selection.select_evidence(provider, token, model, inputs[case_id]["request"], passages)
+                        kwargs["deadline"] = deadline
+                        row["selection_seconds"] = round(time.monotonic() - started, 3)
+                        row["actual_input"] = {**inputs[case_id], "route": "generate" if passages else "selection-empty",
+                            "sources": [impl.answers.model_evidence(p) for p in passages],
+                            "source_snapshots": [p.evidence for p in passages], "public_source_snapshots": [p.source for p in passages],
+                            "model_messages": impl.answers.answer_payload(model, inputs[case_id]["request"], passages)["messages"] if passages else []}
+                    if passages:
+                        answer = await impl.answers.generate_answer(provider, token, model, inputs[case_id]["request"], passages, backup=backup, **kwargs)
+                        row["validated_model_answer"] = answer.model_dump()
+                    else:
+                        answer = impl.selection.empty_answer()
+                    result = impl.answers.assemble_answer(answer, passages)
+                    selected_value = {**value, "passages": passages}
+                    row["evidence_state"] = answer_state(case, evidence.evidence_metrics(impl, index, case, fixture["refs"], selected_value), result)
                 else:
                     result = copy.deepcopy(value["result"])
-                row.update(answer=result, status_ok=case["expect"] in {"any", result["status"]},
-                           evidence_state=answer_state(case, metrics[case_id], result))
+                row.update(answer=result, status_ok=case["expect"] in {"any", result["status"]})
+                row.setdefault("evidence_state", answer_state(case, metrics[case_id], result))
             except impl.answers.ProviderFailure as exc:
                 row["error"] = exc.code
             except Exception as exc:

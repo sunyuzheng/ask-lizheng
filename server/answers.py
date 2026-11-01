@@ -221,10 +221,10 @@ class ProviderStalled(Exception):
 
 
 async def generate_answer(client: httpx.AsyncClient, token: str, model: str, request: dict, passages: list[Passage],
-                          on_progress=None, on_partial=None, backup: str | None = None) -> ModelAnswer:
+                          on_progress=None, on_partial=None, backup: str | None = None, deadline=None) -> ModelAnswer:
     """The answer to one question, within one wall-clock budget. With a backup, a model that has
     written nothing after FIRST_CONTENT_SECONDS (or failed first) hands the question to it once."""
-    deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
+    deadline = deadline if deadline is not None else time.monotonic() + ANSWER_BUDGET_SECONDS
     if not backup or backup == model:
         return await answer_with(client, token, model, request, passages, deadline, on_progress, on_partial)
     try:

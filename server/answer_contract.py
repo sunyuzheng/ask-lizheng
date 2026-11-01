@@ -10,7 +10,7 @@ import hashlib
 from functools import lru_cache
 from pathlib import Path
 
-VERSION = "2026-11-01.3"
+VERSION = "2026-11-01.4"
 GOAL = "根据可核对的公开原文，帮助读者理解问题、作有条件的应用判断，或找到值得读的资料。"
 
 

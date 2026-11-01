@@ -25,7 +25,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .answers import BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
+from .answers import ANSWER_BUDGET_SECONDS, BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
+from .evidence_selection import empty_answer, select_evidence
 from .query_context import uses_previous_question
 from .answer_contract import VERSION as ANSWER_CONTRACT_VERSION, engine_fingerprint
 from .retrieval import ContextIndex
@@ -572,16 +573,25 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     result = sources_only(passages, "找到这些节目，可以打开节目或原稿继续阅读。", "find") if passages else unsupported_result(passages)
                     yield sse("result", await settled_result(result))
                     return
-                cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
-                yield sse("approach", answer_approach(payload.intent, passages, cards))
-                yield sse("progress", {"stage": "thinking", "message": f"已找到 {len(passages)} 个候选片段，正在根据材料整理回答…"}) + STREAM_HEARTBEAT
+                yield sse("progress", {"stage": "matching", "message": "正在筛选能直接回答问题的原文…"}) + STREAM_HEARTBEAT
                 try:
                     updates = asyncio.Queue()
                     async def partial(value):
                         await updates.put({"_event": "partial", **value})
                     async def generate():
+                        nonlocal passages
                         try:
-                            return await generate_answer(application.state.provider, token, current_model, {**payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model", "ai_consent_backup"}), "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial, backup=backup_model)
+                            deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
+                            answer_request = payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model", "ai_consent_backup"})
+                            passages = await select_evidence(application.state.provider, token, current_model, answer_request, passages)
+                            await updates.put({"_event": "sources", "phase": "matched", "provisional": True,
+                                               "sources": [p.source for p in passages[:5]], "candidates": map_candidates(passages)})
+                            if not passages:
+                                return empty_answer()
+                            cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
+                            await updates.put({"_event": "approach", **answer_approach(payload.intent, passages, cards)})
+                            await updates.put({"stage": "thinking", "message": f"已选出 {len(passages)} 个相关片段，正在根据原文整理回答…"})
+                            return await generate_answer(application.state.provider, token, current_model, {**answer_request, "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial, backup=backup_model, deadline=deadline)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())

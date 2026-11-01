@@ -60,7 +60,8 @@ def implementation(root: Path):
     return types.SimpleNamespace(root=root, name=name,
         retrieval=importlib.import_module(name + ".retrieval"),
         semantic=importlib.import_module(name + ".semantic"),
-        answers=importlib.import_module(name + ".answers"))
+        answers=importlib.import_module(name + ".answers"),
+        selection=importlib.import_module(name + ".evidence_selection") if (root / "server/evidence_selection.py").exists() else None)
 
 
 def implementation_hash(root: Path) -> str:
