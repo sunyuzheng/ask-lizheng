@@ -258,7 +258,112 @@
     "resident_peak_mb": 115,
     "ready_seconds": 2,
     "final_release_ci": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41361994147",
-    "production": null
+    "production": {
+      "verified_at": "2026-11-01T23:36:33.806778+00:00",
+      "checks": [
+        {
+          "url": "https://ask-lizheng.ai-builders.space/api/meta",
+          "engine_match": true,
+          "source_match": true,
+          "model": "deepseek-v4-flash",
+          "backup_model": "gpt-5",
+          "ops_logging": {
+            "enabled": true,
+            "retention": "until_deleted",
+            "notice": "v4",
+            "answer_archive": true,
+            "context_archive": false,
+            "public_display": "as_asked"
+          }
+        },
+        {
+          "url": "https://www.lizheng.ai/api/ask-lizheng/meta",
+          "engine_match": true,
+          "source_match": true,
+          "model": "deepseek-v4-flash",
+          "backup_model": "gpt-5",
+          "ops_logging": {
+            "enabled": true,
+            "retention": "until_deleted",
+            "notice": "v4",
+            "answer_archive": true,
+            "context_archive": false,
+            "public_display": "as_asked"
+          }
+        },
+        {
+          "url": "https://www.lizheng.ai/guests/changxi-zheng",
+          "expected_programme_present": true
+        },
+        {
+          "url": "https://www.lizheng.ai/guests/mujtaba",
+          "expected_programme_present": true
+        },
+        {
+          "url": "https://www.lizheng.ai/guests/gene-tabach",
+          "expected_programme_present": true
+        }
+      ],
+      "engine_sha256": "8298dac1e06b0651085c659bfc43cbb419182171dfc7297c1fc6add7970fbd7c",
+      "context_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+      "searches": [
+        {
+          "question": "立正对具身智能怎么看？",
+          "sources": 8,
+          "exact_local_match": true,
+          "titles": [
+            "通过Jev，辨清AI新技术的叙事陷阱：谁替你决定了什么叫“厉害”？",
+            "从「会工作」到「会赚钱」，建立自己的事业",
+            "有限的AI降临派",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "清华教授：应试教育在AI面前全军覆没，我们应该如何重新学习？",
+            "26岁财富自由的程序员郭宇：很多人起点虽然高，但生活得一团糟"
+          ],
+          "sources_sha256": "4784b30b283d22c8873bf25bf2970cb0d2e67beee71f2adcd0d7f584209ee558"
+        },
+        {
+          "question": "郑昌熙与立正对世界模型定义的关系",
+          "sources": 8,
+          "exact_local_match": true,
+          "titles": [
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "世界模型",
+            "关于ChatGPT最重要的五个问题",
+            "世界模型",
+            "对《世界模型》的补充",
+            "升维必然被骂"
+          ],
+          "sources_sha256": "1c328c12187e15bad9310dfc69fc9b24e0f4debc4142a04efc4e6a28ad828678"
+        },
+        {
+          "question": "嘉宾访谈里的创业选择",
+          "sources": 8,
+          "exact_local_match": true,
+          "titles": [
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "我是怎样做视频播客的",
+            "AI在大企业中的应用才刚刚开始，人才供不应求？｜对话微软CoreAI副总裁Marco Casalaina",
+            "AI在大企业中的应用才刚刚开始，人才供不应求？｜对话微软CoreAI副总裁Marco Casalaina",
+            "AI在大企业中的应用才刚刚开始，人才供不应求？｜对话微软CoreAI副总裁Marco Casalaina",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "李飞飞收购郑昌熙：有生之年，我们可能看不到通用机器人出现",
+            "杨天楠：看似体面的工作，实则都是在表演？"
+          ],
+          "sources_sha256": "3c9061ede2954ea70c089cfdd377cec69c1ca8daba0f29611dca9ee2000055a1"
+        }
+      ],
+      "ask_deployed_commit": "e3fea169c4df4ba1e9ee21ed047c328410c2ac88",
+      "site_commit": "786b9a8c88c5582c760f311a5b09c877568e59d3",
+      "source_commit": "62de93be0f9cbe3a5a04a845be61e1dc91f9d440",
+      "workflow": "https://github.com/sunyuzheng/ask-lizheng/actions/runs/41362534645",
+      "platform_status": "HEALTHY",
+      "platform_git_commit_id": null,
+      "paid_production_test_questions": 0
+    }
   },
   "report_sha256": {
     "release-answers-old.json": "541b637a50fdd2fb51ed31f0388d05fd4852b944b3d077664065e0a8f76d5d2b",
