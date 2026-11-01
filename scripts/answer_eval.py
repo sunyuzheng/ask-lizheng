@@ -37,20 +37,24 @@ OUTPUT = ROOT / "docs/evaluation-status.json"
 JUDGE_MODEL = "gpt-5"
 URL = "https://space.ai-builders.com/backend/v1/chat/completions"
 OWN_ORIGINS = {"yuzheng-published-text", "yuzheng-spoken-source"}
-VIEW = re.compile(r"立正(本人)?(认为|主张|觉得|相信|建议|强调|提到|指出|说|的(观点|立场|判断|看法))")
 QUOTE = re.compile(r"「([^」]{6,})」|“([^”]{6,})”")
 ORIGINAL_WORDS = re.compile(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|一句话")
-CRITERIA = ["relevance", "attribution", "faithfulness", "time", "limitations", "readability"]
+from server.answer_contract import CRITERIA as CONTRACT_CRITERIA, JUDGE_CRITERIA
+from server.names import NameIndex
 
-JUDGE_PROMPT = """你在评估“问问立正”的一个回答。问问立正根据立正公开的文章、视频和对谈回答问题。立正、孙煜征、Yuzheng Sun、课代表立正是同一个人：出处的作者或说话人写 Yuzheng Sun 或立正，都是他本人。要求：
-立正的观点只能来自他本人的材料；嘉宾、主持人或其他人的话归他们本人；引用必须忠实于给出的出处；要意识到材料的时间；材料不够时说明局限；语言直接好读。
-下面给你问题、这类问题“好回答”应该包含什么、实际回答（每段后面是它引用的出处编号）以及出处（编号、标题、说话人或作者、日期、摘录）。
-按1到5打分（5最好），只根据给出的出处判断事实，不用你自己的知识补充：
-relevance 是否回答了问题；attribution 归属是否准确（尤其不能把别人的话说成立正的观点，也不能把立正的提问当成他的观点）；
-faithfulness 内容和引文是否忠实于出处、有没有编造；time 是否注意材料的时间、没有把旧信息说成现在；limitations 材料不够时有没有说明；readability 是否直接好读。
-对“材料里没有”的问题，正确地说明没有并且不编造，算高分。回答按设计只转述、不写原话；引号可能用来标节目标题或强调，不要求逐字。出处里的“某人在本期的陈述”片段，是这一位被确认为陈述的句子按时间汇集，可以作为这位说话人的观点。
-输出JSON：{"scores": {"relevance": n, "attribution": n, "faithfulness": n, "time": n, "limitations": n, "readability": n},
-"problems": ["具体问题，指出哪句话"], "verdict": "good" 或 "acceptable" 或 "poor"}"""
+CRITERIA = list(JUDGE_CRITERIA)
+_table = ROOT / "data/context/catalog/guest-names.json"
+_host_names = NameIndex(json.loads(_table.read_text())).speaker_names("yuzheng")
+VIEW = re.compile(r"(?:" + "|".join(re.escape(name) for name in _host_names) + r")(本人)?(认为|主张|觉得|相信|建议|强调|提到|指出|说|的(观点|立场|判断|看法))", re.I)
+JUDGE_PROMPT = (
+    "你在评估问问立正的局部回答回归。人物目录中的同一人称呼：" + "、".join(_host_names)
+    + "。对以下合同逐项1到5分：\n"
+    + json.dumps({key: CONTRACT_CRITERIA[key]["instruction"] for key in CRITERIA}, ensure_ascii=False)
+    + "\n这里只给实际检索片段，没有独立完整资料金标准。可以判断是否编造，但不能凭片段不足认定检索成功、全库没有或任务完成。"
+      "本检查不能衡量资料漏检；完整效果评测请用answer_benchmark.py。回答按产品默认转述。"
+      "只输出JSON，scores包含上述六个ID的整数1到5；problems为具体问题字符串数组；verdict为good、acceptable或poor。"
+)
+
 
 
 def norm(text: str) -> str:
@@ -194,7 +198,7 @@ def main():
         "answer_model": os.getenv("AI_MODEL", DEFAULT_MODEL), "judge_model": JUDGE_MODEL,
         "context_commit": meta.get("context_commit", ""), "context_release": meta.get("context_release", ""),
         "fixture_sha256": hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),
-        "method": "Local app instance on the committed context; every case through /api/ask; deterministic checks plus a rubric judged by a different model. Real model calls, not a guarantee for other questions.",
+        "method": "Legacy local regression through /api/ask, judged only against retrieved excerpts. Does not measure missed corpus evidence or full task completion; use answer_benchmark.py for independent paired evaluation.",
         "summary": summary, "cases": rows}, ensure_ascii=False, indent=1) + "\n")
     print(json.dumps(summary, ensure_ascii=False, indent=1))
 

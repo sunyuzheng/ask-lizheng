@@ -1,0 +1,687 @@
+{
+  "schema_version": 1,
+  "audit_baseline": "efc554c2a36692b499d30d2dbd4231a3b41d5c98",
+  "policy_owner": "server/answer_contract.py",
+  "note": "Migration register, not97additional model commands. Ablations are diagnostics; retained heuristics are defaults, not source eligibility boundaries. See ANSWERING_CONTRACT.md and RULES_VERIFICATION.md for adopted decisions and measured limits.",
+  "rules": [
+    {
+      "id": "P1",
+      "topic": "AI身份",
+      "criterion": "input_scope",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P2",
+      "topic": "按用途选择依据",
+      "criterion": "input_scope",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P3",
+      "topic": "回应真实问题",
+      "criterion": "relevance",
+      "type": "outcome",
+      "action": "centralize"
+    },
+    {
+      "id": "P4",
+      "topic": "不可信输入与历史",
+      "criterion": "input_scope",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P5",
+      "topic": "原始字段说明",
+      "criterion": "attribution",
+      "type": "implementation",
+      "action": "server-annotation"
+    },
+    {
+      "id": "P6",
+      "topic": "说话人与赞同关系",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "centralize"
+    },
+    {
+      "id": "P7",
+      "topic": "参与者目录非发言",
+      "criterion": "attribution",
+      "type": "implementation",
+      "action": "server-annotation"
+    },
+    {
+      "id": "P8",
+      "topic": "片段正文依据",
+      "criterion": "faithfulness",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P9",
+      "topic": "来源与综合应用类别",
+      "criterion": "format",
+      "type": "interface",
+      "action": "keep"
+    },
+    {
+      "id": "P10",
+      "topic": "作者转述同源与时间",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "centralize"
+    },
+    {
+      "id": "P11",
+      "topic": "生成原话限制",
+      "criterion": "format",
+      "type": "product-default",
+      "action": "retain-paraphrase"
+    },
+    {
+      "id": "P12",
+      "topic": "编号与链接",
+      "criterion": "format",
+      "type": "interface",
+      "action": "keep"
+    },
+    {
+      "id": "P13",
+      "topic": "先答已知与澄清",
+      "criterion": "limitations",
+      "type": "outcome",
+      "action": "centralize"
+    },
+    {
+      "id": "P14",
+      "topic": "赛事新闻返工",
+      "criterion": "limitations",
+      "type": "legacy-pitfall",
+      "action": "remove-specific-command"
+    },
+    {
+      "id": "P15",
+      "topic": "个案不等于读者事实",
+      "criterion": "readability",
+      "type": "outcome",
+      "action": "centralize"
+    },
+    {
+      "id": "P16",
+      "topic": "周洁建议返工",
+      "criterion": "readability",
+      "type": "legacy-pitfall",
+      "action": "generalize-condition"
+    },
+    {
+      "id": "P17",
+      "topic": "百万条数据返工",
+      "criterion": "faithfulness",
+      "type": "legacy-pitfall",
+      "action": "generalize-condition"
+    },
+    {
+      "id": "P18",
+      "topic": "缺口不代表全库没有",
+      "criterion": "limitations",
+      "type": "outcome",
+      "action": "centralize"
+    },
+    {
+      "id": "P19",
+      "topic": "文字与视频访问",
+      "criterion": "input_scope",
+      "type": "boundary",
+      "action": "server-annotation"
+    },
+    {
+      "id": "P20",
+      "topic": "判断卡导航非证据",
+      "criterion": "faithfulness",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P21",
+      "topic": "理解用途写法",
+      "criterion": "relevance",
+      "type": "default",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P22",
+      "topic": "应用用途写法",
+      "criterion": "readability",
+      "type": "default",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P23",
+      "topic": "先试哪一步返工",
+      "criterion": "readability",
+      "type": "legacy-pitfall",
+      "action": "generalize-condition"
+    },
+    {
+      "id": "P24",
+      "topic": "找资料用途写法",
+      "criterion": "relevance",
+      "type": "default",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P25",
+      "topic": "节目计数与编号返工",
+      "criterion": "faithfulness",
+      "type": "legacy-pitfall",
+      "action": "keep-scope"
+    },
+    {
+      "id": "P26",
+      "topic": "摘要即答案",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P27",
+      "topic": "要点标题正文长度",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P28",
+      "topic": "全文长度",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P29",
+      "topic": "句式计数",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "purpose-not-count"
+    },
+    {
+      "id": "P30",
+      "topic": "观点直接说",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "purpose-not-count"
+    },
+    {
+      "id": "P31",
+      "topic": "立正认为归属",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "centralize"
+    },
+    {
+      "id": "P32",
+      "topic": "读者语言术语例子",
+      "criterion": "readability",
+      "type": "preference",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P33",
+      "topic": "局限只写真缺口",
+      "criterion": "limitations",
+      "type": "preference",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P34",
+      "topic": "L1-L6与分钟返工",
+      "criterion": "readability",
+      "type": "legacy-pitfall",
+      "action": "remove-specific-command"
+    },
+    {
+      "id": "P35",
+      "topic": "推荐理由与追问",
+      "criterion": "readability",
+      "type": "default",
+      "action": "keep-purpose"
+    },
+    {
+      "id": "P36",
+      "topic": "话题词隐私",
+      "criterion": "privacy",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "P37",
+      "topic": "完整JSON",
+      "criterion": "format",
+      "type": "interface",
+      "action": "add-complete-example"
+    },
+    {
+      "id": "P38",
+      "topic": "流式字段顺序",
+      "criterion": "format",
+      "type": "interface",
+      "action": "keep"
+    },
+    {
+      "id": "P39",
+      "topic": "DeepSeek schema适配",
+      "criterion": "format",
+      "type": "interface",
+      "action": "keep"
+    },
+    {
+      "id": "P40",
+      "topic": "Flash追加段",
+      "criterion": "readability",
+      "type": "duplication",
+      "action": "merge-common-prompt"
+    },
+    {
+      "id": "R1",
+      "topic": "公开资料锁与哈希",
+      "criterion": "input_scope",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R2",
+      "topic": "立正依据资格",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R3",
+      "topic": "嘉宾依据资格",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R4",
+      "topic": "立正姓名作用域",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R5",
+      "topic": "名字前后字表",
+      "criterion": "attribution",
+      "type": "heuristic",
+      "action": "retain-after-negative-controls"
+    },
+    {
+      "id": "R6",
+      "topic": "追问正则三处",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "one-helper"
+    },
+    {
+      "id": "R7",
+      "topic": "停用词碎片",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "ablate"
+    },
+    {
+      "id": "R8",
+      "topic": "口头词改写",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "ablate"
+    },
+    {
+      "id": "R9",
+      "topic": "手写近义词",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "ablate"
+    },
+    {
+      "id": "R10",
+      "topic": "词法频率参数",
+      "criterion": "relevance",
+      "type": "parameter",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R11",
+      "topic": "分句覆盖加成",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R12",
+      "topic": "稀少词命中丢弃",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R13",
+      "topic": "非陈述降权",
+      "criterion": "relevance",
+      "type": "default",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R14",
+      "topic": "原文与派生优先",
+      "criterion": "faithfulness",
+      "type": "default",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R15",
+      "topic": "标题类型猜测降权",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "ablate-no-corpus-guess"
+    },
+    {
+      "id": "R16",
+      "topic": "排名融合常数",
+      "criterion": "relevance",
+      "type": "parameter",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R17",
+      "topic": "语义窗口与门槛",
+      "criterion": "faithfulness",
+      "type": "implementation",
+      "action": "preserve-winning-window"
+    },
+    {
+      "id": "R18",
+      "topic": "卡片词路由",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R19",
+      "topic": "卡片语义兜底",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R20",
+      "topic": "卡片固定加分",
+      "criterion": "relevance",
+      "type": "heuristic",
+      "action": "ablate-rank-fusion"
+    },
+    {
+      "id": "R21",
+      "topic": "多人发现代表",
+      "criterion": "relevance",
+      "type": "default",
+      "action": "keep"
+    },
+    {
+      "id": "R22",
+      "topic": "同人后续片段去重",
+      "criterion": "faithfulness",
+      "type": "implementation",
+      "action": "content-overlap"
+    },
+    {
+      "id": "R23",
+      "topic": "链接http(s)",
+      "criterion": "format",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R24",
+      "topic": "模型阅读与展示预算",
+      "criterion": "format",
+      "type": "product-default",
+      "action": "retain-500-until-measured"
+    },
+    {
+      "id": "R25",
+      "topic": "词频截段",
+      "criterion": "faithfulness",
+      "type": "heuristic",
+      "action": "semantic-position-first"
+    },
+    {
+      "id": "R26",
+      "topic": "卡片焦点词截取",
+      "criterion": "faithfulness",
+      "type": "default",
+      "action": "retain-measure"
+    },
+    {
+      "id": "R27",
+      "topic": "标题访问说明非正文",
+      "criterion": "faithfulness",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "R28",
+      "topic": "无片段目录降级",
+      "criterion": "limitations",
+      "type": "fallback",
+      "action": "keep"
+    },
+    {
+      "id": "G1",
+      "topic": "未指明嘉宾澄清",
+      "criterion": "limitations",
+      "type": "heuristic",
+      "action": "retain-measure"
+    },
+    {
+      "id": "G2",
+      "topic": "点名找资料直达",
+      "criterion": "relevance",
+      "type": "routing",
+      "action": "retain-measure"
+    },
+    {
+      "id": "G3",
+      "topic": "无令牌材料降级",
+      "criterion": "limitations",
+      "type": "fallback",
+      "action": "keep"
+    },
+    {
+      "id": "G4",
+      "topic": "仅发现条目降级",
+      "criterion": "faithfulness",
+      "type": "fallback",
+      "action": "keep"
+    },
+    {
+      "id": "V1",
+      "topic": "不生成链接",
+      "criterion": "format",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "V2",
+      "topic": "原话正则",
+      "criterion": "format",
+      "type": "heuristic",
+      "action": "retain-paraphrase"
+    },
+    {
+      "id": "V3",
+      "topic": "编号存在",
+      "criterion": "format",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "V4",
+      "topic": "要点与来源绑定",
+      "criterion": "faithfulness",
+      "type": "boundary",
+      "action": "bind-explicit-known-ids-then-validate"
+    },
+    {
+      "id": "V5",
+      "topic": "状态与问题字段",
+      "criterion": "format",
+      "type": "interface",
+      "action": "keep"
+    },
+    {
+      "id": "V6",
+      "topic": "立正归属检查",
+      "criterion": "attribution",
+      "type": "heuristic",
+      "action": "all-visible-fields-backstop"
+    },
+    {
+      "id": "V7",
+      "topic": "嘉宾归属检查",
+      "criterion": "attribution",
+      "type": "heuristic",
+      "action": "all-visible-fields-backstop"
+    },
+    {
+      "id": "V8",
+      "topic": "一次归属修复",
+      "criterion": "format",
+      "type": "parameter",
+      "action": "keep"
+    },
+    {
+      "id": "V9",
+      "topic": "编号当名字重写",
+      "criterion": "readability",
+      "type": "heuristic",
+      "action": "mechanical-title-rendering"
+    },
+    {
+      "id": "V10",
+      "topic": "编号标题角标换算",
+      "criterion": "format",
+      "type": "implementation",
+      "action": "keep"
+    },
+    {
+      "id": "V11",
+      "topic": "修复与超时预算",
+      "criterion": "format",
+      "type": "parameter",
+      "action": "keep"
+    },
+    {
+      "id": "V12",
+      "topic": "流式同样检查",
+      "criterion": "format",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "V13",
+      "topic": "未引用附前五份",
+      "criterion": "relevance",
+      "type": "default",
+      "action": "keep"
+    },
+    {
+      "id": "K1",
+      "topic": "卡片非证据",
+      "criterion": "faithfulness",
+      "type": "boundary",
+      "action": "centralize"
+    },
+    {
+      "id": "K2",
+      "topic": "卡片焦点原文合同",
+      "criterion": "faithfulness",
+      "type": "upstream-boundary",
+      "action": "keep"
+    },
+    {
+      "id": "K3",
+      "topic": "卡片片段支持缺口",
+      "criterion": "faithfulness",
+      "type": "implementation",
+      "action": "check-focus-for-exact-id"
+    },
+    {
+      "id": "K4",
+      "topic": "卡片覆盖偏差",
+      "criterion": "relevance",
+      "type": "evaluation",
+      "action": "independent-gold"
+    },
+    {
+      "id": "E1",
+      "topic": "来源资格门禁",
+      "criterion": "attribution",
+      "type": "boundary",
+      "action": "keep"
+    },
+    {
+      "id": "E2",
+      "topic": "卡片命中评测",
+      "criterion": "relevance",
+      "type": "evaluation",
+      "action": "structural-only"
+    },
+    {
+      "id": "E3",
+      "topic": "语义候选数量",
+      "criterion": "input_scope",
+      "type": "evaluation",
+      "action": "structural-only"
+    },
+    {
+      "id": "E4",
+      "topic": "回答真实效果",
+      "criterion": "relevance",
+      "type": "evaluation",
+      "action": "independent-paired-repeated-holdout"
+    },
+    {
+      "id": "E5",
+      "topic": "评审手写名字",
+      "criterion": "attribution",
+      "type": "duplication",
+      "action": "catalog-names"
+    },
+    {
+      "id": "D1",
+      "topic": "AGENTS复述实现",
+      "criterion": "format",
+      "type": "duplication",
+      "action": "link-contract"
+    },
+    {
+      "id": "D2",
+      "topic": "产品决策",
+      "criterion": "input_scope",
+      "type": "product-owner",
+      "action": "keep"
+    },
+    {
+      "id": "D3",
+      "topic": "上游回答合同",
+      "criterion": "attribution",
+      "type": "upstream-owner",
+      "action": "align-distinguish-product-default"
+    }
+  ]
+}

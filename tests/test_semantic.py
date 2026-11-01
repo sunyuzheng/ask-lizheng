@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from scripts import build_semantic_index as builder
-from server.semantic import DIMENSIONS, MAX_INPUT_BYTES, SemanticIndex, SemanticIndexError, dry_run_summary, embedding_inputs, normalized_vector, prepare_index, request_embeddings, verify_public_pack
+from server.semantic import DIMENSIONS, MAX_INPUT_BYTES, SemanticIndex, SemanticIndexError, _plain, _plain_offsets, dry_run_summary, embedding_inputs, embedding_segment, normalized_vector, prepare_index, request_embeddings, verify_public_pack
 
 
 def write_manifest(root):
@@ -110,13 +110,71 @@ def test_long_unicode_source_is_fully_covered_with_bounded_windows(public_docs):
     assert sum(len(text.split("\n", 1)[1]) for text in inputs) == len(docs[0].text)
 
 
+@pytest.mark.parametrize("text", [
+    "  > `原文` [公开链接](https://example.org/source)\n\n[00:02:03] 字。<!-- hidden -->\n",
+    "前[00:00:01]后\n> 引用\n\n末尾。", "\n\t", "**原文** 😀 甲乙\n\n丙丁",
+])
+def test_embedding_offset_projection_matches_existing_vector_inputs(text):
+    projected, positions = _plain_offsets(text)
+    assert projected == _plain(text)
+    assert len(projected) == len(positions)
+    assert positions == sorted(positions)
+    assert all(projected[i] == text[position] or projected[i].isspace() for i, position in enumerate(positions))
+
+
+def test_winning_segment_survives_verified_and_legacy_prebuilt_loads(public_docs):
+    root, docs = public_docs
+    docs[0].text = "前半段公开背景。" * 400 + "尾部的独立论据。"
+    (root / docs[0].path).write_text(docs[0].text, encoding="utf-8")
+    write_manifest(root)
+    metadata, _ = prepare_index(root, docs)
+    last = max(row["segment"] for row in metadata["entries"] if row["document_id"] == docs[0].id)
+    assert last > 0
+    near, far = [1.0] + [0.0] * (DIMENSIONS - 1), [0.0, 1.0] + [0.0] * (DIMENSIONS - 2)
+    vectors = array("f", [value for row in metadata["entries"]
+                             for value in (near if row["document_id"] == docs[0].id and row["segment"] == last else far)])
+    output = root.parent / "semantic"
+    output.mkdir()
+    raw = vectors.tobytes()
+    metadata.update(vector_file="vectors.f32", vector_sha256=hashlib.sha256(raw).hexdigest())
+    (output / "vectors.f32").write_bytes(raw)
+    (output / "index.json").write_text(json.dumps(metadata))
+    original = SemanticIndex(root, docs)
+    assert original.load()
+    expected = [{"docindex": 0, "score": 1.0, "segment": last}]
+    assert original._rank(array("f", near)) == expected
+    for legacy in (False, True):
+        checked = dict(original.checked)
+        if legacy:
+            checked.pop("segments")
+        restored = SemanticIndex(root, [])
+        assert restored.load_verified(checked)
+        assert restored._rank(array("f", near)) == expected
+    text, positions = embedding_segment(docs[0], last)
+    assert "尾部的独立论据" in text
+    assert docs[0].text[positions[-1]] == text[-1]
+    assert embedding_segment(docs[0], last + 1) is None
+    assert embedding_segment(docs[0], True) is None
+
+
+def test_winning_segment_ties_are_stable_and_manual_candidates_stay_compatible():
+    index = SemanticIndex(Path("."), [])
+    index.document_indexes = [7, 7]
+    index.segment_indexes = [0, 1]
+    query = array("f", [1.0] + [0.0] * (DIMENSIONS - 1))
+    index.vectors = query * 2
+    assert index._rank(query) == [{"docindex": 7, "score": 1.0, "segment": 0}]
+    index.segment_indexes = []
+    assert index._rank(query) == [{"docindex": 7, "score": 1.0}]
+
+
 def test_loading_and_rank_uses_chunk_ids_and_normalized_vectors(public_docs):
     root, docs = public_docs
     index_file(root, docs)
     index = SemanticIndex(root, docs)
     assert index.load() and index.ready
-    assert index._rank(normalized_vector([1.0] + [0.0] * (DIMENSIONS - 1))) == [{"docindex": 0, "score": 1.0}]
-    assert index._rank(normalized_vector([0.0, 1.0] + [0.0] * (DIMENSIONS - 2))) == [{"docindex": 1, "score": 1.0}]
+    assert index._rank(normalized_vector([1.0] + [0.0] * (DIMENSIONS - 1))) == [{"docindex": 0, "score": 1.0, "segment": 0}]
+    assert index._rank(normalized_vector([0.0, 1.0] + [0.0] * (DIMENSIONS - 2))) == [{"docindex": 1, "score": 1.0, "segment": 0}]
     # Weak matches to both known vectors do not become candidate evidence.
     assert index._rank(normalized_vector([.35, 0, (1 - .35 ** 2) ** .5] + [0] * (DIMENSIONS - 3))) == []
 
@@ -177,7 +235,7 @@ def test_runtime_query_has_one_ephemeral_request_and_failure_falls_back(public_d
                 return httpx.Response(200, json={"model": "text-embedding-3-small", "data": [{"index": 0, "embedding": [1] + [0] * 255}]})
             return httpx.Response(401, json={"error": "synthetic-token user-question-sensitive"})
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            assert await index.candidates(client, "synthetic-token", "user-question-sensitive") == [{"docindex": 0, "score": 1.0}]
+            assert await index.candidates(client, "synthetic-token", "user-question-sensitive") == [{"docindex": 0, "score": 1.0, "segment": 0}]
             assert await index.candidates(client, "synthetic-token", "user-question-sensitive") == []
             assert await index.candidates(client, "", "user-question-sensitive") == []
     asyncio.run(run())

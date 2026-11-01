@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from .query_context import uses_previous_question
+
 
 CARDS_PATH = "context/decision-cards.json"
 # Primary refers to an actual source body, not whose position its speech proves.
@@ -175,7 +177,7 @@ class ContextArchitecture:
             return []
         # The current question owns routing. Context can disambiguate it; old
         # turns alone cannot keep injecting a previous topic into every answer.
-        if history and len(question) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", question):
+        if uses_previous_question(question, history):
             last = history[-1]
             prior = last.get("question", "") if isinstance(last, dict) else getattr(last, "question", "")
             question += " " + str(prior)[:600]
@@ -232,8 +234,8 @@ class ContextArchitecture:
                         continue
                     evidence = passage.evidence
                     exact = evidence.get("document_id") == reference.document_id or evidence.get("docindex") == reference.docindex
-                    fallback = not ("document_id" in evidence or "docindex" in evidence) and evidence.get("source_family") == reference.source_family and _focus_score(passage.source.get("excerpt", ""), reference.focus_terms) >= 4
-                    if exact or fallback:
+                    fallback = not ("document_id" in evidence or "docindex" in evidence) and evidence.get("source_family") == reference.source_family
+                    if (exact or fallback) and _focus_score(passage.source.get("excerpt", ""), reference.focus_terms) >= 4:
                         ids.append(passage.source["id"])
                 if ids:
                     mapped.append({"role": reference.role, "source_ids": list(dict.fromkeys(ids))})

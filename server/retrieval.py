@@ -18,7 +18,8 @@ from typing import NamedTuple
 from urllib.parse import urlparse, quote
 
 from .names import NameIndex
-from .semantic import MIN_SIMILARITY
+from .query_context import uses_previous_question
+from .semantic import MIN_SIMILARITY, embedding_segment
 from .store import SCHEMA as STORE_SCHEMA, Store, build as build_store
 
 LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -453,7 +454,7 @@ class ContextIndex:
     @staticmethod
     def retrieval_query(question: str, history: list | None = None) -> str:
         query = question.strip()
-        if history and len(query) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", query):
+        if uses_previous_question(query, history):
             item = history[-1]
             previous = item.get("question", "") if isinstance(item, dict) else getattr(item, "question", "")
             query += " " + str(previous)[:500]
@@ -571,13 +572,19 @@ class ContextIndex:
         # Reciprocal rank fusion preserves exact-word matches while admitting
         # paraphrases. Curated links bring the basis and scope contrast together.
         fused = {index: 1 / (40 + rank) for rank, (_, index) in enumerate(ranked, 1)}
+        lexical_indexes = set(fused)
         # The semantic list ranks the whole index; this question's source purpose picks from it
         # before any cut, so the closest eligible passages arrive however many others rank above.
         semantic = [candidate for candidate in semantic_candidates or []
                     if candidate["docindex"] in eligible and candidate["score"] >= MIN_SIMILARITY][:SEMANTIC_LIMIT]
+        segment_by_index = {}
         for rank, candidate in enumerate(semantic, 1):
             index = candidate["docindex"]
             fused[index] = fused.get(index, 0) + 1 / (40 + rank)
+            # Keep the established paragraph path for dual-channel candidates.
+            # A window guides candidates admitted only by semantic retrieval.
+            if index not in lexical_indexes and type(candidate.get("segment")) is int and candidate["segment"] >= 0:
+                segment_by_index[index] = candidate["segment"]
         focus_by_index = {}
         for candidate in linked:
             index = candidate["docindex"]
@@ -596,6 +603,7 @@ class ContextIndex:
             first = {row[1] for row in representatives}
             ranked = representatives + [row for row in ranked if row[1] not in first]
         seen = set()
+        family_counts = {}
         family_speakers = {}
         selected_raw = {}
         named_families = {
@@ -614,21 +622,23 @@ class ContextIndex:
             # translations and duplicate passages from becoming extra sources.
             if family in seen:
                 owners = family_speakers.get(family, set())
-                if layer != "raw" or not speaker or len(selected_raw.get(family, [])) >= 3:
+                if layer != "raw" or not speaker or family_counts.get(family, 0) >= 3:
                     continue
                 if speaker in owners:
                     overlap = getattr(module, "raw_windows_overlap", None)
-                    if (family in named_families or speaker != "unknown" or overlap is None):
+                    if ((speaker == "unknown" and family in named_families) or overlap is None):
                         continue
                     doc = self.documents[index]
-                    if (not getattr(doc, "fragment_id", "")
-                            or any(overlap(doc, old) for old in selected_raw.get(family, []))):
+                    if (not getattr(doc, "fragment_id", "") or not getattr(doc, "source_snapshot_sha256", "")
+                            or any(overlap(doc, old) for old in selected_raw.get(family, [])
+                                   if getattr(old, "speaker_id", "") == speaker)):
                         continue
             doc = self.documents[index]
             url = doc.original_source_url if doc.source_type == "video-translation" and doc.original_source_url else doc.source_url
             if urlparse(url).scheme not in {"http", "https"}:
                 continue
             seen.add(family)
+            family_counts[family] = family_counts.get(family, 0) + 1
             family_speakers.setdefault(family, set()).add(speaker if layer == "raw" else "")
             if layer == "raw":
                 selected_raw.setdefault(family, []).append(doc)
@@ -637,7 +647,8 @@ class ContextIndex:
             excerpt_weights = {term: weights.get(term, 4) * (1 if term in primary else .45) for term in excerpt_terms}
             for term in focused:
                 excerpt_weights[term] = max(8, excerpt_weights.get(term, 0))
-            excerpt, timestamp, timestamp_url = self._excerpt(doc, excerpt_terms, excerpt_weights)
+            excerpt, timestamp, timestamp_url = self._excerpt(doc, excerpt_terms, excerpt_weights,
+                                                             semantic_segment=segment_by_index.get(index))
             if timestamp_url:
                 url = timestamp_url
             source_id = "S" + str(len(passages) + 1)
@@ -738,8 +749,23 @@ class ContextIndex:
             return []
         return self.architecture.render_bundle(self.card_ids(question, context, history, semantic_candidates), passages)
 
-    def _excerpt(self, doc, terms: list[str], weights: dict[str, float]) -> tuple[str, str, str]:
+    def _excerpt(self, doc, terms: list[str], weights: dict[str, float], *, semantic_segment: int | None = None) -> tuple[str, str, str]:
         limit = 2100 if getattr(doc, "license", "") in OPEN_LICENSES else 500
+        window = embedding_segment(doc, semantic_segment) if semantic_segment is not None else None
+        if window is not None:
+            # The vector matched this window, not an arbitrary lexical hit in
+            # the same document. Keep its source positions for exact timecodes.
+            text, positions = window
+            lowered = text.lower()
+            matching = [(weights.get(term, 1), lowered.find(term)) for term in terms if term in lowered]
+            position = max(matching)[1] if matching else 0
+            start = max(0, position - min(650, limit // 3)) if len(text) > limit else 0
+            prefix = "…" if start else ""
+            excerpt = plain_text(prefix + text[start:start + limit - len(prefix)])
+            source_position = positions[position]
+            anchors = [match for match in TIMESTAMP.finditer(doc.text) if match.start() <= source_position]
+            anchor = anchors[-1] if anchors else None
+            return excerpt, timed_label(anchor), timed_url(doc, anchor)
         if doc.source_type == "video-excerpt" and getattr(doc, "data_layer", "") == "raw":
             # Structured speech and reviewed quotes already have a speaker
             # boundary. Neighboring document chunks must never be appended.

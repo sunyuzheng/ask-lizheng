@@ -100,9 +100,12 @@ def test_stream_section_never_shows_a_number_as_a_name(index):
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
             return await generate_answer(client,'synthetic-token','deepseek-v4-flash',{'question':'职业选择'},passages,on_partial=callback)
-    assert asyncio.run(run()).sections[0].body=='依据材料，需要比较目标与实际结果。'
+    from server.answers import assemble_answer
+    result=assemble_answer(asyncio.run(run()),passages)
     title=passages[0].source['title']
-    assert len(calls)==2 and partials[0]['sections'][0]['body']==f'《{title}》[S1]说得更直接：需要比较目标与实际结果。'
+    expected=f'《{title}》[S1]说得更直接：需要比较目标与实际结果。'
+    assert result['sections'][0]['body']==expected
+    assert len(calls)==1 and partials[0]['sections'][0]['body']==expected
 
 
 @pytest.mark.parametrize('failure',['disconnect','deadline','empty'])

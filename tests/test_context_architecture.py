@@ -90,6 +90,19 @@ def test_family_fallback_requires_actual_matching_evidence(tmp_path):
     assert architecture.render_bundle(["learning-transfer"], [unrelated])[0]["source_roles"] == [{"role": "basis", "source_ids": ["S1"]}]
 
 
+@pytest.mark.parametrize("identity", ["document_id", "docindex"])
+def test_exact_reference_identity_cannot_replace_excerpt_support(tmp_path, identity):
+    _, docs = make_pack(tmp_path)
+    architecture = load(tmp_path, docs)
+    evidence = {identity: docs[1].id if identity == "document_id" else 1,
+                "source_family": docs[1].source_family}
+    passage = Passage({"id": "S1", "excerpt": "无关的开场介绍。"}, evidence, False)
+    assert architecture.render_bundle(["learning-transfer"], [passage]) == []
+    passage.source["excerpt"] = docs[1].text
+    assert architecture.render_bundle(["learning-transfer"], [passage])[0]["source_roles"] == [
+        {"role": "basis", "source_ids": ["S1"]}]
+
+
 @pytest.mark.parametrize("mutation", ["hash", "path", "missing", "relation", "duplicate", "no-basis", "many-refs", "many-cards", "bad-date", "bad-role", "empty-focus", "boolean-version"])
 def test_invalid_public_cards_fail_closed(tmp_path, mutation):
     pack, docs = make_pack(tmp_path)

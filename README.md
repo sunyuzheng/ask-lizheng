@@ -55,6 +55,8 @@ Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/com
 
 ## 验证
 
+回答结果、资料边界和规则的职责见[回答合同](docs/ANSWERING_CONTRACT.md)；本轮独立评测、消融和发布验收见[规则验证记录](docs/RULES_VERIFICATION.md)。卡片命中是结构回归，不代表回答质量。
+
 ```sh
 .venv/bin/pip install pytest 'fakeredis[lua]'
 .venv/bin/python -m pytest -q tests

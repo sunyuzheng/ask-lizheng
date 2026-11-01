@@ -85,6 +85,48 @@ def _plain(text: str) -> str:
     return re.sub(r"\s+", " ", text.replace("`", "")).strip()
 
 
+def _plain_offsets(text: str) -> tuple[str, list[int]]:
+    """The embedding projection, with each character's original source position."""
+    positions = list(range(len(text)))
+
+    def replace(pattern, group=None, flags=0, space=False):
+        nonlocal text, positions
+        pieces, mapped, end = [], [], 0
+        for match in re.finditer(pattern, text, flags):
+            pieces.append(text[end:match.start()])
+            mapped.extend(positions[end:match.start()])
+            if group is not None:
+                start, stop = match.span(group)
+                pieces.append(text[start:stop])
+                mapped.extend(positions[start:stop])
+            elif space:
+                pieces.append(" ")
+                mapped.append(positions[match.start()])
+            end = match.end()
+        pieces.append(text[end:])
+        mapped.extend(positions[end:])
+        text, positions = "".join(pieces), mapped
+
+    replace(r"\[([^\]]*)\]\([^)]*\)", 1)
+    replace(r"\[\d\d:\d\d:\d\d\]", space=True)
+    replace(r"<!--.*?-->", flags=re.S)
+    replace(r"(?m)^\s*>\s?")
+    replace("`")
+    pieces, mapped = [], []
+    for match in re.finditer(r"\S+|\s+", text):
+        if match.group().isspace():
+            if pieces:
+                pieces.append(" ")
+                mapped.append(positions[match.start()])
+        else:
+            pieces.append(match.group())
+            mapped.extend(positions[match.start():match.end()])
+    if pieces and pieces[-1] == " ":
+        pieces.pop()
+        mapped.pop()
+    return "".join(pieces), mapped
+
+
 def _source_projection(root: Path, path: str, records: dict, cache: dict):
     """Recompute projections with both source and parser pinned to this pack."""
     if path in cache:
@@ -149,13 +191,36 @@ def _byte_windows(text: str, limit: int):
         yield "".join(current)
 
 
-def embedding_inputs(doc) -> list[str]:
+def _embedding_prefix(doc) -> str:
     prefix = _plain(doc.title[:300] + " / " + doc.section[:180]) + "\n"
-    prefix = next(_byte_windows(prefix, 1800), "")
+    return next(_byte_windows(prefix, 1800), "")
+
+
+def embedding_inputs(doc) -> list[str]:
+    prefix = _embedding_prefix(doc)
     # Byte count is a conservative token bound even for rare Unicode. Keep
     # every part of long public chunks instead of silently cutting their tails.
     limit = MAX_INPUT_BYTES - len(prefix.encode("utf-8"))
     return [prefix + part for part in _byte_windows(_plain(doc.text), limit)]
+
+
+def embedding_segment(doc, segment: int) -> tuple[str, list[int]] | None:
+    """A split document's embedding window and its canonical source positions."""
+    if type(segment) is not int or segment < 0:
+        return None
+    prefix = _embedding_prefix(doc)
+    windows = embedding_inputs(doc)
+    # A single window already covers the source. Preserve paragraph-based
+    # excerpt selection there; only split documents need a location constraint.
+    if len(windows) <= 1 or segment >= len(windows):
+        return None
+    plain, positions = _plain_offsets(doc.text)
+    parts = [window[len(prefix):] for window in windows]
+    if "".join(parts) != plain or not parts[segment]:
+        return None
+    start = sum(len(part) for part in parts[:segment])
+    end = start + len(parts[segment])
+    return parts[segment], positions[start:end]
 
 
 def prepare_index(root: Path, documents) -> tuple[dict, list[str]]:
@@ -268,6 +333,7 @@ class SemanticIndex:
         self.disabled_reason = "missing-index"
         self.vectors = array("f")
         self.document_indexes = []
+        self.segment_indexes = []
         # What load() checked, so a store can hand it to load_verified() without re-deriving it.
         self.checked: dict | None = None
 
@@ -275,6 +341,7 @@ class SemanticIndex:
         self.ready = False
         self.vectors = array("f")
         self.document_indexes = []
+        self.segment_indexes = []
         self.checked = None
         try:
             if not self.index_root.resolve().is_relative_to(self.root.parent.resolve()):
@@ -297,7 +364,7 @@ class SemanticIndex:
             entries = metadata["entries"]
             if not isinstance(entries, list) or not 0 < len(entries) <= MAX_INDEX_VECTORS:
                 raise SemanticIndexError("Invalid public semantic entry count")
-            hashes, input_hashes, seen, indexes = {}, {}, set(), []
+            hashes, input_hashes, seen, indexes, segments = {}, {}, set(), [], []
             for row in entries:
                 identity = (row["path"], row["document_id"])
                 index, doc = docs[identity]
@@ -314,6 +381,7 @@ class SemanticIndex:
                     raise SemanticIndexError("Duplicate public semantic segment")
                 seen.add(segment_identity)
                 indexes.append(index)
+                segments.append(row["segment"])
             filename = metadata["vector_file"]
             # Indexes built before 2026-10-04 carried the checksum in the file name instead.
             if filename != VECTOR_FILE and not (re.fullmatch(r"vectors-[0-9a-f]{64}\.f32", filename)
@@ -335,9 +403,10 @@ class SemanticIndex:
                 if not math.isfinite(norm) or abs(norm - 1) > .002:
                     raise SemanticIndexError("Semantic vectors are not normalized finite values")
             self.vectors, self.document_indexes = vectors, indexes
+            self.segment_indexes = array("I", segments)
             self.ready, self.disabled_reason = True, ""
             self.checked = {"index_sha256": sha256(metadata_path.read_bytes()), "vector_file": filename,
-                            "vector_sha256": metadata["vector_sha256"], "docindexes": list(indexes)}
+                            "vector_sha256": metadata["vector_sha256"], "docindexes": list(indexes), "segments": segments}
             return True
         except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
             self.disabled_reason = "invalid-or-stale-index"
@@ -350,14 +419,25 @@ class SemanticIndex:
         self.ready = False
         self.vectors = array("f")
         self.document_indexes = []
+        self.segment_indexes = []
         try:
             if not self.index_root.resolve().is_relative_to(self.root.parent.resolve()):
                 raise SemanticIndexError("Semantic index path escapes this app's public data directory")
-            if sha256((self.index_root / "index.json").read_bytes()) != checked["index_sha256"]:
+            metadata_raw = (self.index_root / "index.json").read_bytes()
+            if sha256(metadata_raw) != checked["index_sha256"]:
                 raise SemanticIndexError("Semantic index changed since it was checked")
             docindexes = checked["docindexes"]
             if not isinstance(docindexes, list) or not 0 < len(docindexes) <= MAX_INDEX_VECTORS:
                 raise SemanticIndexError("Invalid public semantic entry count")
+            # Older prebuilt stores retained only document indexes. Their pinned
+            # metadata already verified the segment IDs, so recover them without
+            # reading source bodies or requesting new vectors.
+            segments = checked.get("segments")
+            if segments is None:
+                segments = [entry["segment"] for entry in json.loads(metadata_raw)["entries"]]
+            if (not isinstance(segments, list) or len(segments) != len(docindexes)
+                    or any(type(segment) is not int or segment < 0 for segment in segments)):
+                raise SemanticIndexError("Invalid public semantic segment indexes")
             vector_path = _safe_path(self.index_root, checked["vector_file"])
             size = len(docindexes) * DIMENSIONS * 4
             if vector_path.stat().st_size != size:
@@ -371,6 +451,7 @@ class SemanticIndex:
             if sys.byteorder != "little":
                 vectors.byteswap()
             self.vectors, self.document_indexes = vectors, array("I", docindexes)
+            self.segment_indexes = array("I", segments)
             self.ready, self.disabled_reason, self.checked = True, "", checked
             return True
         except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, EOFError):
@@ -382,11 +463,13 @@ class SemanticIndex:
         for row, docindex in enumerate(self.document_indexes):
             offset = row * DIMENSIONS
             score = sum(self.vectors[offset + column] * query[column] for column in range(DIMENSIONS))
-            scores[docindex] = max(score, scores.get(docindex, -1))
+            if docindex not in scores or score > scores[docindex][0]:
+                scores[docindex] = (score, row)
         # A conservative small-sample cutoff reduces unrelated semantic hits;
         # it is not an authority or factual-support probability.
-        return [{"docindex": docindex, "score": round(score, 6)}
-                for docindex, score in heapq.nlargest(CANDIDATE_LIMIT, scores.items(), key=lambda row: row[1]) if score >= MIN_SIMILARITY]
+        return [{"docindex": docindex, "score": round(score, 6),
+                 **({"segment": int(self.segment_indexes[row])} if len(self.segment_indexes) == len(self.document_indexes) else {})}
+                for docindex, (score, row) in heapq.nlargest(CANDIDATE_LIMIT, scores.items(), key=lambda item: item[1][0]) if score >= MIN_SIMILARITY]
 
     async def candidates(self, client: httpx.AsyncClient, token: str, query: str) -> list[dict]:
         if not self.ready or not token or not query.strip():

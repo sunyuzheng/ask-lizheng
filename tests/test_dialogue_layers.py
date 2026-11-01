@@ -56,7 +56,11 @@ def test_both_speakers_and_unknown_survive_retrieval_without_merging(context_pac
     assert owners["guest-synthetic"].source["url"].endswith("&t=4s")
     for owner, passage in owners.items():
         evidence = model_evidence(passage)
-        assert evidence["data_layer"] == "raw" and evidence["speaker_id"] == owner
+        if owner == "unknown":
+            assert "说话人未确认" in "；".join(evidence["attribution"]["notes"])
+        else:
+            assert "片段说话人" in evidence["attribution"]["basis"]
+        assert passage.evidence["data_layer"] == "raw" and passage.evidence["speaker_id"] == owner
         answer = assemble_answer(answer_for(passage.source["id"]), [passage])
         archived = archived_answer(answer)
         assert archived["sources"][0]["speaker_id"] == owner
@@ -94,7 +98,8 @@ def test_participant_name_discovery_does_not_assign_unknown_turns(context_pack):
     unknown = next(p for p in passages if p.source.get("speaker_id") == "unknown")
     assert unknown.source["author"] == "说话人待核"
     assert unknown.source["participant_names"] == "合成目录嘉宾名"
-    assert model_evidence(unknown)["transcript_quality"] == "ai-text-reviewed"
+    assert unknown.evidence["transcript_quality"] == "ai-text-reviewed"
+    assert "说话人未确认" in "；".join(model_evidence(unknown)["attribution"]["notes"])
 
 
 def test_alias_and_stable_identity_survive_answer_pipeline_without_attribution(context_pack):
@@ -107,7 +112,8 @@ def test_alias_and_stable_identity_survive_answer_pipeline_without_attribution(c
     passages = index.retrieve("合成身份别名", limit=8)
     unknown = next(p for p in passages if p.source.get("speaker_id") == "unknown")
     assert unknown.source["participant_entity_ids"] == "guest:synthetic"
-    assert model_evidence(unknown)["participant_aliases"] == "合成身份别名"
+    assert "说话人未确认" in "；".join(model_evidence(unknown)["attribution"]["notes"])
+    assert unknown.evidence["participant_aliases"] == "合成身份别名"
     assert unknown.evidence["yuzheng_stance_weight"] == "not-evidence"
     result = assemble_answer(answer_for(unknown.source["id"]), [unknown])
     assert archived_answer(result)["sources"][0]["participant_metadata_basis"] == "programme association only"
@@ -203,7 +209,7 @@ def test_published_summary_has_separate_provenance_in_evidence_archive_and_seman
     assert passage.source["author"] == "AI" and passage.source["speaker_status"] == "not-speech"
     assert passage.source["content_origin"] == "ai-synthesis"
     assert passage.source["generation_method"] == "source-declared-ai-written"
-    assert model_evidence(passage)["yuzheng_stance_weight"] == "secondary-only"
+    assert "不能独立作为立正立场" in "；".join(model_evidence(passage)["attribution"]["notes"])
     archived = archived_answer(assemble_answer(answer_for(passage.source["id"]), [passage]))
     assert archived["sources"][0]["content_origin"] == "ai-synthesis"
     assert CurateSource.model_validate(passage.source).generation_method == "source-declared-ai-written"
@@ -235,7 +241,8 @@ def test_host_question_and_reported_attitude_are_preserved_without_stance_upgrad
     for owner, act in [("yuzheng", "question"), ("guest-synthetic", "reported-other")]:
         passage = next(p for p in passages if p.source.get("speaker_id") == owner)
         assert passage.evidence["yuzheng_stance_weight"] == "not-evidence"
-        assert model_evidence(passage)["speech_act"] == act
+        assert act in model_evidence(passage)["attribution"]["basis"]
+        assert "该言语行为不独立证明" in "；".join(model_evidence(passage)["attribution"]["notes"])
         assert CurateSource.model_validate(passage.source).speech_act == act
         answer = assemble_answer(answer_for(passage.source["id"]), [passage])
         assert archived_answer(answer)["sources"][0]["speech_act"] == act

@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .answers import BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
+from .query_context import uses_previous_question
 from .retrieval import ContextIndex
 from .admission import AdmissionError, HEADER
 from .quota import QuotaAdmission
@@ -523,7 +524,7 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 yield sse("progress", {"stage": "retrieving", "message": "正在查找相关公开材料…"}) + STREAM_HEARTBEAT
                 token = os.getenv("AI_BUILDER_TOKEN", "")
                 semantic_query = payload.question + "\n" + payload.context
-                if payload.history and len(payload.question) < 160 and re.search(r"^(那|这|它|上面|刚才|继续)|具体怎么|举个例子|能展开", payload.question):
+                if uses_previous_question(payload.question, payload.history):
                     semantic_query += "\n" + payload.history[-1].question
                 # Start the network lookup alongside local retrieval. Readers
                 # can open actual public excerpts without waiting on either AI call.

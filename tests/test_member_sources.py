@@ -82,11 +82,11 @@ def test_markdown_parser_keeps_all_access_and_speaker_metadata(context_pack):
 def test_model_sees_access_and_asr_limits_without_server_links(context_pack):
     passage = member_passage(context_pack)
     evidence = model_evidence(passage)
-    assert evidence["text_access"] == "public" and evidence["source_visibility"] == "members-only"
-    assert evidence["transcript_quality"] == "uncorrected-asr"
-    assert evidence["speaker_classification"] == "mixed-or-unresolved"
-    assert evidence["rights_scope"] == "publisher-authorized-transcript"
-    assert evidence["license"] == "LicenseRef-Original-Rights-Retained"
+    notes = "；".join(evidence["attribution"]["notes"])
+    assert "原视频需会员观看" in notes and "文字稿已公开" in notes
+    assert "字幕未经逐字核实" in notes
+    assert "不能独立作为立正立场" in notes
+    assert passage.evidence["license"] == "LicenseRef-Original-Rights-Retained"
     assert not {"url", "membership_url", "public_copy_url", "source_path", "docindex"}.intersection(evidence)
     assert "YouTube" in SYSTEM_PROMPT and "Founding Member" in SYSTEM_PROMPT
 

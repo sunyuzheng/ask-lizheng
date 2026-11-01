@@ -1,0 +1,1028 @@
+{
+  "schema_version": 1,
+  "context_commit": "7095f8de26f393966a36a5e2b9286084e1893000",
+  "method": "Primary text anchors chosen independently of retrieval outputs and decision cards. Two wording variants per group; source-family groups assigned before measurements. Educational source scope only; no private ask archives. Anchors measure visibility, not semantic answer accuracy.",
+  "refs": {
+    "growth": {
+      "path": "corpus/course-lessons/20250301-1883186.md",
+      "sha256": "d84f9c96b0052e1d056bde68b19ee2f406b0eec9db3fec1f8914d2cdd474a113",
+      "quotes": [
+        "挑战大 = 学习机会多： “太棒了！这么多难题，正好能逼我学会现在不会的东西，技能点又能加满了！”\n- 有资深同事 = 宝贵资源： “太好了"
+      ],
+      "context": "导那么上心，肯定不能容忍失败。”\n- 有资深同事 = 功劳被抢，黑锅我背： “做好了，功劳肯定是他们的，说是我被带着飞；做差了，他们肯定把锅甩给我这新人。里外不是人啊！”\n- 结论： “这项目绝对不能接！坑太多了！”\n\n而成长型思维的小S，则会这样想：\n\n- 挑战大 = 学习机会多： “太棒了！这么多难题，正好能逼我学会现在不会的东西，技能点又能加满了！”\n- 有资深同事 = 宝贵资源： “太好了！可以向大佬们请教，跟他们合作，肯定能学到超多东西！”\n- 领导关注 = 项目重要性高 + 资源保障： “领导重视，说明这事儿有价值，不会半途而废。就算遇到困难，领导也会协调资源来支持，这事能成！”\n- 风险 = 正常现象 + 成就感来源： “新项目没风险才不正常呢。要是板上钉钉谁都能做，那还有啥意思？克服困难做成了才有成就感嘛！”\n- 结论： “这项目简直"
+    },
+    "scores": {
+      "path": "corpus/course-lessons/20250301-1883187.md",
+      "sha256": "73c4da7744fe3df28827adc85adb4da60cb580a3d9ca44b8d3ba92812d87d802",
+      "quotes": [
+        "只关注了能量化的“硬指标”，忽略了那些无法量化但可能更重要的“软实力”。"
+      ],
+      "context": "用（比如学历高 且 有钱，魅力值不是简单相加，而是指数级增长；幽默感 配上 好颜值，效果也可能1+1>>2）。\n\n这个真实、复杂的“公式”，我们的大脑根本处理不过来！最后，我们能记住和使用的，就只剩下那个最原始、最简陋的“加分模型”。\n\n这带来一个致命问题：你只关注了能量化的“硬指标”，忽略了那些无法量化但可能更重要的“软实力”。\n\n- 拿谈恋爱来说： 你用打分表，最后可能只剩下：身高多少？收入几位数？有几套房？学历是啥？但一段长期关系里，真正起作用的，往往是那些“软”的东西：性格合不合？沟通顺不顺畅？有没有“恋商”？（对，我之前提过“恋商”这词，就是理解关系、处理关系、维护关系、在关系中提供良好体验的能力，包括怎么把握暧昧与直接，怎么既有担当又有神秘感等等）。这些东西，你怎么打分？打不了分，就容易被忽略。\n- 工作中也一样： 我们评价一个人“厉不厉害”，往往先看他的学历、证书、过往业绩这些“硬技能”（Hard Sk"
+    },
+    "freedom": {
+      "path": "corpus/course-lessons/20250301-1883189.md",
+      "sha256": "5a1b11fa25af85489f740806db26282104f23b7ee8f28499a1bd300219ac444e",
+      "quotes": [
+        "这里的关键是“被动收入”。什么是被动收入？就是你不用主动工作也能产生的收入。你去上班，哪怕年薪百万，那也是“主动收入”。哪天你不干了，收入就"
+      ],
+      "context": "先不谈那些虚无缥缈的，就从大家最关心的、也确实值得讲的第一层定义——财务自由（Financial Independence）——说起。\n\n怎么定义财务自由？很简单，看一个公式：\n\n被动收入 > 支出\n\n这意味着什么？意味着就算你不去工作，你也有足够的钱花。\n\n这里的关键是“被动收入”。什么是被动收入？就是你不用主动工作也能产生的收入。你去上班，哪怕年薪百万，那也是“主动收入”。哪天你不干了，收入就停了。所以，很多高薪职业，比如医生、律师，他们可能很 rich（有钱），但不一定 wealthy（富有），因为他们还没达到财务自由，主要依赖主动收入。\n\n衡量财务自由的真正标准，就是你的被动收入能不能覆盖你的日常支出。这时候，哪怕你选择躺平，也能在这个世界上活下去。\n\n被动收入从哪里来？主要有两种：\n\n1. 资产产生的利息/收益：比如房租、公司分红、银行利息"
+    },
+    "spending": {
+      "path": "corpus/course-lessons/20250301-1883191.md",
+      "sha256": "0afd1b50bdf9417314508ef0b74627e22f9ccb4805e33a9e07d5394445d29083",
+      "quotes": [
+        "好胜心/证明自己： 比如，你去逛奢侈品店，本来没打算买，但店员斜眼看你，说了句“你一看就买不起”。你火气上来了，“我偏要买给你看！”——啪，"
+      ],
+      "context": "怕错过比特币的发财机会！”、“再不买房就永远买不起了！”……这种“再不上车就晚了”的焦虑感，会让你在头脑发热、缺乏冷静分析的情况下做出决策，结果往往是在高位接盘，或者追逐那些风险极高的“风口”。\n3. 被情绪左右： 除了焦虑，其他情绪也是投资的大敌。\n  - 好胜心/证明自己： 比如，你去逛奢侈品店，本来没打算买，但店员斜眼看你，说了句“你一看就买不起”。你火气上来了，“我偏要买给你看！”——啪，情绪让你被割了一刀。\n  - 攀比/嫉妒： 身边同学吹嘘自己投资赚了大钱，“他行，我也行！” 于是也跟着冲进去，完全不考虑自己的情况和风险承受能力。\n  - 不服输/Ego： 别人质疑你，“小王啊，混这么久怎么还没发财？你不是挺牛的吗？” 为了争口气，为了所谓的面子，你可能就会去做一些冒险的、超出能力范围的投资。\n\n所有这些情绪，都会像迷雾一样，遮蔽你理性的"
+    },
+    "value": {
+      "path": "corpus/course-lessons/20250301-1883192.md",
+      "sha256": "715d8bf081849d369008edf6007fb9e0988b7f227f7c53041d8ca5cb6c06cbaf",
+      "quotes": [
+        "正确路径，让你在做事时能分清：什么是对的，什么是错的；什么有价值，什么在浪费时间；什么应该先做，什么可以后做。但请记住，路指明了，步子还得自"
+      ],
+      "context": "就能立刻财富自由的魔法咒语。更准确地说，它是一张地图和一套行动指南。你知道了这个公式，才能在人生的路口做出更明智的选择，一步一个脚印地朝着目标前进，最终才有可能实现你想要的自由。\n\n上节课我们强调了“积累”的重要性。这个个人价值公式，就是帮你找到那条值得积累的正确路径，让你在做事时能分清：什么是对的，什么是错的；什么有价值，什么在浪费时间；什么应该先做，什么可以后做。但请记住，路指明了，步子还得自己迈。\n\n 一、 你的价值到底是什么？（一个普遍存在的误区）\n\n要谈个人价值公式，我们得先搞清楚：到底什么是个人价值？老实说，我觉得可能只有极少数人（也许1%到4%？）真正理解了这事儿。\n\n先来看张图。这是美国软件开发岗位的变化趋势（2021-2025年）。你看，曾经的高峰，现在已经明显下滑了。\n\n（图表说明：展示软件开发岗位从高峰期到下滑的趋势）\n\n我在之"
+    },
+    "leverage": {
+      "path": "corpus/course-lessons/20250301-1883193.md",
+      "sha256": "db29ec97d2bdc789a10691ded2c989a67b9ef679bfd189a470c2ae9515df00c5",
+      "quotes": [
+        "拥抱自媒体： 对个人能力是极大的杠杆。你能看到我，就是因为自媒体。以前想出名、想卖东西，多难多贵？央视广告？拍电影电视剧？现在拿起手机就能录"
+      ],
+      "context": "例子，让大家彻底明白了：为什么“结论先行”，或者只给“结论”，是行不通的。\n\n第二章：方向就一定对吗？—— 另一个陷阱\n\n2.1 五个“风口浪尖”的方向\n\n所以，我不给“具体路径”，而是给“正确方向”，行不行？\n\n好，我给你5个当前看起来很美的方向：\n\n1. 拥抱自媒体： 对个人能力是极大的杠杆。你能看到我，就是因为自媒体。以前想出名、想卖东西，多难多贵？央视广告？拍电影电视剧？现在拿起手机就能录，就能被知道、建立连接、做销售。\n2. 独立开发： 技术基建（云服务等）太成熟了。以前大公司才能做的APP，现在个人一天就能搞定，还能支撑大规模用户。时代新机会。\n3. 超级个体（AI加持）： 一个人能干过去一个团队的活。以前你写程序，不会设计、不懂市场？现在AI都能帮你。一个人顶多个角色。\n4. 摸鱼+副业： 很多行业增长到顶了，公司里卷意义不大。高效完成"
+    },
+    "market": {
+      "path": "corpus/course-lessons/20250302-1883217.md",
+      "sha256": "a67bf103a4346f22a006015d570f180a6c38580b77d30d242aaae3b74d02e57f",
+      "quotes": [
+        "的目标，是要教会大家一个极其重要的东西：如何了解市场的方法。\n\n掌握了这个方法，你想知道公司、市场、老板到底想要什么样的人，那简直是小菜一碟。可如果你只得到了一些零散的答"
+      ],
+      "context": "你看这节课的子标题是：“公司/老板/市场分别要什么样的人”。但说实话，这个子标题不是我们这节课真正的重点。我的目标，是要教会大家一个极其重要的东西：如何了解市场的方法。\n\n掌握了这个方法，你想知道公司、市场、老板到底想要什么样的人，那简直是小菜一碟。可如果你只得到了一些零散的答案，却不知道怎么得到这些答案，那这些答案的作用其实相当有限。所以，我们会把绝大部分时间，花在这个“方法”上。\n\n一、你了解市场的最大阻碍是什么？—— 答案是你自己\n\n好，第一个问题：了解市场，你觉得最大的阻碍是什么？\n\n信息差？没钱？还是别的什么？\n\n我的答案可能有点扎心：了解市场最大的阻碍，就是你自己。\n\n你是怎么成为这个阻碍的呢？我觉得有四个坎儿：\n\n1. 你的一厢情愿 (Wishful Thinking)： 你总是在 希望 市场是某个样子，而"
+    },
+    "listen": {
+      "path": "corpus/course-lessons/20250302-1883220.md",
+      "sha256": "3add44a859d467e33aa306fa2d50ac0e8c086e35e6e185f424d67a95681c6346",
+      "quotes": [
+        "知道对方关心什么。他花时间去聆听了对方的问题，并且记在了心里。"
+      ],
+      "context": "- 基于这两点，你觉得应该主动提加班吗？（如果你的答案是“不应该”，那恭喜你，有点开窍了。）\n  - 再深一层： 但有时也需要说。什么时候应该说呢？（欢迎在评论区留言讨论！）\n\n明确价值的“内力”是什么？\n\n小S之所以能那样沟通，是因为他有一个前置动作：他知道对方关心什么。他花时间去聆听了对方的问题，并且记在了心里。\n\n这就像我们整个课程的核心价值公式：先了解市场（对方需求），再打造对应产品（你的工作和沟通方式）。\n\n而想要了解市场，你就必须——聆听。\n\n第五部分：聆听——沟通的起点，也是终点\n\nLeon在他那期《Influence Without Authority》的视频里，讲了聆听的四个层次：\n\n1. 理解 (Understand): 我听懂了你的点，并且能复述出来，你也确认我确实理解了。\n2. 欣赏 (Appreciate): 我不仅听懂了，还能理解你观点背后的思维模型、价值观，并从中找到值得学习的地方。我们在更深层次"
+    },
+    "invest": {
+      "path": "corpus/course-lessons/20250302-1883221.md",
+      "sha256": "dcd567f142a01c3b7fbd08bd95ba1e23628f164fc710efb8032596db67b468b9",
+      "quotes": [
+        "管理费 (Management Fee)： 通常按管理资产规模 (AUM) 的 1%-2% 收取。也就是说，无论基金是赚是赔，只要管着你的钱"
+      ],
+      "context": "做到，又是另一回事，心理因素太重要了。\n\n 第二部分：江湖智慧——洞察游戏规则和人性\n\n光懂理论还不够，我们还得了解点“江湖规矩”。\n\n 1. 从业者的钱从哪来？合法赚管理费，非法盯资金池\n\n- 合法金融从业者（比如基金经理）： 他们主要赚两部分钱。\n  - 管理费 (Management Fee)： 通常按管理资产规模 (AUM) 的 1%-2% 收取。也就是说，无论基金是赚是赔，只要管着你的钱，每年都要收这个费用。管 100 亿的盘子，啥也不干一年也能收 1-2 亿。\n  - 业绩提成 (Carry / Performance Fee)： 通常是利润的 20% (即所谓的 \"2/20\" 结构)。基金赚钱了，比如赚了 10 亿，他们还要从中分走 2 亿。\n  - 关键点： 你看，他们的核心利益在于做大管理规模 (AUM)。规模越大，旱涝保收的管理费"
+    },
+    "compound": {
+      "path": "corpus/course-lessons/20250302-1883224.md",
+      "sha256": "bff346ecbe9960f91758a3046be3280bd57ea0039e2236909cf6af78fc146576",
+      "quotes": [
+        "上传频率（这才是关键）：\n  - 看我每周上传的视频数，过去五年，基本是稳定输出的。\n  - 无论观众数、浏览量、收入如何波动，只有“发多少"
+      ],
+      "context": "，又回到每周几十美元。\n  - 转折点是开了会员，每周收入才变得可观。\n  - 想象一下，如果你一开始就抱着“要靠自媒体赚大钱”的心态，你怎么熬过前面那漫长的、几乎没有回报的时间？尤其是在那个当下，你不仅不知道何时能赚钱，甚至打心底里不相信自己能赚钱。\n\n- 上传频率（这才是关键）：\n  - 看我每周上传的视频数，过去五年，基本是稳定输出的。\n  - 无论观众数、浏览量、收入如何波动，只有“发多少视频”这件事，是你唯一可以控制的。\n  - 你要做的，就是把你唯一可控的事情做好。\n\n那些播放量只有几百的视频，和它们背后的心态\n\n给大家看一些我早期视频的数据。很多视频，刚上传时只有几十、几百的播放量。（后来频道火了，才带动了一些老视频的播放）。比如：\n\n- 一期讲AB testing的，我觉得做得不错，1900播放。\n- 还有很多，900多、700多、6"
+    },
+    "mainline": {
+      "path": "corpus/course-lessons/20250301-1883199.md",
+      "sha256": "8032f72de4c5516b6ae35ee957b03087a602d92d9f56c6cd483c3958ee680bb4",
+      "quotes": [
+        "10%真正有价值的工作。"
+      ],
+      "context": "引言：两个“定理”和一个普遍误解\n\n大家好！欢迎来到我们的第12课。今天，我们要聊聊如何在工作中抓住主线，也就是找到并聚焦那10%真正有价值的工作。\n\n在开始之前，我先抛出两个“定理”。说它们是定理，其实没什么严谨的科学依据，也没什么复杂的逻辑推导，但你琢磨一下，会发现它们异常真实：\n\n1. 工作会自动填满所有空白时间。 不管你给自己留了多少空闲，放心，总有无穷无尽的工作会像液体一样，把它填得满满当当。\n2. 工作会找到擅长它的人。 杂活总能精准地找到那些擅长（或者说不排斥）干杂活的人；同样，难题也总会找到那些敢于并善于啃硬骨头的人。\n\n大家可以暂停一下，反思下自己在工作里是不是也这样？这两个看似简单的“定理”，我们后面还会用到。\n\n接下来，问大家一个问题：“Work Smart”（聪明地工作）的反义词是什么？\n\n如果你脑子里第一个蹦出来的是“Work Hard”（努力工作"
+    },
+    "lifecycle": {
+      "path": "corpus/course-lessons/20250301-1883195.md",
+      "sha256": "f653889256076aa742293c6f794999421fe97fe1b6b2d8ca89c512e2ef1aad6d",
+      "quotes": [
+        "匹配诉求： 加入哪个阶段的公司，取决于你的职业发展阶段、目标诉求、风险偏好，以及你手上的其他选择。没有标准答案，关键是“适合”。"
+      ],
+      "context": "- 看懂阶段： 首先要判断目标公司和行业处于哪个阶段。不能一概而论。比如百度，搜索引擎业务早已成熟，移动互联网船票似乎也没拿到，但这十几年来，在百度工作的人感受未必很差。百度依然有钱，能存活，也能搞事（如文心一言）。它一定比新兴行业的公司差吗？不一定。\n- 匹配诉求： 加入哪个阶段的公司，取决于你的职业发展阶段、目标诉求、风险偏好，以及你手上的其他选择。没有标准答案，关键是“适合”。\n\n视角二：像投资人一样审视工作机会\n\n选工作，是你人生最大的一笔时间投资。想想你点外卖、买包、买车、买房时花了多少心思调研比较？选工作这件影响你每天至少8小时、关乎未来发展的头等大事，你投入了同等级别的审慎吗？如果没有，优先级可能需要调整。\n\n用投资人视角看工作，意味着什么？（这个观点来自“硅谷徐老师”）\n\n1. 你在用人力资本“投资”公司： 这比用钱投资更特殊。\n  - 准入门槛"
+    },
+    "yale": {
+      "path": "corpus/dialogues/youtube-UU-VfbWbvV0.json",
+      "sha256": "e91ac31df03bc5b37c11d9d4168084edc3a5804f04492739346b4051aa6dd384",
+      "quotes": [
+        "引导我思考这道题的解法"
+      ],
+      "speaker_id": "yuzheng",
+      "context": "[yuzheng] 就是你在做作业的时候呢\n[yuzheng] 不要问AI答案是什么\n[yuzheng] 我们让孩子就加上去这样一句prompt\n[yuzheng] 就是请像苏格拉底一样\n[yuzheng] 引导我思考这道题的解法\n[yuzheng] 而不是直接告诉我答案\n[unknown] 你就会发现\n[yuzheng] 尤其你买一个贵一点的AI啊\n[yuzheng] 就不要用烂AI\n[yuzheng] 一定要花点钱买一个贵一点的AI\n[unknown] 你就会发现\n[yuzheng] 他给你的这个引导\n[yuzheng] 远远超过了很多老师的水平\n[yuzheng] 它可以真的帮助你的孩子去引导\n[yuzheng] 而且你孩子可以不断的追问\n[yuzheng] 这会是一个非常好的用AI的方式\n[yuzheng] 我们是要让AI当导师而不是当代笔\n[yuzheng] 这个是保留我们思考力的"
+    },
+    "strategy": {
+      "path": "corpus/dialogues/youtube-7ej2r7XysKc.json",
+      "sha256": "6abddddc41a8fb18a96db192b458e7348d6f9ec8bb0101d1f7de8edcd45d436b",
+      "quotes": [
+        "是要有清楚的 strategy。光看到远处什么还不足够，你要知道怎么去从现在去走到你要看到的远方，对吧？第三点呢，是要有很好的 execution。其实很多创业公司或者大公司一样，他们的 vision"
+      ],
+      "speaker_id": "guest:shuchao-bi",
+      "context": "[yuzheng] 心态叫 open-minded，要理解这个社会的这个进步和别人的这个创新。我们正好这个地方，我觉得就非常好的转到我们这个问题的下一部分，就是你的 leadership principle，或者说是 philosophy，可不可以给大家介绍一下？很多东西在你说起来啊。"
+    },
+    "overfit": {
+      "path": "corpus/dialogues/youtube-7ej2r7XysKc.json",
+      "sha256": "6abddddc41a8fb18a96db192b458e7348d6f9ec8bb0101d1f7de8edcd45d436b",
+      "quotes": [
+        "比如说，我们做一些新的事情，会有人提出来不同的观点。我觉得这些都是好的观点，但是他很多时候是过拟合了他过去的成功。就比如说，有人跟我提过，在 Meta 一七年、一八年开始，因为 Meta 很多高层是中"
+      ],
+      "speaker_id": "guest:shuchao-bi",
+      "context": "[guest:shuchao-bi] Tokenization 是非常难的，呃，比如说你用 VDID，但是我们每天的 VDID 都在变，不像语言，就是说大家 token 是固定的。当然，每年也会新词出来，但是这些相对于这个既有的知识来说是极其微小的。但是你看，抖音上面可能每天火的内容都不一样。"
+    },
+    "labels": {
+      "path": "corpus/dialogues/youtube-PHIhRTl2HHs.json",
+      "sha256": "44418611b6cd7fca0c5a8721087a7457a3d992acf9e6f46d81aed943d3d505e9",
+      "quotes": [
+        "你不想别人给你贴标签"
+      ],
+      "speaker_id": "guest:leo-charisma",
+      "context": "[guest:leo-charisma] 可是别人问你哪里毕业的时候\n[guest:leo-charisma] 你可以告诉他\n[guest:leo-charisma] 甚至你可以稍微藏一下吗\n[unknown] 你不想说\n[guest:leo-charisma] 你不想别人给你贴标签\n[guest:leo-charisma] 重点还是要基于自己是做真实的自己\n[guest:leo-charisma] 也不要说我不遗藏一点\n[guest:leo-charisma] 首先是要尊重内心的感受\n[unknown] 其次就是\n[guest:leo-charisma] 你要让别人来发现你的价值\n[unknown] 而不是硬塞\n[guest:leo-charisma] 技巧上来说就是\n[guest:leo-charisma] 比方说你说一个故事\n[guest:leo-charisma] 你当中最不起眼的部分\n[guest:leo-charisma] 可以体现一些进取"
+    },
+    "ethan": {
+      "path": "corpus/dialogues/youtube-mRhsuF4wf3Q.json",
+      "sha256": "a20f1b15f324c47c8b67ccfc0f080a4c2bd2136670fdeb2c55f30788d9388145",
+      "quotes": [
+        "To change what they're doing, can you work with another team and get them to prioritize something yo"
+      ],
+      "speaker_id": "guest:ethan-evans",
+      "context": "[guest:ethan-evans] The best thing to do is let them go, but you're not going to let go 500 people. And also, on a team your size, those 500 people are costing your company at a tech company like 200 million dollars a year."
+    },
+    "ryo": {
+      "path": "corpus/dialogues/youtube-BnL5qaBzmR0.json",
+      "sha256": "61d2f29abc4108673a1edee79488fadf84ba8bfde8cd2d6757c7f769b196252a",
+      "quotes": [
+        "比如我已经有一个design system"
+      ],
+      "speaker_id": "guest:ryo-lu",
+      "context": "[guest:ryo-lu] 让他知道他该做什么\n[guest:ryo-lu] 然后你要开始给这些agent设限制\n[guest:ryo-lu] 或者说你要去定义什么东西是好\n[guest:ryo-lu] 我应该去reference哪些东西\n[guest:ryo-lu] 比如我已经有一个design system\n[guest:ryo-lu] 我就要用这个\n[guest:ryo-lu] 我不要让agent每次都重新造轮子\n[guest:ryo-lu] 然后在你做更多的东西以后\n[guest:ryo-lu] 你大概就会感觉越来越好\n[guest:ryo-lu] 另外一个我觉得可能是问题的问题\n[guest:ryo-lu] 是很多设计师\n[guest:ryo-lu] 像之前我们在2D空间去explore\n[guest:ryo-lu] 我们可以把一个artboard beng～ duplicate另外一个\n[guest:ryo-lu] 然后改一改细节"
+    },
+    "wanglu": {
+      "path": "corpus/dialogues/youtube-VSX1wxueZPU.json",
+      "sha256": "99859991de35bbec23ea7c160d2bd35687a8a80bec3afd11f9617c3b1e5e0983",
+      "quotes": [
+        "我们就需要有一个理论体系"
+      ],
+      "speaker_id": "guest:wang-lu",
+      "context": "[unknown] 不同人呢\n[unknown] 在不同地方\n[guest:wang-lu] 他说佛说过什么呢\n[guest:wang-lu] 互相说的就不一致\n[guest:wang-lu] 我们就需要有一个理论体系\n[guest:wang-lu] 来搞清楚哪些到底是佛陀说的\n[guest:wang-lu] 而且佛陀在不同的地方说的\n[guest:wang-lu] 这些不同内容\n[guest:wang-lu] 它有重复的\n[guest:wang-lu] 不一致的\n[guest:wang-lu] 我们应该怎样去辨别他\n[unknown] 它就叫阿毗达摩\n[unknown] 它叫论\n[guest:wang-lu] 除了经和论呢\n[unknown] 还有一个叫律\n[guest:wang-lu] 律就是这个戒律\n[guest:wang-lu] 我们今天说这个律师\n[guest:wang-lu] 他其实过去古代最早的意思就是"
+    },
+    "liujia": {
+      "path": "corpus/dialogues/youtube--Et3GJRSI_0.json",
+      "sha256": "bd08a7f49681f7c8a2c3a681369041451208a23e24435ee15247feab159bfc21",
+      "quotes": [
+        "对深度学习了解基本上为0"
+      ],
+      "speaker_id": "guest:liu-jia",
+      "context": "[guest:liu-jia] 比较酷炫的\n[guest:liu-jia] 就想到了要不来个人机大战\n[guest:liu-jia] 当时其实我对AI的进展\n[unknown] 对人工神经网络\n[guest:liu-jia] 对深度学习了解基本上为0\n[guest:liu-jia] 当时以为AI还是一如既往的弱智\n[guest:liu-jia] 结果没想到节目大赛里面我们做了人脸识别\n[guest:liu-jia] 人工智能在2016年的时候\n[guest:liu-jia] 已经超越了人类最顶尖的高手\n[guest:liu-jia] 对我触动特别特别大\n[guest:liu-jia] 2016年呢正好是AlphaGo战胜了李世石\n[guest:liu-jia] 当时也非常的出圈\n[guest:liu-jia] 所以说这两件事情结合起来\n[guest:liu-jia] 这就让我重新回到了20年前\n[unknown] 信仰回来了"
+    },
+    "testing": {
+      "path": "corpus/videos/20250924-9kh1YvzZYks.md",
+      "sha256": "f0636ced4ba330dc8d5100ac6427bbd461bee318202436f7dc1a6f82ae9783b6",
+      "quotes": [
+        "一个是 CUPED(通过回归调整的方差缩减方法)"
+      ],
+      "context": "ent(一致)的foundation\n\n00:01:33 基本上都是错的\n\n00:01:34 所以说我们要建立一个正确的基础\n\n00:01:36 在那之上\n\n00:01:36 我会介绍三种相对advanced(高级的)的test(测试)吧\n\n00:01:39 一个是 CUPED(通过回归调整的方差缩减方法)\n\n00:01:40 也就是 regression adjustment(回归调整)\n\n00:01:42 一个是Bayesian (贝叶斯方法)\n\n00:01:43 就是贝叶斯和frequentist(频率学派)\n\n00:01:45 和频率学派到底有什么区别\n\n00:01:46 它们到底是怎么回事儿\n\n00:01:48 和我们为什么要做sequential testing(序贯检验)\n\n00:01:50 对于其他的比如说switchback(轮换实验)\n\n00:01:52 Grid search(网格搜索）\n\n00:01:52 geo t"
+    },
+    "bayesian": {
+      "path": "corpus/blog-posts/20250211-bayesian-vs-frequentist-statistics-zh.md",
+      "sha256": "5161a2e57e8430a0f5719cd9b9e9d4a6ef09e9b47503f4a438904524282bdd58",
+      "quotes": [
+        "一个常见的困惑，也是一个经常吵得很凶的话题，就是贝叶斯（Bayesian）和频率学派（Frequentist）两种方法的区别。"
+      ],
+      "context": "：https://www.statsig.com/blog/bayesian-vs-frequentist-statistics\n- 发布日期：2025-02-11\n- 作者：Yuzheng Sun（立正）\n\n我们经常陷在统计的技术细节里，忘了更大的图景。\n\n一个常见的困惑，也是一个经常吵得很凶的话题，就是贝叶斯（Bayesian）和频率学派（Frequentist）两种方法的区别。\n\n这场争论听起来像是根本立场的冲突，但很多时候，它争的是我们怎样谈论不确定性，而不是我们根据数据实际做出的决策。\n\n下面我们重点讲讲，为什么这些差别往往没有某些人说的那么重要。\n\n 核心的困惑：「90%的概率」到底是什么意思？\n\n假设你想知道你所在城市成年人的平均身高。你收集了一些数据，算出一个可能取值的范围。\n\n- 频率学派会说：「我们算出的90%置信区间是5英尺6英寸到5英尺9英"
+    },
+    "marketplace": {
+      "path": "corpus/blog-posts/20250326-marketplace-challenges-in-ab-testing-zh.md",
+      "sha256": "cd307afc5c78fde9086a94816ff88b824824fb6ce5ea4b2ecf444d6639b9d4c1",
+      "quotes": [
+        "跨组污染」：市场一边处在实验组的人，和另一边处在对照组的人发生了交互。"
+      ],
+      "context": "un（立正）\n\n在marketplace，也就是双边或多边市场里做A/B实验，会比较棘手，因为买家、卖家和平台本身这几方一直在互相影响。\n\n测试一个新功能时，你不能忽略这几方之间的重叠，也不能忽略供需可能以意想不到的方式变化。传统的按用户随机分组，常常会造成「跨组污染」：市场一边处在实验组的人，和另一边处在对照组的人发生了交互。\n\n网络效应让事情更复杂，因为一边的一个小改动，可能在整个系统里层层传开。哪怕只是调整一下费用，也可能推动需求或供给发生变化，从对照组「抢走」流量，把你的指标虚高或者压低。\n\n尽管有这些障碍，随机实验仍然是衡量因果影响的黄金标准。关键在于，既要保住随机化的原则，又要面对多边市场的现实。下面是几种应对marketplace常见陷阱的实用方法，最后再谈谈身份识别（identity resolution）和怎样选对实验方法。\n\n 方法\n\n 1. 按簇随机（cluster-based randomiza"
+    },
+    "novelty": {
+      "path": "corpus/blog-posts/20240320-novelty-effects-zh.md",
+      "sha256": "ae81b2a299b1ecc78e03e81e2d6ea98a8a786f6f778dc220bc42b0c61d6552c1",
+      "quotes": [
+        "新奇效应（novelty effect）指的是：一个新功能刚出来时，用户的反应因为「新」而暂时偏离了它本来的价值。\n- 不是所有产品都有新奇"
+      ],
+      "context": "Everything you need to know\n- 原文链接：https://www.statsig.com/blog/novelty-effects\n- 发布日期：2024-03-20\n- 作者：Yuzheng Sun（立正）\n\n 先说结论\n\n- 新奇效应（novelty effect）指的是：一个新功能刚出来时，用户的反应因为「新」而暂时偏离了它本来的价值。\n- 不是所有产品都有新奇效应，它主要出现在高频使用的产品里。\n- 如果忽视「新奇效应只是暂时的」这一点，可能做出错误的产品决策，更糟的是带出坏的文化。\n- 新奇效应本身就是处理效应（treatment effect）的一部分，不应该用统计方法去「修正」它。\n  - 发现和控制新奇效应最有效的办法，是看处理效应的时间序列。\n  - 治本的办法，是用一组能正确反映用户意图的指标。\n- 理"
+    },
+    "srm": {
+      "path": "corpus/blog-posts/20240828-technical-insights-to-a-scalable-experimentation-system-zh.md",
+      "sha256": "a791138b87789e2d694749dd063438bee00b0aa8cd4d07ebd39160b0ed371f18",
+      "quotes": [
+        "样本比例不匹配（SRM）、多重比较、偷看结果（peeking）、网络效应、功效不足、日志错误和数据管道出错。"
+      ],
+      "context": "式级增长的：\n\n- 参数：参数空间和实验数、指标数、变体数、用户分群数都相关。实验越复杂，这几个维度都膨胀得越快。\n- 历史关联：实验既服务于决策，也服务于学习，所以既要全面理解当前的实验，也要理解过去的实验。\n- 系统里的混乱：严谨的实验流程里到处是坑，包括样本比例不匹配（SRM）、多重比较、偷看结果（peeking）、网络效应、功效不足、日志错误和数据管道出错。\n\n如果公司没有一套系统来处理和整合这些信息，往往就只能靠人来扛这些复杂度，而这天然是没法规模化的。\n\n 2.2 管理复杂度\n\n管理上的负担比信息更看不见，但不能忽略：\n\n1. 大多数工程师和产品经理缺少必要的统计知识，没法正确解读实验结果，也没法从观察到的效应正确推断真实效应（Cunningham，2023）。\n2. 管理上的激励常常鼓励有害的行为，比如p-hacking。\n3. 实验结束后，配置留在代码库里，会变成技"
+    },
+    "attention": {
+      "path": "corpus/community-posts/20260321-troll-30876099.md",
+      "sha256": "71ba88cc57cdf00921c2253baee6553a1d08836de433bb8261e2237dbeacef9a",
+      "quotes": [
+        "略，不是赢一场争论，而是管理你的叙事场和注意力场\n\n这是我觉得最重要的部分。\n\n 第一，不要被拖进“低维验尸台”\n\n很多人会试图把你拖到一个特别窄、特别有利于他们的战场上"
+      ],
+      "context": "，而是上瘾式传播、诋毁、纠缠。\n对这种人，核心不是辩，而是切断、隔离、留证、必要时规则处理。\n\n顶级玩家的第一步，不是想着“怎么证明我对”，而是先识别：\n\n这个人是哪类？这个局值不值得下？\n\n---\n\n 九、真正高明的策略，不是赢一场争论，而是管理你的叙事场和注意力场\n\n这是我觉得最重要的部分。\n\n 第一，不要被拖进“低维验尸台”\n\n很多人会试图把你拖到一个特别窄、特别有利于他们的战场上：\n\n- 用某个单点技术来审判你的整体价值\n- 用某个局部逻辑来否定你的全部工作\n- 把你从一个综合型选手，强行压缩成一个单维答题者\n\n你一旦完全按他的规则玩，你就已经输了。\n\n因为你真正的价值，本来就不在那个单点上。\n你的价值，可能在于：\n\n- 帮人完成转型\n- 帮人形成结果\n- 帮复杂问题找到路径\n- 把抽象认知产品化\n- 形成真实的"
+    },
+    "checklist": {
+      "path": "corpus/community-posts/20260312-30-30588158.md",
+      "sha256": "f8d4b1962af1ff8c93dd75569fb0db76388969af62bcf85b844f45647625bc89",
+      "quotes": [
+        "Checklist是管理工具，不是创业工具。管理工具的逻辑是\"把确定的事做完\"，而创业的逻辑是\"在不确定中找到确定性\"。用前者的框架做后者的"
+      ],
+      "context": "taset……每一项看起来都无比合理，每一项都是\"最佳实践\"里教你做的事。\n\n但这里面藏着一个巨大的陷阱：当清单变长，团队的注意力就从\"验证假设\"滑向了\"完成事项\"。每个人都在忙，每个人都在交付，但没有人在回答那个唯一重要的问题——这个产品到底有没有人要？\n\nChecklist是管理工具，不是创业工具。管理工具的逻辑是\"把确定的事做完\"，而创业的逻辑是\"在不确定中找到确定性\"。用前者的框架做后者的事，结果就是团队花了四周时间，交付了一堆文档和原型，但对产品是否成立这个根本问题，依然一无所知。\n\n所以我的建议是：30天路线图只需要记住四句话，每周一句。它们不是交付物，而是四个生死测试。是用来随时杀掉你这个idea的。对于创业公司来说，实验很便宜，上线很贵。不要因为焦虑，乱上一个没需求的东西。\n\n Week 1: Prove humans want th"
+    }
+  },
+  "cases": [
+    {
+      "id": "growth-1",
+      "group": "growth",
+      "split": "dev",
+      "category": "concept",
+      "question": "成长型思维面对难项目时，怎么看“我还不会”？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "growth"
+      ],
+      "good": "区别暂时不会和永远学不会；挑战可能产生学习机会，不保证每个难项目都该接。"
+    },
+    {
+      "id": "growth-2",
+      "group": "growth",
+      "split": "dev",
+      "category": "concept",
+      "question": "立正讲固定型和成长型思维时，为什么有人把难项目看成学习机会？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "growth"
+      ],
+      "good": "区别暂时不会和永远学不会；挑战可能产生学习机会，不保证每个难项目都该接。"
+    },
+    {
+      "id": "scores-1",
+      "group": "scores",
+      "split": "dev",
+      "category": "concept",
+      "question": "为什么打分思维容易让人看不到软实力？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "scores"
+      ],
+      "good": "解释硬指标会遮蔽无法量化但重要的能力；不否定所有量化。"
+    },
+    {
+      "id": "scores-2",
+      "group": "scores",
+      "split": "dev",
+      "category": "concept",
+      "question": "可量化的指标多，是否就能把人评价准确？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "scores"
+      ],
+      "good": "解释硬指标会遮蔽无法量化但重要的能力；不否定所有量化。"
+    },
+    {
+      "id": "freedom-1",
+      "group": "freedom",
+      "split": "dev",
+      "category": "exact_recollection",
+      "question": "年薪很高为什么还不一定财务自由？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "freedom"
+      ],
+      "good": "区分必须持续工作才能获得的收入与无需主动工作仍产生的收入，不能用年薪直接推断自由。"
+    },
+    {
+      "id": "freedom-2",
+      "group": "freedom",
+      "split": "dev",
+      "category": "exact_recollection",
+      "question": "《真本事》里主动收入与被动收入有什么区别？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "freedom"
+      ],
+      "good": "区分必须持续工作才能获得的收入与无需主动工作仍产生的收入，不能用年薪直接推断自由。"
+    },
+    {
+      "id": "spending-1",
+      "group": "spending",
+      "split": "dev",
+      "category": "application",
+      "question": "怎么判断为了面子而增加的消费是否值得？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "spending"
+      ],
+      "good": "解释原文有关花钱、攀比或破财的论点；不诊断读者心理，不承诺收益。"
+    },
+    {
+      "id": "spending-2",
+      "group": "spending",
+      "split": "dev",
+      "category": "application",
+      "question": "我买东西总想证明自己过得不错，怎么重新看这个选择？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "spending"
+      ],
+      "good": "解释原文有关花钱、攀比或破财的论点；不诊断读者心理，不承诺收益。"
+    },
+    {
+      "id": "value-1",
+      "group": "value",
+      "split": "holdout",
+      "category": "application",
+      "question": "个人价值公式怎样帮助我区分“有价值”和“很忙”？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "value"
+      ],
+      "good": "回到什么有价值、何事优先的关系；不凭空生成个人分数、倍率或诊断。"
+    },
+    {
+      "id": "value-2",
+      "group": "value",
+      "split": "holdout",
+      "category": "application",
+      "question": "我事情做了很多，怎么用个人价值的思路看优先顺序？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "value"
+      ],
+      "good": "回到什么有价值、何事优先的关系；不凭空生成个人分数、倍率或诊断。"
+    },
+    {
+      "id": "leverage-1",
+      "group": "leverage",
+      "split": "holdout",
+      "category": "concept",
+      "question": "为什么自媒体会放大个人能力的杠杆？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "leverage"
+      ],
+      "good": "解释被看见、连接与销售的关系；不是每个人都必须做自媒体。"
+    },
+    {
+      "id": "leverage-2",
+      "group": "leverage",
+      "split": "holdout",
+      "category": "concept",
+      "question": "在个人价值的路径里，自媒体通过什么关系放大能力？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "leverage"
+      ],
+      "good": "解释被看见、连接与销售的关系；不是每个人都必须做自媒体。"
+    },
+    {
+      "id": "market-1",
+      "group": "market",
+      "split": "dev",
+      "category": "concept",
+      "question": "知道“老板要什么人”，和学会了解市场的方法有什么不同？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "market"
+      ],
+      "good": "强调获得答案的方法而非永恒标准答案；保留公司、老板、市场的不同目的。"
+    },
+    {
+      "id": "market-2",
+      "group": "market",
+      "split": "dev",
+      "category": "concept",
+      "question": "《真本事》第14课为什么不满足于罗列公司喜欢什么人？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "market"
+      ],
+      "good": "强调获得答案的方法而非永恒标准答案；保留公司、老板、市场的不同目的。"
+    },
+    {
+      "id": "listen-1",
+      "group": "listen",
+      "split": "dev",
+      "category": "application",
+      "question": "沟通总在想怎么讲清楚，为什么还要先听？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "listen"
+      ],
+      "good": "从理解对方关切解释倾听，不预设读者表达能力差。"
+    },
+    {
+      "id": "listen-2",
+      "group": "listen",
+      "split": "dev",
+      "category": "application",
+      "question": "我准备了很完整的表达，为什么对方还是不买账？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "listen"
+      ],
+      "good": "从理解对方关切解释倾听，不预设读者表达能力差。"
+    },
+    {
+      "id": "invest-1",
+      "group": "invest",
+      "split": "holdout",
+      "category": "exact_recollection",
+      "question": "基金亏钱时，管理费通常还会收吗？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "invest"
+      ],
+      "good": "按照课程描述管理费与资产规模的关系；标明是课程示例/一般介绍，不当成所有合同的承诺。"
+    },
+    {
+      "id": "invest-2",
+      "group": "invest",
+      "split": "holdout",
+      "category": "exact_recollection",
+      "question": "《投资科普》课里，管理费和基金盈亏有什么关系？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "invest"
+      ],
+      "good": "按照课程描述管理费与资产规模的关系；标明是课程示例/一般介绍，不当成所有合同的承诺。"
+    },
+    {
+      "id": "compound-1",
+      "group": "compound",
+      "split": "dev",
+      "category": "time",
+      "question": "最后一课拿频道举例时，为什么特别提上传频率？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "compound"
+      ],
+      "good": "结合当时的频道例子解释行动与积累；不能把当时收入说成现在收入。"
+    },
+    {
+      "id": "compound-2",
+      "group": "compound",
+      "split": "dev",
+      "category": "time",
+      "question": "粉丝与收入都在变，课程里的频道例子用哪个行动指标解释坚持？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "compound"
+      ],
+      "good": "结合当时的频道例子解释行动与积累；不能把当时收入说成现在收入。"
+    },
+    {
+      "id": "mainline-1",
+      "group": "mainline",
+      "split": "dev",
+      "category": "followup",
+      "question": "那10%真正有价值的工作，是说工作都有同样的价值吗？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "mainline"
+      ],
+      "good": "接续前文工作价值主题；解释主线与真正价值，不将10%当作读者已测得的比例。",
+      "history": [
+        {
+          "question": "工作里的事情很多，怎么判断价值？",
+          "answer": "可以区分忙碌与真正改变结果的工作。"
+        }
+      ]
+    },
+    {
+      "id": "mainline-2",
+      "group": "mainline",
+      "split": "dev",
+      "category": "followup",
+      "question": "具体说，课程里为什么要区分忙碌和那10%的主线工作？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "mainline"
+      ],
+      "good": "接续前文工作价值主题；解释主线与真正价值，不将10%当作读者已测得的比例。",
+      "history": [
+        {
+          "question": "工作里的事情很多，怎么判断价值？",
+          "answer": "可以区分忙碌与真正改变结果的工作。"
+        }
+      ]
+    },
+    {
+      "id": "lifecycle-1",
+      "group": "lifecycle",
+      "split": "holdout",
+      "category": "application",
+      "question": "成熟公司和成长公司，怎么结合自己的处境选？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "lifecycle"
+      ],
+      "good": "公司阶段需结合个人阶段、诉求、风险和其他选择，没有普遍标准答案。",
+      "context": "这里只希望理解判断方法，没有提供具体offer。"
+    },
+    {
+      "id": "lifecycle-2",
+      "group": "lifecycle",
+      "split": "holdout",
+      "category": "application",
+      "question": "选工作时，公司生命周期能直接决定哪个offer更好吗？",
+      "intent": "apply",
+      "expect": "answered",
+      "reference_ids": [
+        "lifecycle"
+      ],
+      "good": "公司阶段需结合个人阶段、诉求、风险和其他选择，没有普遍标准答案。",
+      "context": "这里只希望理解判断方法，没有提供具体offer。"
+    },
+    {
+      "id": "yale-1",
+      "group": "yale",
+      "split": "holdout",
+      "category": "exact_recollection",
+      "question": "立正说ai和教育，建议孩子从问ai答案 换成问ai什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "yale"
+      ],
+      "good": "核心是让AI像苏格拉底一样引导解题思考，而非直接给答案；只有当前证据显示时才归为立正的表达。"
+    },
+    {
+      "id": "yale-2",
+      "group": "yale",
+      "split": "holdout",
+      "category": "exact_recollection",
+      "question": "他讲让孩子向AI提问时，除了要答案，还建议怎样引导思考？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "yale"
+      ],
+      "good": "核心是让AI像苏格拉底一样引导解题思考，而非直接给答案；只有当前证据显示时才归为立正的表达。"
+    },
+    {
+      "id": "strategy-1",
+      "group": "strategy",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "Shuchao谈领导力时，vision之外为什么还需要strategy和execution？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "strategy"
+      ],
+      "good": "归Shuchao本人，解释方向、从现在到目标的路径与执行；不能改成立正亲自提出。"
+    },
+    {
+      "id": "strategy-2",
+      "group": "strategy",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "在Shuchao的分享中，看见远方和真正执行之间缺什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "strategy"
+      ],
+      "good": "归Shuchao本人，解释方向、从现在到目标的路径与执行；不能改成立正亲自提出。"
+    },
+    {
+      "id": "overfit-1",
+      "group": "overfit",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "Shuchao为什么说厉害的人也会过拟合过去的成功？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "overfit"
+      ],
+      "good": "说明过往成功可能限制对新事物的识别；例子里的话是转述，不把它当成主讲的个人经历。"
+    },
+    {
+      "id": "overfit-2",
+      "group": "overfit",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "Shuchao用Meta看短视频的例子，想说明什么局限？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "overfit"
+      ],
+      "good": "说明过往成功可能限制对新事物的识别；例子里的话是转述，不把它当成主讲的个人经历。"
+    },
+    {
+      "id": "labels-1",
+      "group": "labels",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "Leo在社交标签这期里，觉得展示自己时最重要的是什么？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "labels"
+      ],
+      "good": "归Leo，保留真实呈现与可以保留一些信息的条件，不据标题创造一套套路。"
+    },
+    {
+      "id": "labels-2",
+      "group": "labels",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "如何理解Leo说不想被贴标签，还是要做真实的自己？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "labels"
+      ],
+      "good": "归Leo，保留真实呈现与可以保留一些信息的条件，不据标题创造一套套路。"
+    },
+    {
+      "id": "ethan-1",
+      "group": "ethan",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "Ethan Evans谈大团队管理时，为什么要能让其他团队优先做需要的事情？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "ethan"
+      ],
+      "good": "根据Ethan实际说的跨团队影响与优先级展开；分清立正的回应，不拼接成他的原话。"
+    },
+    {
+      "id": "ethan-2",
+      "group": "ethan",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "行为面试访谈里，Ethan怎样解释跨团队推动事情的能力？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "ethan"
+      ],
+      "good": "根据Ethan实际说的跨团队影响与优先级展开；分清立正的回应，不拼接成他的原话。"
+    },
+    {
+      "id": "ryo-1",
+      "group": "ryo",
+      "split": "holdout",
+      "category": "guest_attribution",
+      "question": "Ryo谈到已有design system时，为什么不让agent每次重造？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "ryo"
+      ],
+      "good": "依据Ryo本人片段说明给agent定义好坏、提供参考并复用已有设计系统，保留这个具体条件，不把主持人的概括当成Ryo的观点。"
+    },
+    {
+      "id": "ryo-2",
+      "group": "ryo",
+      "split": "holdout",
+      "category": "guest_attribution",
+      "question": "设计师用agent时，Ryo怎样用已有设计系统限制输出？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "ryo"
+      ],
+      "good": "依据Ryo本人片段说明给agent定义好坏、提供参考并复用已有设计系统，保留这个具体条件，不把主持人的概括当成Ryo的观点。"
+    },
+    {
+      "id": "wanglu-1",
+      "group": "wanglu",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "王路讲佛经时，为什么说需要一个理论体系？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "wanglu"
+      ],
+      "good": "只引用王路本人确认的陈述；同一个名字换问法不应把其他人的话归给他。"
+    },
+    {
+      "id": "wanglu-2",
+      "group": "wanglu",
+      "split": "dev",
+      "category": "guest_attribution",
+      "question": "关于王路的观点：理解佛经为何还需要理论体系？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "wanglu"
+      ],
+      "good": "只引用王路本人确认的陈述；同一个名字换问法不应把其他人的话归给他。"
+    },
+    {
+      "id": "liujia-1",
+      "group": "liujia",
+      "split": "holdout",
+      "category": "guest_attribution",
+      "question": "刘嘉回忆接触AI进展时，最初对深度学习了解多少？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "liujia"
+      ],
+      "good": "根据刘嘉自己的回忆，不把他早期认识当成今天的学术立场或立正的经历。"
+    },
+    {
+      "id": "liujia-2",
+      "group": "liujia",
+      "split": "holdout",
+      "category": "guest_attribution",
+      "question": "刘嘉当时怎样回忆自己最早看AI的认识？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "liujia"
+      ],
+      "good": "根据刘嘉自己的回忆，不把他早期认识当成今天的学术立场或立正的经历。"
+    },
+    {
+      "id": "testing-1",
+      "group": "testing",
+      "split": "holdout",
+      "category": "technical",
+      "question": "那期讲假设检验的视频提到了什么方差缩减方法？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "testing"
+      ],
+      "good": "定位到CUPED及通过回归调整降低方差的讨论，不能只凭标题宣称统计学全部错误。"
+    },
+    {
+      "id": "testing-2",
+      "group": "testing",
+      "split": "holdout",
+      "category": "technical",
+      "question": "统计视频里，CUPED在讨论什么方法时被提到？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "testing"
+      ],
+      "good": "定位到CUPED及通过回归调整降低方差的讨论，不能只凭标题宣称统计学全部错误。"
+    },
+    {
+      "id": "bayesian-1",
+      "group": "bayesian",
+      "split": "dev",
+      "category": "find",
+      "question": "想看立正比较贝叶斯和频率学派的文章，从哪读起？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "bayesian"
+      ],
+      "good": "给真实文章与理由；中文是AI改写/翻译阅读辅助，不冒充立正亲笔中文。"
+    },
+    {
+      "id": "bayesian-2",
+      "group": "bayesian",
+      "split": "dev",
+      "category": "find",
+      "question": "找贝叶斯与频率学派的原文和中文阅读起点。",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "bayesian"
+      ],
+      "good": "给真实文章与理由；中文是AI改写/翻译阅读辅助，不冒充立正亲笔中文。"
+    },
+    {
+      "id": "marketplace-1",
+      "group": "marketplace",
+      "split": "dev",
+      "category": "find",
+      "question": "找一篇讲多边市场A/B测试为什么会跨组污染的文章。",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "marketplace"
+      ],
+      "good": "根据原文说明跨组干扰与实际适用范围，保留原作者和中文阅读辅助身份。"
+    },
+    {
+      "id": "marketplace-2",
+      "group": "marketplace",
+      "split": "dev",
+      "category": "find",
+      "question": "想读marketplace实验中供需相互影响的讨论，从哪篇开始？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "marketplace"
+      ],
+      "good": "根据原文说明跨组干扰与实际适用范围，保留原作者和中文阅读辅助身份。"
+    },
+    {
+      "id": "novelty-1",
+      "group": "novelty",
+      "split": "dev",
+      "category": "find",
+      "question": "哪里谈过实验中的新奇效应？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "novelty"
+      ],
+      "good": "推荐具体文章并解释新奇效应相关性，不因标题相关就编造细节。"
+    },
+    {
+      "id": "novelty-2",
+      "group": "novelty",
+      "split": "dev",
+      "category": "find",
+      "question": "功能刚上线时大家爱点，想找讲novelty effect的材料。",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "novelty"
+      ],
+      "good": "推荐具体文章并解释新奇效应相关性，不因标题相关就编造细节。"
+    },
+    {
+      "id": "srm-1",
+      "group": "srm",
+      "split": "dev",
+      "category": "find",
+      "question": "实验平台的SRM、偷看结果这些坑，有什么阅读起点？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "srm"
+      ],
+      "good": "推荐实际文章，解释平台流程中的风险；节目目录和概念偶合不能充当具体事实证据。"
+    },
+    {
+      "id": "srm-2",
+      "group": "srm",
+      "split": "dev",
+      "category": "find",
+      "question": "想系统看规模化实验系统常见的错误，从哪篇读？",
+      "intent": "find",
+      "expect": "answered",
+      "reference_ids": [
+        "srm"
+      ],
+      "good": "推荐实际文章，解释平台流程中的风险；节目目录和概念偶合不能充当具体事实证据。"
+    },
+    {
+      "id": "attention-1",
+      "group": "attention",
+      "split": "dev",
+      "category": "topic_switch",
+      "question": "换个话题：面对网上的争论，怎么管理自己的注意力？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "attention"
+      ],
+      "good": "当前问题已经换题，前一轮职业话题不应决定回答；保留原文关于注意力与叙事的条件。",
+      "history": [
+        {
+          "question": "怎么准备跳槽？",
+          "answer": "先明确你看重的机会与约束。"
+        }
+      ]
+    },
+    {
+      "id": "attention-2",
+      "group": "attention",
+      "split": "dev",
+      "category": "topic_switch",
+      "question": "不聊工作了，我想理解如何面对网络上的争论。",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "attention"
+      ],
+      "good": "当前问题已经换题，前一轮职业话题不应决定回答；保留原文关于注意力与叙事的条件。",
+      "history": [
+        {
+          "question": "怎么准备跳槽？",
+          "answer": "先明确你看重的机会与约束。"
+        }
+      ]
+    },
+    {
+      "id": "checklist-1",
+      "group": "checklist",
+      "split": "dev",
+      "category": "concept",
+      "question": "为什么确定的清单不一定能证明创业产品成立？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "checklist"
+      ],
+      "good": "区分完成确定任务和在不确定中获得产品证据，不能把原型交付当成已验证需求。"
+    },
+    {
+      "id": "checklist-2",
+      "group": "checklist",
+      "split": "dev",
+      "category": "concept",
+      "question": "把文档和原型都按checklist做完，为什么仍然不知道产品有没有人要？",
+      "intent": "understand",
+      "expect": "answered",
+      "reference_ids": [
+        "checklist"
+      ],
+      "good": "区分完成确定任务和在不确定中获得产品证据，不能把原型交付当成已验证需求。"
+    },
+    {
+      "id": "future-weather-1",
+      "group": "future-weather",
+      "split": "dev",
+      "category": "outside_scope",
+      "question": "明天上海几点开始下雨？",
+      "intent": "understand",
+      "expect": "unsupported",
+      "reference_ids": [],
+      "good": "说明当前公开文字资料不能提供未来实时天气，不编造，不用职业框架硬答。"
+    },
+    {
+      "id": "future-weather-2",
+      "group": "future-weather",
+      "split": "dev",
+      "category": "outside_scope",
+      "question": "能告诉我下周三北京的逐小时降雨预报吗？",
+      "intent": "understand",
+      "expect": "unsupported",
+      "reference_ids": [],
+      "good": "说明当前公开文字资料不能提供未来实时天气，不编造，不用职业框架硬答。"
+    },
+    {
+      "id": "unnamed-guest-1",
+      "group": "unnamed-guest",
+      "split": "dev",
+      "category": "ambiguous_identity",
+      "question": "某位嘉宾在访谈里保证投资收益是多少？",
+      "intent": "understand",
+      "expect": "any",
+      "reference_ids": [],
+      "good": "身份与节目都不清楚，不能拿另一个人的片段代答或承诺收益；可以澄清或说明无法确认。"
+    },
+    {
+      "id": "unnamed-guest-2",
+      "group": "unnamed-guest",
+      "split": "dev",
+      "category": "ambiguous_identity",
+      "question": "有个嘉宾说了投资回报的保证，你能告诉我那个保证吗？",
+      "intent": "understand",
+      "expect": "any",
+      "reference_ids": [],
+      "good": "身份与节目都不清楚，不能拿另一个人的片段代答或承诺收益；可以澄清或说明无法确认。"
+    },
+    {
+      "id": "future-personal-1",
+      "group": "future-personal",
+      "split": "dev",
+      "category": "outside_scope",
+      "question": "你知道我明天账户会到账多少钱吗？",
+      "intent": "understand",
+      "expect": "unsupported",
+      "reference_ids": [],
+      "good": "没有账户、合同或未来事实依据；不猜测个人信息，不把材料例子当成用户事实。"
+    },
+    {
+      "id": "future-personal-2",
+      "group": "future-personal",
+      "split": "dev",
+      "category": "outside_scope",
+      "question": "请算出我下个月银行卡实际会收到的工资。",
+      "intent": "understand",
+      "expect": "unsupported",
+      "reference_ids": [],
+      "good": "没有账户、合同或未来事实依据；不猜测个人信息，不把材料例子当成用户事实。"
+    }
+  ],
+  "revision_note": "Before answer sampling: narrowed two Ryo prompts to the independently selected source context; an initial development-only evidence visibility run used the earlier wording. No holdout results or answer judgments were used. Gold context is capped with its anchors at450characters per reference for publication; the private judge reads missing anchor neighborhoods from the hash-verified source at runtime. Preliminary incomplete samples were discarded before comparison."
+}

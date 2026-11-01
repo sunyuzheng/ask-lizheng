@@ -367,9 +367,9 @@ def test_provider_answer_is_source_validated(context_pack, monkeypatch):
         assert body["reasoning_effort"] == "medium"
         assert "先确定 status，再写 sections" in body["messages"][0]["content"]
         prompt = json.loads(body["messages"][1]["content"])
-        assert prompt["sources"][0]["attribution_note"]
+        assert prompt["sources"][0]["attribution"]["basis"]
         assert prompt["sources"][0]["excerpt"]
-        assert "evidence_role" in prompt["sources"][0]
+        assert "notes" in prompt["sources"][0]["attribution"]
         assert "discovery_only" in prompt["sources"][0]
         assert not {"url", "public_copy_url", "source_path", "docindex", "reason"}.intersection(prompt["sources"][0])
         return httpx.Response(200, json={"choices": [{"message": {"content": answer_for().model_dump_json()}, "finish_reason": "stop"}]})
@@ -504,45 +504,19 @@ def test_numbers_written_as_names_are_found(index):
     assert numbers_as_names([("先看能力证据[S1]", False)]) == ["先看能力证据[S1]"]
 
 
-def test_a_number_written_as_a_name_gets_one_rewrite(context_pack, monkeypatch):
+def test_source_label_wording_is_rendered_without_another_model_call(context_pack, monkeypatch):
     monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
     attempts = []
     def provider(request):
-        body = json.loads(request.content)
-        attempts.append(body)
-        if len(attempts) == 1:
-            answer = ModelAnswer.model_validate({**answer_for(body="S1 说得更直接：作品是能力的证据。").model_dump(),
-                                                 "source_reasons": [{"source_id": "S1", "reason": "可与S2相互印证。"}]})
-        else:
-            assert "当成名字" in body["messages"][-1]["content"] and "「S1 说得更直接：作品是能力的证据。」" in body["messages"][-1]["content"]
-            answer = answer_for(body="作品是能力的证据[S1]。")
-        return httpx.Response(200, json={"choices": [{"message": {"content": answer.model_dump_json()}, "finish_reason": "stop"}]})
-    with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
-        result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
-    assert result["status"] == "answered" and result["sections"][0]["body"] == "作品是能力的证据[S1]。"
-    assert len(attempts) == 2
-
-
-@pytest.mark.parametrize("failure", ["invalid-json", "unknown-source", "timeout", "busy"])
-def test_a_failed_rewrite_keeps_the_first_answer(context_pack, monkeypatch, failure):
-    monkeypatch.setenv("AI_BUILDER_TOKEN", "synthetic-placeholder-token")
-    attempts = []
-    def provider(request):
-        attempts.append(True)
-        if len(attempts) == 1:
-            content = answer_for(body="S1 说得更直接：作品是能力的证据。").model_dump_json()
-        elif failure == "timeout":
-            raise httpx.ReadTimeout("Synthetic timeout")
-        elif failure == "busy":
-            return httpx.Response(429)
-        else:
-            content = "{" if failure == "invalid-json" else answer_for("S900").model_dump_json()
+        attempts.append(json.loads(request.content))
+        content = answer_for(body="S1 说得更直接：作品是能力的证据。").model_dump_json()
         return httpx.Response(200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}]})
     with TestClient(create_app(context_pack, httpx.MockTransport(provider))) as client:
         result = events(client.post("/api/ask", json={"question": "职业选择怎么做"}))[-1][1]
     title = next(source["title"] for source in result["sources"] if source["id"] == "S1")
-    assert result["status"] == "answered" and result["sections"][0]["body"] == f"《{title}》[S1]说得更直接：作品是能力的证据。"
-    assert len(attempts) == 2
+    assert result["status"] == "answered"
+    assert result["sections"][0]["body"] == f"《{title}》[S1]说得更直接：作品是能力的证据。"
+    assert len(attempts) == 1
 
 
 def test_a_second_slip_reads_as_titles(index):
