@@ -7,6 +7,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -21,6 +22,69 @@ from scripts import evidence_eval as evidence
 
 URL = "https://space.ai-builders.com/backend/v1/chat/completions"
 JUDGE_MODEL = "gpt-5"
+
+
+def judge_evidence(run: dict, saved_input: dict) -> tuple[dict, dict]:
+    """Put actual excerpts in the public answer's ID space, with no added body text."""
+    public = run["answer"]
+    public_sources = public.get("sources", [])
+    public_ids = [source["id"] for source in public_sources]
+    if len(set(public_ids)) != len(public_ids):
+        raise ValueError("Public answer has duplicate source IDs")
+    marks = re.findall(r"\[(S\d+)\]", json.dumps({key: value for key, value in public.items() if key != "sources"}, ensure_ascii=False))
+    marks += [source_id for section in public.get("sections", []) for source_id in section.get("source_ids", [])]
+    if set(marks) - set(public_ids):
+        raise ValueError("Public answer cites a source absent from its public sources")
+    route = saved_input["route"]
+    if "validated_model_answer" not in run:
+        if route == "generate":
+            raise ValueError("Generated answer is missing its validated model answer")
+        # Deterministic navigation/clarification has no answering-model input.
+        # Its public source snapshots are the evidence actually displayed.
+        return {"answer": copy.deepcopy(public), "actual_model_input": {
+                    "route": route, "sources": copy.deepcopy(public_sources)},
+                "evidence_state": run["evidence_state"]}, {
+                    "basis": "public_result_sources", "public_to_retrieval": {}, "unreferenced_to_retrieval": {}}
+
+    actual = saved_input["sources"]
+    actual_ids = [source["id"] for source in actual]
+    if len(set(actual_ids)) != len(actual_ids):
+        raise ValueError("Actual model input has duplicate source IDs")
+    by_id = {source["id"]: source for source in actual}
+    snapshots = saved_input["source_snapshots"]
+    snapshot_ids = [source.get("id") for source in snapshots]
+    if len(set(snapshot_ids)) != len(snapshot_ids) or set(actual_ids) != set(snapshot_ids):
+        raise ValueError("Saved source snapshots do not match the actual input source IDs")
+    snapshot_by_id = {source["id"]: source for source in snapshots}
+    for source_id, source in by_id.items():
+        snapshot = snapshot_by_id[source_id]
+        if any(source.get(key, "") != snapshot.get(key, "") for key in ("title", "author", "date", "excerpt")):
+            raise ValueError("Saved source snapshot differs from the actual model excerpt or metadata")
+    stable = ("title", "url", "date", "excerpt", "author", "source_type", "public_copy_url",
+              "data_layer", "speaker_id", "fragment_id", "source_snapshot_sha256")
+    public_to_retrieval = {}
+    for source in public_sources:
+        if any(key not in source for key in ("title", "url", "excerpt")):
+            raise ValueError("Public source lacks a traceable source identity")
+        matches = [snapshot["id"] for snapshot in snapshots
+                   if all(snapshot.get(key, "") == source.get(key, "")
+                          for key in stable if key in source)]
+        if len(matches) != 1 or matches[0] in public_to_retrieval.values():
+            raise ValueError("Public source identity is missing or ambiguous in the saved model input")
+        public_to_retrieval[source["id"]] = matches[0]
+    retrieval_to_public = {original: public_id for public_id, original in public_to_retrieval.items()}
+    aligned, unused = [], {}
+    for source in actual:
+        original = source["id"]
+        label = retrieval_to_public.get(original)
+        if label is None:
+            label = "U" + str(len(unused) + 1)
+            unused[label] = original
+        aligned.append({**copy.deepcopy(source), "id": label})
+    return {"answer": copy.deepcopy(public), "actual_model_input": {"route": route, "sources": aligned},
+            "evidence_state": run["evidence_state"]}, {
+                "basis": "exact_saved_source_snapshot_identity", "public_to_retrieval": public_to_retrieval,
+                "unreferenced_to_retrieval": unused}
 
 
 def require_private_output(path: Path) -> None:
@@ -180,6 +244,8 @@ def judge_prompt() -> str:
               "检索漏证据后诚实地说不足，可以没有编造，但不能因此把任务完成、相关性评为成功；分别报告这两件事。"
               "没有金标准且expect=unsupported的负例才标记为预期的库外问题；这也不是自动证明整个库不存在。"
               "指出归属或忠实度的严重错误时，引用具体错误句及与哪段证据冲突；没有则为空。"
+              "每个回答的证据ID已依据保存的来源身份映射到该回答的公开编号。S1/S2对应这份回答的同号证据；"
+              "U1/U2是模型实际收到但未作为公开来源列出的候选，也保留原始片段。不要按列表位置猜编号，更不能把U2当作S2。"
               "完整评价回答的摘要、正文、标题、限制、追问和澄清。不要输出思维过程。只输出JSON："
               '{"A":{"scores":{各合同ID:1到5},"problems":["具体问题"],'
               '"critical_errors":[{"criterion":"attribution或faithfulness","text":"具体错误句和证据"}],'
@@ -266,7 +332,8 @@ async def judge(args, token: str, client=None) -> dict:
               "candidate_report_sha256": evidence.digest(args.candidate.read_bytes()),
               "criteria": list(rubric()), "seed": args.seed, "pairs": [],
               "generation_summaries": {"baseline": baseline["summary"], "candidate": candidate["summary"]},
-              "method": "One blinded paired judge call per case/repeat; independent gold and actual model inputs. Group summaries keep paraphrases together; no aggregate pass score."}
+              "evidence_id_version": 2,
+              "method": "One blinded paired judge call per case/repeat; public answer IDs mechanically matched to original model excerpts using saved source identities. Unreferenced candidates retain independent U labels. No system prompts or additional body text. Group summaries keep paraphrases together; no aggregate pass score."}
     semaphore = asyncio.Semaphore(args.concurrency)
 
     async def one(key, provider):
@@ -279,17 +346,24 @@ async def judge(args, token: str, client=None) -> dict:
         if any("answer" not in value for value in values.values()):
             row["error"] = "generation_failed"
         else:
-            shown = {label: {"answer": values[side]["answer"], "actual_model_input": (baseline if side == "baseline" else candidate)["inputs"][case_id],
-                              "evidence_state": values[side]["evidence_state"]} for label, side in order.items()}
+            try:
+                views = {side: judge_evidence(values[side], (baseline if side == "baseline" else candidate)["inputs"][case_id])
+                         for side in values}
+            except (ValueError, KeyError, TypeError) as exc:
+                row["error"] = "evidence_mapping_" + type(exc).__name__
+                row["mapping_error"] = str(exc)
+                report["pairs"].append(row)
+                report["pairs"].sort(key=lambda item: (item["id"], item["repeat"]))
+                report["summary"] = judge_summary(report["pairs"], report["criteria"])
+                evidence.private_write(args.output, report)
+                return
+            shown = {label: views[side][0] for label, side in order.items()}
+            row["source_mapping"] = {side: views[side][1] for side in values}
             content = {"question": case["question"], "context": case.get("context", ""), "history": case.get("history", []),
                        "intent": case["intent"], "expect": case["expect"], "good": case["good"],
                        "independent_gold": gold_evidence(fixture, case, ROOT / "data/context"), "answers": shown}
-            # Do not expose system prompts, file paths, implementation names or baseline/candidate labels.
-            # Full messages remain in the private generation report for reproducibility;
-            # the judge needs the actual evidence, not a clue to the prompt version.
-            for value in shown.values():
-                value["actual_model_input"] = {key: value["actual_model_input"][key]
-                                                for key in ("sources", "route")}
+            # judge_evidence only emits the original excerpts with corrected labels;
+            # full messages and mapping audit remain private and out of the blind input.
             payload = {"model": JUDGE_MODEL, "reasoning_effort": "low", "response_format": {"type": "json_object"},
                        "messages": [{"role": "system", "content": judge_prompt()},
                                     {"role": "user", "content": json.dumps(content, ensure_ascii=False)}]}

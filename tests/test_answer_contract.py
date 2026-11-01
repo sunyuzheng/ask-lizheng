@@ -51,6 +51,7 @@ def test_legacy_judge_uses_same_outcomes_and_catalog_names():
 
 def test_all_models_share_semantic_policy_and_actual_evidence():
     p = sample_passage()
+    p.source["source_type"] = "community-post"
     for model in ("gpt-5", "deepseek-v4-flash", "deepseek-v4-pro", "grok-4.5"):
         payload = answers.answer_payload(model, {"question": "合成问题"}, [p])
         assert payload["messages"][0]["content"].startswith(contract.system_prompt())
@@ -62,11 +63,13 @@ def test_all_models_share_semantic_policy_and_actual_evidence():
 
 def test_compact_annotations_do_not_replace_full_provenance():
     p = sample_passage()
+    p.source["source_type"] = "community-post"
     p.evidence["section"] = "Synthetic Alpha在本期的陈述"
     value = contract.model_evidence(p)
     assert "归属已核对" in " ".join(value["attribution"]["notes"])
     assert "句间可能隔着其他发言" in " ".join(value["attribution"]["notes"])
     assert "Synthetic Alpha" in value["attribution"]["basis"]
+    assert value["source_type"] == "community-post"
     assert "source_snapshot_sha256" not in value
     assert p.evidence["source_snapshot_sha256"] == "a" * 64
     assert value["excerpt"] == p.evidence["excerpt"]
