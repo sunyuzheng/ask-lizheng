@@ -1,41 +1,21 @@
 #!/usr/bin/env python3
-"""Real-model answer quality, measured locally on the committed context.
+"""Historical deterministic checks; the legacy paid runner is retired.
 
-Every question in tests/fixtures/answer-eval.json goes through the service's own /api/ask route
-in a local app instance (no quota, no records, no analytics, nothing published). Each answer is
-then checked two ways:
-
-- deterministic: the status matches what the case expects; words presented as someone's original
-  words (「」 or “” after 原话、说过 and the like) appear in the excerpts the answer cites; a sentence that gives 立正 a view cites at least one source
-  attributed to him; a case that needs his own sources has at least one.
-- judged: a different model scores relevance, attribution, faithfulness to the sources, time
-  awareness, stated limits and readability from 1 to 5, against what the case says a good answer
-  contains, and names concrete problems.
-
-Writes docs/evaluation-status.json. Needs AI_BUILDER_TOKEN and makes real model calls (about two
-dozen answers and as many judgements). Run: python scripts/answer_eval.py [--cases id ...]
+Use scripts/answer_benchmark.py and docs/EXPERIMENTS.md for bounded experiments.
+Existing published evaluation-status.json remains a historical result.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 import re
 import sys
-import time
 import unicodedata
-from datetime import datetime, timezone
 from pathlib import Path
-
-import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 FIXTURE = ROOT / "tests/fixtures/answer-eval.json"
-OUTPUT = ROOT / "docs/evaluation-status.json"
-JUDGE_MODEL = "gpt-5"
-URL = "https://space.ai-builders.com/backend/v1/chat/completions"
 OWN_ORIGINS = {"yuzheng-published-text", "yuzheng-spoken-source"}
 QUOTE = re.compile(r"「([^」]{6,})」|“([^”]{6,})”")
 ORIGINAL_WORDS = re.compile(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|一句话")
@@ -123,84 +103,17 @@ def deterministic(case: dict, result: dict) -> dict:
     return checks
 
 
-def judge(client: httpx.Client, token: str, case: dict, result: dict) -> dict:
-    parts = [f"[摘要] {result.get('summary', '')}"]
-    for section in result.get("sections", []):
-        parts.append(f"[{section.get('heading', '')}] {section.get('body', '')} 出处：{','.join(section.get('source_ids', []))}")
-    if result.get("limitations"):
-        parts.append(f"[局限] {result['limitations']}")
-    sources = [f"{s['id']}｜{s.get('title', '')}｜说话人或作者：{s.get('speaker_name') or s.get('author') or s.get('speaker_id', '')}"
-               f"｜{s.get('date') or s.get('published_at', '')}｜{s.get('excerpt', '')}" for s in result.get("sources", [])]
-    content = (f"问题：{case['question']}\n读者补充的处境：{case.get('context', '无')}\n好回答应包含：{case['good']}\n"
-               f"回答状态：{result.get('status')}\n\n回答：\n" + "\n".join(parts) + "\n\n出处：\n" + "\n".join(sources))
-    payload = {"model": JUDGE_MODEL, "reasoning_effort": "low", "response_format": {"type": "json_object"},
-               "messages": [{"role": "system", "content": JUDGE_PROMPT}, {"role": "user", "content": content}]}
-    for attempt in range(3):
-        try:
-            response = client.post(URL, json=payload, headers={"Authorization": "Bearer " + token}, timeout=180)
-            response.raise_for_status()
-            value = json.loads(response.json()["choices"][0]["message"]["content"])
-            if set(CRITERIA) <= set(value.get("scores", {})):
-                return value
-        except Exception as error:  # retried, then recorded as missing
-            last = str(error)
-        time.sleep(2 + attempt * 3)
-    return {"error": last if "last" in locals() else "invalid judgement"}
+def judge(*args, **kwargs):
+    raise RuntimeError("Legacy paid judging is retired; use the guarded answer_benchmark.py")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Historical diagnostics only; no paid requests.")
     parser.add_argument("--cases", nargs="*")
-    args = parser.parse_args()
-    token = os.environ.get("AI_BUILDER_TOKEN")
-    if not token:
-        raise SystemExit("AI_BUILDER_TOKEN is not set")
-    for name in ("ASK_OPS_ENABLED", "UPSTASH_REDIS_REST_URL", "KV_REST_API_URL"):
-        os.environ.pop(name, None)
-    from fastapi.testclient import TestClient
-    from server.answers import DEFAULT_MODEL
-    from server.app import create_app
+    args = parser.parse_args(argv)
     cases = [c for c in json.loads(FIXTURE.read_text())["cases"] if not args.cases or c["id"] in args.cases]
-    rows = []
-    app = create_app(context_root=ROOT / "data/context")
-    with TestClient(app) as client, httpx.Client() as judge_client:
-        meta = client.get("/api/meta").json()
-        for case in cases:
-            payload = {"question": case["question"], "intent": case["intent"], "context": case.get("context", ""), "history": []}
-            started = time.monotonic()
-            with client.stream("POST", "/api/ask", json=payload) as response:
-                result, stages = sse_result(response) if response.status_code == 200 else (None, [])
-            seconds = round(time.monotonic() - started, 1)
-            if result is None:
-                rows.append({"id": case["id"], "error": f"no result (HTTP {response.status_code})", "seconds": seconds})
-                print(case["id"], "no result", flush=True)
-                continue
-            checks = deterministic(case, result)
-            verdict = judge(judge_client, token, case, result) if result.get("status") != "clarify" else {"skipped": "clarify"}
-            rows.append({"id": case["id"], "intent": case["intent"], "question": case["question"], "seconds": seconds,
-                         "checks": checks, "judge": verdict, "summary": result.get("summary", "")[:200]})
-            print(case["id"], result.get("status"), seconds, verdict.get("verdict"), verdict.get("scores"), flush=True)
-            time.sleep(6)  # stay under the local per-minute limit
-    judged = [r for r in rows if isinstance(r.get("judge", {}).get("scores"), dict)]
-    averages = {c: round(sum(r["judge"]["scores"][c] for r in judged) / len(judged), 2) for c in CRITERIA} if judged else {}
-    summary = {
-        "cases": len(rows), "judged": len(judged), "average_scores": averages,
-        "verdicts": {v: sum(1 for r in judged if r["judge"].get("verdict") == v) for v in ("good", "acceptable", "poor")},
-        "status_mismatches": [r["id"] for r in rows if not r.get("checks", {}).get("status_ok", False)],
-        "unverified_quotes": sum(len(r.get("checks", {}).get("unverified_quotes", [])) for r in rows),
-        "quotes": sum(r.get("checks", {}).get("quotes", 0) for r in rows),
-        "views_without_own_source": sum(len(r.get("checks", {}).get("views_without_own_source", [])) for r in rows),
-        "missing_own_sources": [r["id"] for r in rows if r.get("checks", {}).get("own_ok") is False],
-        "median_seconds": sorted(r["seconds"] for r in rows)[len(rows) // 2] if rows else None,
-    }
-    OUTPUT.write_text(json.dumps({
-        "schema_version": 2, "measured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "answer_model": os.getenv("AI_MODEL", DEFAULT_MODEL), "judge_model": JUDGE_MODEL,
-        "context_commit": meta.get("context_commit", ""), "context_release": meta.get("context_release", ""),
-        "fixture_sha256": hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),
-        "method": "Legacy local regression through /api/ask, judged only against retrieved excerpts. Does not measure missed corpus evidence or full task completion; use answer_benchmark.py for independent paired evaluation.",
-        "summary": summary, "cases": rows}, ensure_ascii=False, indent=1) + "\n")
-    print(json.dumps(summary, ensure_ascii=False, indent=1))
+    print(json.dumps({"mode": "retired-paid-entrypoint", "cases": len(cases), "network_requests": 0,
+                      "replacement": "scripts/answer_benchmark.py (offline preview by default; see docs/EXPERIMENTS.md)"}))
 
 
 if __name__ == "__main__":

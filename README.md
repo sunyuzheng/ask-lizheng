@@ -55,7 +55,7 @@ Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/com
 
 ## 验证
 
-回答结果、资料边界和规则的职责见[回答合同](docs/ANSWERING_CONTRACT.md)；本轮独立评测、消融和发布验收见[规则验证记录](docs/RULES_VERIFICATION.md)。卡片命中是结构回归，不代表回答质量。
+回答结果、资料边界和规则的职责见[回答合同](docs/ANSWERING_CONTRACT.md)；本轮独立评测、消融和发布验收见[规则验证记录](docs/RULES_VERIFICATION.md)。卡片命中是结构回归，不代表回答质量。按改动选择相关验证；付费实验的判断、复用、累计上限与停止方式见[开发验证与付费实验](docs/EXPERIMENTS.md)。
 
 ```sh
 .venv/bin/pip install pytest 'fakeredis[lua]'
@@ -63,8 +63,8 @@ Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/com
 npm run build
 # 镜像在256MB里能启动、服务进程最高内存不超过200MB（CI 和资料自动更新都跑）：
 docker build -t ask-lizheng . && python scripts/check_image_memory.py ask-lizheng
-# 设置模型 token 后，使用合成问题进行真实模型核验：
-.venv/bin/python -m server.live_eval
+# 回答评测先预览，不联网；真实执行另需私有实验计划：
+.venv/bin/python scripts/answer_benchmark.py generate --split dev --output .local/answers.json
 ```
 
 产品设计、Context 架构与验收记录见 `docs/PRODUCT.md`、`docs/CONTEXT_ARCHITECTURE.md` 和 `docs/VERIFICATION.md`；本仓库、个人站和私人后台怎样配合见 `docs/ARCHITECTURE.md`。版权见 [`LICENSE.md`](LICENSE.md)：程序和文档是 MIT；`data/context` 里的资料沿用 Open Context 的许可，不随 MIT 授权。

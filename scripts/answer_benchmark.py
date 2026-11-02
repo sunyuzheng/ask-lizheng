@@ -19,6 +19,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts import evidence_eval as evidence
+from scripts import experiment_guard as experiments
 
 URL = "https://space.ai-builders.com/backend/v1/chat/completions"
 JUDGE_MODEL = "gpt-5"
@@ -92,6 +93,43 @@ def require_private_output(path: Path) -> None:
         raise ValueError("Full benchmark answers and excerpts must stay under this repository's .local directory")
 
 
+def prior_report(args):
+    """Keep evidence immutable: resume into a new report, never clobber a paid run."""
+    if args.output.exists():
+        raise ValueError("Output already exists; preserve it and use a new --output with --reuse-report")
+    path = getattr(args, "reuse_report", None)
+    if path is None:
+        return None, None
+    require_private_output(path)
+    raw = path.read_bytes()
+    return json.loads(raw), evidence.digest(raw)
+
+
+def reuse_generation(impl, cached, current_input, passages, origin_sha, model):
+    row = copy.deepcopy(cached)
+    selected = passages
+    if cached.get("actual_input"):
+        ids = {s["id"] for s in cached["actual_input"]["sources"]}
+        selected = [p for p in passages if p.source["id"] in ids]
+        if {p.source["id"] for p in selected} != ids:
+            raise ValueError("Cached selection no longer exists in the current candidates")
+        messages = impl.answers.answer_payload(model, current_input["request"], selected)["messages"] if selected else []
+        if messages != cached["actual_input"]["model_messages"]:
+            raise ValueError("Cached answering input changed; a version number alone cannot establish reuse")
+        row["actual_input"] = {**current_input, "route": "generate" if selected else "selection-empty",
+            "model_messages": messages, "sources": [impl.answers.model_evidence(p) for p in selected],
+            "source_snapshots": [p.evidence for p in selected], "public_source_snapshots": [p.source for p in selected]}
+    if "validated_model_answer" in cached:
+        answer = impl.answers.ModelAnswer.model_validate(cached["validated_model_answer"])
+        impl.answers.normalize_source_bindings(answer, selected)
+        impl.answers.validate_answer(answer, selected)
+        row["answer"] = impl.answers.assemble_answer(answer, selected)
+    elif current_input["route"] == "generate" and selected:
+        raise ValueError("Cached model answer lacks validated source bindings")
+    row.update(reused=True, reused_from_sha256=origin_sha)
+    return row
+
+
 def answer_state(case: dict, metrics: dict, result: dict) -> str:
     """Keep retrieval failure separate from a negative case's expected absence."""
     if case["reference_ids"]:
@@ -109,11 +147,13 @@ def generation_summary(runs: list[dict]) -> dict:
     variation = {}
     for case_id, rows in by_case.items():
         lengths = [len(json.dumps(row["answer"], ensure_ascii=False)) for row in rows]
+        measured = [row["seconds"] for row in rows if not row.get("reused")]
         variation[case_id] = {"runs": len(rows), "statuses": dict(Counter(row["answer"]["status"] for row in rows)),
                               "characters_mean": statistics.mean(lengths),
                               "characters_stdev": statistics.pstdev(lengths),
-                              "generation_seconds_mean": statistics.mean(row["seconds"] for row in rows)}
-    return {"runs": len(runs), "completed": len(successful),
+                              "generation_seconds_mean": statistics.mean(row["seconds"] for row in rows),
+                              "new_measurements": len(measured), "new_generation_seconds_mean": statistics.mean(measured) if measured else None}
+    return {"runs": len(runs), "completed": len(successful), "reused_runs": sum(bool(r.get("reused")) for r in runs),
             "provider_or_validation_failures": [{"id": row["id"], "repeat": row["repeat"], "error": row["error"]}
                                                  for row in runs if "error" in row],
             "status_mismatches": [{"id": row["id"], "repeat": row["repeat"], "status": row["answer"]["status"]}
@@ -123,13 +163,15 @@ def generation_summary(runs: list[dict]) -> dict:
 
 async def generate(args, token: str, client=None) -> dict:
     require_private_output(args.output)
-    if not token:
-        raise ValueError("Generation requires AI_BUILDER_TOKEN in the process environment")
     if not 1 <= args.repeats <= 10 or not 1 <= args.concurrency <= 8:
         raise ValueError("Use 1-10 repeats and 1-8 concurrent calls")
     impl = evidence.implementation(args.implementation)
     fixture = evidence.load_fixture(args.fixture, impl.root / "data/context")
     cases = evidence.select_cases(fixture, args.split, args.cases)
+    if client is not None:
+        experiments.require_guarded(client)
+    experiment = (experiments.execution(args, [c["id"] for c in cases], args.repeats)
+                  if client is None and not getattr(args, "reuse_only", False) else None)
     index = impl.retrieval.ContextIndex(impl.root / "data/context", require_lock=True)
     index.load()
     if fixture.get("context_commit") != index.source_revision:
@@ -161,20 +203,50 @@ async def generate(args, token: str, client=None) -> dict:
               **vector_meta, "answer_model": model, "backup_model": backup, "repeats": args.repeats,
               "concurrency": args.concurrency, "inputs": inputs, "runs": [],
               "method": "Direct local production retrieval/generation functions; no public API, quota, archive, or raw provider reasoning. Cached retrieval is reused for repeated answer sampling."}
+    previous, previous_sha = prior_report(args)
+    if previous and not getattr(args, "fresh", False) and any(previous.get(k) != report[k] for k in (
+            "implementation_sha256", "answer_model", "backup_model")):
+        raise ValueError("Cached implementation/model changed; narrow the experiment and explicitly justify --fresh")
+    previous_rows = {(r["id"], r["repeat"]): r for r in previous.get("runs", [])} if previous else {}
     semaphore = asyncio.Semaphore(args.concurrency)
+    stopped = asyncio.Event()
 
     async def one(case, repeat, provider):
         async with semaphore:
             case_id, started = case["id"], time.monotonic()
             value = prepared[case_id]
             row = {"id": case_id, "group": case["group"], "split": case["split"], "category": case["category"], "repeat": repeat}
+            cached = previous_rows.get((case_id, repeat))
             try:
-                if value["route"] == "generate":
+                if (cached and not getattr(args, "fresh", False) and value["route"] == "generate"
+                        and previous.get("inputs", {}).get(case_id, {}).get("model_messages") != inputs[case_id]["model_messages"]):
+                    raise experiments.ExperimentStop("Cached generation input changed; assess the new signal before explicitly requesting --fresh")
+                reusable = (cached and value["route"] == "generate" and previous.get("implementation_sha256") == report["implementation_sha256"]
+                            and all(previous.get(k) == report[k] for k in ("answer_model", "backup_model"))
+                            and previous.get("inputs", {}).get(case_id, {}).get("model_messages") == inputs[case_id]["model_messages"]
+                            and not getattr(args, "fresh", False))
+                if reusable and "answer" in cached:
+                    row = reuse_generation(impl, cached, inputs[case_id], value["passages"], previous_sha, model)
+                    row.update(group=case["group"], split=case["split"], category=case["category"],
+                               status_ok=case["expect"] in {"any", row["answer"]["status"]})
+                elif reusable and "error" in cached and not getattr(args, "retry_errors", False):
+                    row = {**copy.deepcopy(cached), "reused": True, "reused_from_sha256": previous_sha}
+                elif stopped.is_set():
+                    row.update(error="experiment_stopped", skipped=True)
+                elif value["route"] == "generate":
                     passages = value["passages"]
                     kwargs = {}
                     if impl.selection is not None:
                         deadline = time.monotonic() + impl.answers.ANSWER_BUDGET_SECONDS
-                        passages = await impl.selection.select_evidence(provider, token, model, inputs[case_id]["request"], passages)
+                        if reusable and cached.get("actual_input") and getattr(args, "retry_errors", False):
+                            wanted = {s["id"] for s in cached["actual_input"]["sources"]}
+                            passages = [p for p in passages if p.source["id"] in wanted]
+                            messages = impl.answers.answer_payload(model, inputs[case_id]["request"], passages)["messages"] if passages else []
+                            if messages != cached["actual_input"]["model_messages"]:
+                                raise ValueError("Cached selection input changed")
+                            row["selection_reused"] = True
+                        else:
+                            passages = await impl.selection.select_evidence(provider, token, model, inputs[case_id]["request"], passages)
                         kwargs["deadline"] = deadline
                         row["selection_seconds"] = round(time.monotonic() - started, 3)
                         row["actual_input"] = {**inputs[case_id], "route": "generate" if passages else "selection-empty",
@@ -191,14 +263,27 @@ async def generate(args, token: str, client=None) -> dict:
                     row["evidence_state"] = answer_state(case, evidence.evidence_metrics(impl, index, case, fixture["refs"], selected_value), result)
                 else:
                     result = copy.deepcopy(value["result"])
-                row.update(answer=result, status_ok=case["expect"] in {"any", result["status"]})
-                row.setdefault("evidence_state", answer_state(case, metrics[case_id], result))
+                if "answer" not in row and "error" not in row:
+                    row.update(answer=result, status_ok=case["expect"] in {"any", result["status"]})
+                    row.setdefault("evidence_state", answer_state(case, metrics[case_id], result))
+                if row.get("reused") and "answer" in row:
+                    wanted = {s["id"] for s in row.get("actual_input", inputs[case_id])["sources"]}
+                    selected = [p for p in value["passages"] if p.source["id"] in wanted]
+                    row["evidence_state"] = answer_state(case, evidence.evidence_metrics(
+                        impl, index, case, fixture["refs"], {**value, "passages": selected}), row["answer"])
+            except experiments.ExperimentStop as exc:
+                row.update(error="experiment_stopped", skipped=True)
+                report["stopped"] = str(exc)
+                stopped.set()
+                if experiment is not None:
+                    experiment.stop(str(exc))
             except impl.answers.ProviderFailure as exc:
                 row["error"] = exc.code
             except Exception as exc:
                 # Exception strings can contain HTTP URLs, headers, or provider responses.
                 row["error"] = "internal_" + type(exc).__name__
-            row["seconds"] = round(time.monotonic() - started, 3)
+            if not row.get("reused"):
+                row["seconds"] = round(time.monotonic() - started, 3)
             report["runs"].append(row)
             report["runs"].sort(key=lambda item: (item["id"], item["repeat"]))
             report["summary"] = generation_summary(report["runs"])
@@ -209,11 +294,13 @@ async def generate(args, token: str, client=None) -> dict:
         await asyncio.gather(*(one(case, repeat, provider) for repeat in range(args.repeats) for case in cases))
 
     if client is None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180, connect=10)) as provider:
+        async with experiments.paid_client(experiment, token, "generate") as provider:
             await run(provider)
     else:
         await run(client)
     report["summary"] = generation_summary(report["runs"])
+    if experiment is not None:
+        report["experiment"] = experiment.receipt()
     evidence.private_write(args.output, report)
     return report
 
@@ -330,8 +417,6 @@ def judge_summary(rows: list[dict], criteria: list[str]) -> dict:
 
 async def judge(args, token: str, client=None) -> dict:
     require_private_output(args.output)
-    if not token:
-        raise ValueError("Judging requires AI_BUILDER_TOKEN in the process environment")
     if not 1 <= args.concurrency <= 8:
         raise ValueError("Use 1-8 concurrent judge calls")
     baseline, candidate = json.loads(args.baseline.read_text()), json.loads(args.candidate.read_text())
@@ -342,10 +427,17 @@ async def judge(args, token: str, client=None) -> dict:
         raise ValueError("Judge fixture changed after generation")
     fixture = evidence.load_fixture(args.fixture, ROOT / "data/context")
     cases = {case["id"]: case for case in evidence.select_cases(fixture, args.split, args.cases)}
+    if client is not None:
+        experiments.require_guarded(client)
     b_runs = {(row["id"], row["repeat"]): row for row in baseline["runs"]}
     c_runs = {(row["id"], row["repeat"]): row for row in candidate["runs"]}
     if set(b_runs) != set(c_runs):
         raise ValueError("Answer reports do not have identical paired runs")
+    repeats = max(Counter(key[0] for key in b_runs if key[0] in cases).values(), default=1)
+    experiment = (experiments.execution(args, list(cases), repeats)
+                  if client is None and not getattr(args, "reuse_only", False) else None)
+    previous, previous_sha = prior_report(args)
+    previous_rows = {(r["id"], r["repeat"]): r for r in previous.get("pairs", [])} if previous else {}
     report = {"schema_version": 1, "kind": "paired-answer-judgment", "judge_model": JUDGE_MODEL,
               "fixture_sha256": baseline["fixture_sha256"], "context_commit": baseline["context_commit"],
               "baseline_report_sha256": evidence.digest(args.baseline.read_bytes()),
@@ -355,6 +447,7 @@ async def judge(args, token: str, client=None) -> dict:
               "evidence_id_version": 2,
               "method": "One blinded paired judge call per case/repeat; public answer IDs mechanically matched to original model excerpts using saved source identities. Unreferenced candidates retain independent U labels. No system prompts or additional body text. Group summaries keep paraphrases together; no aggregate pass score."}
     semaphore = asyncio.Semaphore(args.concurrency)
+    stopped = asyncio.Event()
 
     async def one(key, provider):
         case_id, repeat = key
@@ -385,15 +478,37 @@ async def judge(args, token: str, client=None) -> dict:
             # judge_evidence only emits the original excerpts with corrected labels;
             # full messages and mapping audit remain private and out of the blind input.
             payload = {"model": JUDGE_MODEL, "reasoning_effort": "low", "response_format": {"type": "json_object"},
+                       "max_tokens": 4000,
                        "messages": [{"role": "system", "content": judge_prompt()},
                                     {"role": "user", "content": json.dumps(content, ensure_ascii=False)}]}
             async with semaphore:
                 try:
-                    response = await provider.post(URL, json=payload, headers={"Authorization": "Bearer " + token}, timeout=180, follow_redirects=False)
-                    response.raise_for_status()
-                    value = validate_judgment(json.loads(response.json()["choices"][0]["message"]["content"]))
-                    row["judgment"] = {side: value[label] for label, side in order.items()}
-                    row["judgment"].update(preference=order.get(value["preference"], "tie"), reason=value["reason"])
+                    row["request_sha256"] = experiments.digest(payload)
+                    cached = previous_rows.get(key)
+                    if cached and cached.get("order") == order and cached.get("request_sha256") == row["request_sha256"] and not getattr(args, "fresh", False) and (
+                            "judgment" in cached or not getattr(args, "retry_errors", False)):
+                        if "judgment" in cached:
+                            saved = cached["judgment"]
+                            validate_judgment({**{label: saved[side] for label, side in order.items()},
+                                "preference": next((label for label, side in order.items() if side == saved["preference"]), "tie"),
+                                "reason": saved["reason"]})
+                        row = {**copy.deepcopy(cached), "reused": True, "reused_from_sha256": previous_sha}
+                    elif cached and not getattr(args, "fresh", False) and cached.get("request_sha256") != row["request_sha256"]:
+                        raise experiments.ExperimentStop("Judge input changed; calibrate a small sample before explicitly requesting --fresh")
+                    elif stopped.is_set():
+                        row.update(error="experiment_stopped", skipped=True)
+                    else:
+                        response = await provider.post(URL, json=payload, headers={"Authorization": "Bearer " + token}, timeout=180, follow_redirects=False)
+                        response.raise_for_status()
+                        value = validate_judgment(json.loads(response.json()["choices"][0]["message"]["content"]))
+                        row["judgment"] = {side: value[label] for label, side in order.items()}
+                        row["judgment"].update(preference=order.get(value["preference"], "tie"), reason=value["reason"])
+                except experiments.ExperimentStop as exc:
+                    row.update(error="experiment_stopped", skipped=True)
+                    report["stopped"] = str(exc)
+                    stopped.set()
+                    if experiment is not None:
+                        experiment.stop(str(exc))
                 except Exception as exc:
                     row["error"] = "judge_" + type(exc).__name__
         report["pairs"].append(row)
@@ -405,23 +520,25 @@ async def judge(args, token: str, client=None) -> dict:
         await asyncio.gather(*(one(key, provider) for key in sorted(b_runs)))
 
     if client is None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180, connect=10)) as provider:
+        async with experiments.paid_client(experiment, token, "judge") as provider:
             await run(provider)
     else:
         await run(client)
     report["summary"] = judge_summary(report["pairs"], report["criteria"])
+    if experiment is not None:
+        report["experiment"] = experiment.receipt()
     evidence.private_write(args.output, report)
     return report
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="mode", required=True)
     generate_parser = commands.add_parser("generate")
     evidence.add_inputs(generate_parser)
     generate_parser.add_argument("--output", type=Path, required=True)
     generate_parser.add_argument("--model")
-    generate_parser.add_argument("--repeats", type=int, default=3)
+    generate_parser.add_argument("--repeats", type=int, default=1)
     generate_parser.add_argument("--concurrency", type=int, default=2)
     judge_parser = commands.add_parser("judge", aliases=["compare"])
     judge_parser.add_argument("--fixture", type=Path, default=evidence.DEFAULT_FIXTURE)
@@ -432,11 +549,21 @@ def main():
     judge_parser.add_argument("--split", choices=("dev", "holdout"))
     judge_parser.add_argument("--cases", nargs="+")
     judge_parser.add_argument("--concurrency", type=int, default=2)
-    args = parser.parse_args()
+    for command in (generate_parser, judge_parser):
+        experiments.add_paid_args(command, reuse=True)
+    args = parser.parse_args(argv)
     try:
-        token = os.getenv("AI_BUILDER_TOKEN", "")
+        fixture = evidence.load_fixture(args.fixture)
+        case_ids = [c["id"] for c in evidence.select_cases(fixture, args.split, args.cases)]
+        repeats = args.repeats if args.mode == "generate" else max(Counter(
+            r["id"] for r in json.loads(args.baseline.read_text())["runs"] if r["id"] in case_ids).values(), default=1)
+        if experiments.preview(args, case_ids, repeats):
+            return
+        token = os.getenv("AI_BUILDER_TOKEN", "") if args.execute else ""
         report = asyncio.run(generate(args, token) if args.mode == "generate" else judge(args, token))
         print(json.dumps(report["summary"], ensure_ascii=False))
+        if report.get("stopped"):
+            raise SystemExit("Experiment stopped; completed work was saved: " + report["stopped"])
     except (ValueError, OSError, KeyError) as exc:
         raise SystemExit(str(exc)) from None
 

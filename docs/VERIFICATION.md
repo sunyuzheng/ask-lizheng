@@ -105,7 +105,7 @@ Grok与Flash真实流式内容只在完整JSON段落通过现有来源编号、�
 
 ## 回答质量评估（2026-10-11）
 
-`scripts/answer_eval.py` 用 `tests/fixtures/answer-eval.json` 的24个问题，在本机实例上走完整问答流程（不扣额度、不存记录、不进统计），回答模型 deepseek-v4-flash，评审模型 gpt-5。资料版本 Open Context c626488（297期对谈已按声纹标出说话人）。结果在 `docs/evaluation-status.json`：
+历史实验中，`scripts/answer_eval.py` 用 `tests/fixtures/answer-eval.json` 的24个问题，在本机实例上走完整问答流程（不扣额度、不存记录、不进统计），回答模型 deepseek-v4-flash，评审模型 gpt-5。资料版本 Open Context c626488（297期对谈已按声纹标出说话人）。该旧付费入口现已停用；当前验证使用[开发验证与付费实验](EXPERIMENTS.md)中的有界入口。历史结果在 `docs/evaluation-status.json`：
 
 - 24题：好17、可以6、差1；平均分（1–5）相关4.92、归属4.71、忠实4.21、时间4.71、局限5.00、可读5.00；中位用时7.5秒。
 - 程序核对：状态与预期全部一致；没有“立正认为”而无本人出处的句子；没有标成原话却对不上出处的句子。

@@ -105,6 +105,14 @@ def test_paired_judge_sees_gold_and_actual_inputs_once_per_repeat(tmp_path, monk
     for row in report["pairs"]:
         assert row["judgment"][row["order"]["A"]]["critical_errors"]
     assert "private-test-token" not in output.read_text()
+    args.reuse_report, args.output, args.reuse_only = output, output.with_name("reused.json"), True
+    reused = asyncio.run(bench.judge(args, ""))
+    assert len(captured) == 2 and all(r.get("reused") for r in reused["pairs"])
+    old_prompt = bench.judge_prompt()
+    monkeypatch.setattr(bench, "judge_prompt", lambda: old_prompt + " Changed evaluation instruction.")
+    args.output = output.with_name("changed-judge.json")
+    changed = asyncio.run(bench.judge(args, ""))
+    assert changed["stopped"] and len(captured) == 2
 
 
 def reordered_generated_answer():
@@ -199,6 +207,24 @@ def test_complete_validated_repeats_use_direct_production_functions_with_fake_pr
     assert all(len(r["actual_input"]["sources"]) == 1 for r in report["runs"])
     assert report["inputs"]["q"]["sources"]
     assert "private-test-token" not in output.read_text() and output.stat().st_mode & 0o777 == 0o600
+    args.reuse_report, args.output, args.reuse_only = output, output.with_name("reused.json"), True
+    reused = asyncio.run(bench.generate(args, ""))
+    assert len(requests) == 4 and reused["summary"]["reused_runs"] == 2
+    assert reused["summary"]["case_variation"]["q"]["new_measurements"] == 0
+    with pytest.raises(ValueError, match="Output already exists"):
+        asyncio.run(bench.generate(args, ""))
+    # Resume one interrupted answer: preserve the successful row and paid selection.
+    interrupted = json.loads(output.read_text())
+    failed = interrupted["runs"][1]
+    for key in ("answer", "validated_model_answer", "status_ok", "evidence_state"):
+        failed.pop(key, None)
+    failed["error"] = "interrupted"
+    partial = output.with_name("interrupted.json")
+    evidence.private_write(partial, interrupted)
+    args.reuse_report, args.output, args.retry_errors = partial, output.with_name("resumed.json"), True
+    resumed = asyncio.run(run())
+    assert len(requests) == 5 and resumed["summary"]["completed"] == 2
+    assert resumed["runs"][0]["reused"] and resumed["runs"][1]["selection_reused"]
 
 
 def test_full_answers_cannot_accidentally_be_written_to_public_docs(tmp_path, monkeypatch):

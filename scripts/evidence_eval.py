@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline evidence-span evaluation; only --refresh-vectors permits network access."""
+"""Offline evidence-span evaluation; refreshing vectors needs explicit bounded execution."""
 from __future__ import annotations
 
 import argparse
@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from server.query_context import uses_previous_question
 from server.dialogue_evidence import ATTRIBUTED
+from scripts import experiment_guard as experiments
 
 DEFAULT_FIXTURE = ROOT / "tests/fixtures/evidence-benchmark.json"
 DEFAULT_CACHE = ROOT / ".local/rules-revision-20261101/query-vectors.json"
@@ -194,12 +195,13 @@ async def vectors(impl, cases: list[dict], path: Path, refresh: bool = False, cl
     if missing:
         if not token or client is None:
             raise ValueError("Refreshing vectors requires an explicit environment token")
+        experiments.require_guarded(client)
         for start in range(0, len(missing), semantic.MAX_BATCH):
             batch = missing[start:start + semantic.MAX_BATCH]
             values, _ = await semantic.request_embeddings(client, token, [query for _, query in batch], timeout=60)
             for (key, query), value in zip(batch, values):
                 cache["queries"][key] = {"query": query, "vector": encode(value)}
-        private_write(path, cache)
+            private_write(path, cache)
     result = {}
     for case in cases:
         query = semantic_query(case, semantic)
@@ -347,7 +349,8 @@ async def evaluate(args) -> dict:
     if not semantic.ready:
         raise ValueError("Pinned semantic index is not ready")
     if args.refresh_vectors:
-        async with httpx.AsyncClient() as client:
+        experiment = experiments.execution(args, [c["id"] for c in cases])
+        async with experiments.paid_client(experiment, os.getenv("AI_BUILDER_TOKEN", ""), "query-embeddings") as client:
             cached, vector_meta = await vectors(impl, cases, args.vectors_cache, True, client, os.getenv("AI_BUILDER_TOKEN", ""))
     else:
         cached, vector_meta = await vectors(impl, cases, args.vectors_cache)
@@ -366,18 +369,23 @@ async def evaluate(args) -> dict:
     return report
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     add_inputs(parser)
     parser.add_argument("--output", type=Path, default=ROOT / ".local/rules-revision-20261101/evidence.json")
     parser.add_argument("--compare", type=Path)
     parser.add_argument("--refresh-vectors", action="store_true")
-    args = parser.parse_args()
+    experiments.add_paid_args(parser)
+    args = parser.parse_args(argv)
     try:
+        if args.refresh_vectors:
+            cases = select_cases(load_fixture(args.fixture), args.split, args.cases)
+            if experiments.preview(args, [c["id"] for c in cases]):
+                return
         report = asyncio.run(evaluate(args))
         private_write(args.output, report)
         print(json.dumps(report["summary"], ensure_ascii=False))
-    except (ValueError, OSError, KeyError) as exc:
+    except (ValueError, OSError, KeyError, experiments.ExperimentStop) as exc:
         raise SystemExit(str(exc)) from None
 
 

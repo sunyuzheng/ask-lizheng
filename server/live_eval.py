@@ -1,22 +1,9 @@
-"""Synthetic smoke evaluation; prints only result quality and public citations.
-
-Run with an explicitly supplied AI_BUILDER_TOKEN environment variable. No
-credential, request payload, conversation, or provider response is saved.
-"""
+"""Retired paid smoke runner; use the bounded scripts/answer_benchmark.py entrypoint."""
 
 from __future__ import annotations
 
-import argparse
-import asyncio
 import json
-import os
-import time
 from pathlib import Path
-
-import httpx
-
-from .answers import ProviderFailure, assemble_answer, attribution_clarification, generate_answer, unsupported_result
-from .retrieval import ContextIndex
 
 
 CASES = [
@@ -36,48 +23,9 @@ CASES = [
 
 
 async def evaluate(root: Path, only: str = "") -> bool:
-    token = os.getenv("AI_BUILDER_TOKEN", "")
-    if not token:
-        raise SystemExit("Set AI_BUILDER_TOKEN in the process environment to run live evaluation.")
-    index = ContextIndex(root)
-    index.load()
-    semantic = index.semantic_index()
-    model = os.getenv("AI_MODEL", "gpt-5")
-    results = []
-    async with httpx.AsyncClient(timeout=httpx.Timeout(85, connect=10)) as client:
-        for name, question, intent, context in CASES:
-            if only and name != only:
-                continue
-            start = time.monotonic()
-            clarification = attribution_clarification(question, context)
-            candidates = await semantic.candidates(client, token, question + " " + context) if semantic.ready and not clarification else []
-            passages = index.retrieve(question, context, semantic_candidates=candidates, intent=intent) if not clarification else []
-            try:
-                if clarification:
-                    result = clarification
-                elif not any(not passage.discovery for passage in passages):
-                    result = unsupported_result(passages)
-                else:
-                    answer = await generate_answer(client, token, model, {"question": question, "context": context, "intent": intent, "history": [], "reasoning_cards": index.reasoning_bundle(question, context, [], passages, semantic_candidates=candidates)}, passages)
-                    result = assemble_answer(answer, passages)
-                output = {"case": name, "seconds": round(time.monotonic() - start, 2), "semantic_ready": semantic.ready, "status": result["status"],
-                          "summary": result["summary"], "sections": result["sections"],
-                          "sources": [{key: source.get(key) for key in ["id", "title", "author", "evidence_role", "url", "timecode"]} for source in result["sources"]],
-                          "clarifying_questions": result["clarifying_questions"], "limitations": result["limitations"]}
-                expected = {"unsupported"} if name == "out-of-corpus" else {"clarify", "unsupported"} if name == "guest-attribution" else {"answered", "clarify"}
-                passed = result["status"] in expected
-                output["status_check_passed"] = passed
-                results.append(passed)
-            except ProviderFailure as exc:
-                output = {"case": name, "seconds": round(time.monotonic() - start, 2), "failure": exc.code}
-                results.append(False)
-            print(json.dumps(output, ensure_ascii=False), flush=True)
-    return bool(results) and all(results)
+    raise RuntimeError("Legacy paid smoke evaluation is retired; use scripts/answer_benchmark.py with an experiment plan")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--context-root", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "context")
-    parser.add_argument("--case", choices=[name for name, *_ in CASES], default="")
-    args = parser.parse_args()
-    raise SystemExit(0 if asyncio.run(evaluate(args.context_root, args.case)) else 1)
+    print(json.dumps({"mode": "retired-paid-entrypoint", "network_requests": 0,
+                      "replacement": "scripts/answer_benchmark.py (offline preview by default)"}))

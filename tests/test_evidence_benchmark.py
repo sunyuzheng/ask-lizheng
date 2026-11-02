@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 from scripts import evidence_eval as bench
 from server.retrieval import Passage
@@ -91,7 +92,8 @@ def test_missing_cache_never_calls_embeddings_and_refreshed_vectors_are_shared(t
     with pytest.raises(ValueError, match="Missing cached"):
         asyncio.run(bench.vectors(impl, cases, cache))
     assert calls == [] and not cache.exists()
-    first, metadata = asyncio.run(bench.vectors(impl, cases, cache, True, object(), "private-test-token"))
+    offline = SimpleNamespace(_transport=httpx.MockTransport(lambda _: None))
+    first, metadata = asyncio.run(bench.vectors(impl, cases, cache, True, offline, "private-test-token"))
     second, same = asyncio.run(bench.vectors(impl, cases, cache))
     assert len(calls) == 1 and metadata == same and first == second
     assert calls[0][1].endswith("前一轮问题")
@@ -154,10 +156,32 @@ def test_refresh_from_seed_writes_only_private_cache_and_never_adds_seed_queries
     fake = SimpleNamespace(**{name: getattr(semantic, name) for name in
                            ("EMBEDDING_MODEL", "DIMENSIONS", "MAX_INPUT_BYTES", "MAX_BATCH", "_byte_windows")},
                            request_embeddings=embed)
-    result, _ = asyncio.run(bench.vectors(SimpleNamespace(semantic=fake), [first, second], cache, True, object(), "test-token"))
+    offline = SimpleNamespace(_transport=httpx.MockTransport(lambda _: None))
+    result, _ = asyncio.run(bench.vectors(SimpleNamespace(semantic=fake), [first, second], cache, True, offline, "test-token"))
     assert set(result) == {"first", "second"} and calls == [[bench.semantic_query(second, semantic)]]
     assert len(json.loads(cache.read_text())["queries"]) == 2
     assert cache.stat().st_mode & 0o777 == 0o600 and seed_path.read_bytes() == original
+
+
+def test_interrupted_vector_refresh_preserves_batches_and_only_resumes_missing_work(tmp_path):
+    from scripts.experiment_guard import ExperimentStop
+    cache = tmp_path / ".local/vectors.json"
+    rows = [case("one"), {**case("two"), "question": "第二条合成问题"}]
+    value = array("f", [1.0] + [0.0] * (semantic.DIMENSIONS - 1))
+    calls = []
+    async def embed(client, token, texts, timeout):
+        calls.extend(texts)
+        if len(calls) == 2:
+            raise ExperimentStop("simulated interruption")
+        return [value], 1
+    fake = SimpleNamespace(**{k: getattr(semantic, k) for k in ("EMBEDDING_MODEL", "DIMENSIONS", "MAX_INPUT_BYTES", "_byte_windows")},
+                           MAX_BATCH=1, request_embeddings=embed)
+    offline = SimpleNamespace(_transport=httpx.MockTransport(lambda _: None))
+    with pytest.raises(ExperimentStop):
+        asyncio.run(bench.vectors(SimpleNamespace(semantic=fake), rows, cache, True, offline, "fake"))
+    assert len(json.loads(cache.read_text())["queries"]) == 1
+    result, _ = asyncio.run(bench.vectors(SimpleNamespace(semantic=fake), rows, cache, True, offline, "fake"))
+    assert set(result) == {"one", "two"} and len(calls) == 3 and calls[1] == calls[2]
 
 
 def test_path_hit_and_hidden_document_text_do_not_count_as_model_evidence():
