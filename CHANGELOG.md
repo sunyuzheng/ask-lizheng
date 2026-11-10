@@ -1,5 +1,11 @@
 # 更新记录
 
+## 2026-11-10 总结句一写好就先显示
+
+模型按 status、summary、sections 的顺序写，总结句最先写好，但此前流式过程只发写完的段落，总结句要等整篇完成才随 result 出现。现在总结句在流里完整出现并通过和最终回答同样的检查后，就在 `partial` 事件里带上 `summary`（`server/answers.py`：`completed_parts`、`checked_summary`、`partial_answer`；每条文字的检查从 `validate_answer` 里抽成 `validate_text`，流式和最终共用；措辞和角标照 `assemble_answer(final=False)`）。没通过就不带，照旧等最终结果；status 不是 answered 的回复仍然什么都不提前显示；回答合同的边界没有放宽。页面 `Working`：「正在写的回答」挪到问题下面、材料地图上面，先总结句（`.summary` 的样式）再各段；原来排在地图和回答思路之后，总结句会落在第一屏以外。修正阶段（repairing）连总结句一起撤回（`src/answer-draft.js`）。本机假回答服务（`scripts/page_rig.mjs`）照新顺序送事件，问题里带「修正」会撤回重写；走查（`scripts/page_walkthrough.mjs`）多查总结句先于各段出现且在第一屏内、修正时撤回。接口见 docs/API.md。
+
+本机实测（2026-11-10，本机回答服务、deepseek-v4-flash，5个日常问题逐个问）：总结句 3.6–4.6 秒出现（中位 4.0 秒），此前要等整篇写完的 7.7–10.1 秒（中位 8.6 秒）；第一段 4.3–5.7 秒。5 次提前显示的总结句都和最终回答的一致。真页面接本机回答服务再问 2 题：页面上总结句 3.3、3.9 秒出现，整篇 7.6、10.1 秒，都在第一屏内。线上整体更慢，上线后要在线上再量一次。
+
 ## 2026-11-10 先看最近问；提问和等回答时也能看别人问的
 
 立正：默认打开最新问的，不是最常问的；提问之后、尤其等回答的时候，还想看别人问了什么。`src/main.jsx`：宽屏不再默认「最常问」；「别人在问什么」抽成一块，首页和对话页下方（`.thread-others`）共用，列表在对话页也照常更新；等待区多一行最新的别人的问题（`Working` 的 `other`）；读着下面的列表时，上面的回答变长不推走页面（对 `.layout` 的 ResizeObserver，按 `#questions` 移动的距离补滚动），回答到了在屏幕底部和标签页标题上说一声（`arrived`）。本机试页面的假回答服务和走查脚本收进仓库：`npm run dev:rig`、`scripts/page_walkthrough.mjs`。见 PRODUCT.md 同日一节。

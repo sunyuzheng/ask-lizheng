@@ -92,12 +92,12 @@ def test_correct_denial_streams_without_semantic_regex(passages,monkeypatch):
     sid=guest_id(passages);answer=answer_for(sid,f"这是嘉宾观点，不是立正本人的判断。[{sid}]")
     def forbidden(*args): raise AssertionError("semantic regex reached partial production validation")
     monkeypatch.setattr(answers,"misattributed",forbidden)
-    assert answers.completed_sections(answer.model_dump_json(),passages) == answer.sections
+    assert answers.completed_parts(answer.model_dump_json(),passages) == (answer.summary, answer.sections)
 
 
 def test_stream_still_blocks_an_unknown_source_binding(passages):
     answer=answer_for("S99","不存在的出处。")
-    assert answers.completed_sections(answer.model_dump_json(),passages) == []
+    assert answers.completed_parts(answer.model_dump_json(),passages)[1] == []
 
 
 @pytest.mark.parametrize("field", ["body", "followup", "reason", "indirect-followup"])

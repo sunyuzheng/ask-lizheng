@@ -1,8 +1,9 @@
 // Walks the page on the local rig (npm run dev:rig) and checks what a release must not break:
 // which list opens first, asking, reading what others asked while the answer is written (the place
 // held as the answer grows above, with and without the browser's own scroll anchoring, which Safari
-// lacks), the word that the answer is there or failed, 问个类似的 under a conversation, and someone
-// else's shared page. Exits 1 with the failed checks.
+// lacks), the word that the answer is there or failed, the answer's summary shown as soon as it is
+// written and withdrawn when the answer is written again, 问个类似的 under a conversation, and
+// someone else's shared page. Exits 1 with the failed checks.
 //
 //   npm run dev:rig                                   (in another terminal; note its port)
 //   ASK_URL=http://127.0.0.1:5173/ node scripts/page_walkthrough.mjs [folder for screenshots]
@@ -67,6 +68,54 @@ for (const [device, size] of Object.entries(SIZES)) for (const anchoring of [tru
   const back = await page.evaluate(() => ({top: Math.round(document.querySelector('.turn:last-of-type').getBoundingClientRect().top), gone: !document.querySelector('.arrived')}));
   check(`${tag}: one tap back to the answer`, back.gone && back.top > 0 && back.top < 140, back);
   check(`${tag}: no page errors`, page.errors.length === 0, page.errors);
+  await page.context().close();
+}
+
+// The summary first: the answer's conclusion is there to read as soon as it is written, where the
+// reader already is, with the sections arriving under it; the final answer then takes its place.
+for (const [device, size] of Object.entries(SIZES)) {
+  const page = await open(size);
+  await page.waitForSelector('.qcard');
+  await ask(page, '用AI效率变高了，为什么我的工作价值没变？');
+  await page.waitForSelector('.partial .summary', {timeout: 60000});
+  await page.waitForTimeout(300);
+  const first = await page.evaluate(() => {
+    const box = document.querySelector('.partial .summary').getBoundingClientRect();
+    return {text: document.querySelector('.partial .summary').textContent.trim(), sections: document.querySelectorAll('.partial .answer-section').length,
+      top: Math.round(box.top), bottom: Math.round(box.bottom), screen: innerHeight, scrolled: Math.round(scrollY)};
+  });
+  check(`${device}: the summary shows before any section is written`, first.text.length > 0 && first.sections === 0, first);
+  check(`${device}: the summary is on screen without scrolling`, first.top >= 0 && first.bottom <= first.screen, first);
+  await shot(page, `${device}-5-summary-first`);
+  await page.waitForSelector('.partial .answer-section', {timeout: 60000});
+  const order = await page.evaluate(() => {
+    const summary = document.querySelector('.partial .summary'), section = document.querySelector('.partial .answer-section');
+    return {summary: summary?.textContent.trim(), below: !!(summary && summary.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING)};
+  });
+  check(`${device}: the sections arrive under the summary, which stays`, order.below && order.summary === first.text, order);
+  await shot(page, `${device}-6-summary-and-section`);
+  await page.waitForSelector('.turn .answer', {timeout: 60000});
+  const done = await page.evaluate(() => ({draft: !!document.querySelector('.partial'), summary: document.querySelector('.turn .answer .summary')?.textContent.trim()}));
+  check(`${device}: the final answer takes the draft's place`, !done.draft && done.summary === first.text, done);
+  check(`${device}, summary first: no page errors`, page.errors.length === 0, page.errors);
+  await page.context().close();
+}
+
+// An answer found invalid and written again: what was shown of it goes, summary included, and the
+// repaired one comes back the same way.
+{
+  const page = await open(SIZES.desktop);
+  await page.waitForSelector('.qcard');
+  await ask(page, '这一条需要修正吗？');
+  await page.waitForSelector('.partial .answer-section', {timeout: 60000});
+  await page.waitForFunction(() => /修正/.test(document.querySelector('.working-top [role=status]')?.textContent || ''), null, {timeout: 60000});
+  const withdrawn = await page.evaluate(() => ({draft: !!document.querySelector('.partial'), summary: !!document.querySelector('.turn .summary'), materials: document.querySelectorAll('.candidates .candidate').length}));
+  check('repairing withdraws the summary and sections; the materials stay', !withdrawn.draft && !withdrawn.summary && withdrawn.materials > 0, withdrawn);
+  await shot(page, 'desktop-7-repairing');
+  await page.waitForSelector('.partial .summary', {timeout: 60000});
+  check('the repaired summary shows again', (await page.$$('.partial .answer-section')).length === 0);
+  await page.waitForSelector('.turn .answer', {timeout: 60000});
+  check('repaired answer: no page errors', page.errors.length === 0, page.errors);
   await page.context().close();
 }
 

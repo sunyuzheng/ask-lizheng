@@ -24,7 +24,7 @@ python3 -m venv .venv
 
 打开 http://127.0.0.1:8000 。前端开发可单独运行 `npm run dev`，Vite 将 API 转发到 8000 端口。
 
-只改页面时不用起回答服务：`npm run dev:rig`（`scripts/page_rig.mjs`）用真实的页面源码，回答由本机的假服务按真实的事件顺序慢慢送回（默认24秒，问题里带「失败」就中途失败），「别人在问什么」和材料地图只读线上的公开数据，统计、点赞、分享、反馈都留在本机，不会进线上的统计。`/s/任意` 打开别人分享页的样子。`scripts/page_walkthrough.mjs` 在这上面走一遍提问、等待时看别人的提问、回答写好的提示，电脑和手机尺寸各两遍（其中一遍关掉浏览器自带的位置保持，相当于 Safari），上线前跑。
+只改页面时不用起回答服务：`npm run dev:rig`（`scripts/page_rig.mjs`）用真实的页面源码，回答由本机的假服务按真实的事件顺序慢慢送回（默认24秒，先总结句、再各段；问题里带「失败」就中途失败，带「修正」就撤回重写一次），「别人在问什么」和材料地图只读线上的公开数据，统计、点赞、分享、反馈都留在本机，不会进线上的统计。`/s/任意` 打开别人分享页的样子。要看真回答和真实速度时，另起上面的回答服务，再用 `ASK_RIG_ANSWERS=http://127.0.0.1:8000 npm run dev:rig` 把提问交给它（页面按不记录的方式提问）。`scripts/page_walkthrough.mjs` 在假服务上走一遍提问、等待时看别人的提问、总结句先于各段出现且在第一屏内、修正时撤回、回答写好的提示，电脑和手机尺寸各两遍（其中一遍关掉浏览器自带的位置保持，相当于 Safari），上线前跑。
 
 ## 公开资料
 
@@ -49,7 +49,7 @@ python3 scripts/sync_context.py --source /path/to/lizheng-open-context
 
 ## API 与部署
 
-`GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度、候选sources与公开整理方向，再逐段显示已经过出处和格式校验的内容，最后返回完整result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
+`GET /api/meta` 返回材料版本、模型与推理设置；`GET /api/search?q=...` 返回公开出处；`POST /api/ask` 接受 `question`、`context`、`intent` 与最多六轮 `history`，通过 SSE 先返回真实处理进度、候选sources与公开整理方向，再先后显示已经过出处和格式校验的总结句和各段，最后返回完整result。接口对输入长度、并发与频率设限；问答正文不进入应用日志。
 
 Builder Space 模型接口为 `https://space.ai-builders.com/backend/v1/chat/completions`，默认 `deepseek-v4-flash`，附带 thinking enabled、`reasoning_effort: low`、JSON object 与同一 schema 提示；流式段落和最终回答继续经过格式与来源验证，并至多修复一次。可通过 `AI_MODEL` 更换：`grok-4.5` 使用 medium，`gpt-5` 使用 low，`deepseek-v4-pro` 使用 high。DeepSeek 30秒内没开始写回答或先报错时，同一预算内改由备用模型 `gpt-5` 重答一次（`server/answers.py` 的 `BACKUP_MODELS`，`/api/meta` 的 `backup_model`）；页面说明、App 的同意和隐私政策都写明了它。根目录 Dockerfile 将 Vite 静态文件与 FastAPI 放进同一进程、同一端口，遵守 `PORT`，并在构建时建好资料索引（镜像里 `ASK_STORE=prebuilt`，服务启动时不再自己建）。平台从部署者账号自动注入 `AI_BUILDER_TOKEN`，无需把密钥放入部署 payload。当前平台要求公开 GitHub 仓库，并提供 256 MB 容器；具体契约见[官方 OpenAPI](https://space.ai-builders.com/backend/openapi.json)。服务闲置后会休眠，下一个请求把它唤醒。ask.lizheng.ai 的页面文件由个人站托管，打开即显示；页面读 `/api/meta` 最多等一分钟，3秒没回应就说明服务在唤醒，醒来前不能发送。提问经个人站的 Edge 函数转发，12秒内没收到这里的回应就先给页面回话、边等边发心跳（Vercel 要求25秒内开始回话）。
 

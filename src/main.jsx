@@ -18,6 +18,7 @@ import {REPORT_COPY, REPORT_TEXT_MAX, reportCopy, reportPayload, sendReport} fro
 import {isMembersOnly, memberJoinUrl, memberVideoUrl, sourceAccessNote, sourceCopyText, sourceTypeLabel, transcriptQualityNote} from './source-access.js';
 import {sourceAttributionLabel} from './source-attribution.js';
 import {AmbientMap, AnswerMapPanel} from './answer-map-panel.jsx';
+import {afterPartial, afterProgress} from './answer-draft.js';
 
 // Every user-facing mode, label and message lives here, so the wording can be reviewed in one place.
 // Two ways to ask. 想明白 explains (intent understand); with the user's situation switched on it
@@ -359,6 +360,15 @@ function Working({message, elapsed, other, onStop, onSelect, onReport, onOther})
       <span className="working-peek-question">{other.question}</span>
       <span className="working-peek-go" aria-hidden="true">↓</span>
     </button>}
+    {/* The answer as it is written, where the reader already is: under the question, above the map
+        and the materials. The summary is written first and shows as soon as the service has checked
+        it, then each section; placed lower, it was below the first screen and went unread. */}
+    {message.partial && <div className="partial">
+      <h3>正在写的回答</h3>
+      <small>{message.partial.sections.length ? '这些段落的出处编号已经核对，完整回答还在生成。' : '先看结论，分段说明和出处还在写。'}</small>
+      {message.partial.summary && <div className="summary"><Markdown text={message.partial.summary} sources={message.partial.sources} onSelect={onSelect}/></div>}
+      {message.partial.sections.map((section, index) => <SectionBlock key={index} section={section} sources={message.partial.sources} onSelect={onSelect} personal={!!message.context}/>)}
+    </div>}
     <AnswerMapPanel message={message} live onSelect={onSelect} onOpen={source => trackSource(source.url)}/>
     <p className="working-note">
       <span>{message.model} · 已用{elapsed}秒</span>
@@ -370,11 +380,6 @@ function Working({message, elapsed, other, onStop, onSelect, onReport, onOther})
       <p>{message.approach.summary}</p>
       {message.approach.questions?.length > 0 && <ul>{message.approach.questions.map(item => <li key={item}>{item}</li>)}</ul>}
       {message.approach.note && <small>{message.approach.note}</small>}
-    </div>}
-    {message.partial && <div className="partial">
-      <h3>正在写的回答</h3>
-      <small>这些段落的出处编号已经核对，完整回答还在生成。</small>
-      {message.partial.sections.map((section, index) => <SectionBlock key={index} section={section} sources={message.partial.sources} onSelect={onSelect} personal={!!message.context}/>)}
     </div>}
     {candidates.length > 0 && <Candidates sources={candidates} turnId={message.id} onSelect={onSelect}/>}
   </section>;
@@ -1492,8 +1497,8 @@ function App() {
         let value;
         try { value = JSON.parse(data.join('\n')); } catch { throw failure('invalid_stream', MESSAGES.stream); }
         if (controller.signal.aborted) return;
-        if (name === 'progress') update({progress: value, ...(value.stage === 'repairing' ? {partial: undefined} : {})});
-        else if (name === 'partial') update(m => ({partial: value, previewSources: [...new Map([...(m.previewSources || []), ...value.sources].map(source => [source.id, source])).values()]}));
+        if (name === 'progress') update(afterProgress(value));
+        else if (name === 'partial') update(m => afterPartial(m, value));
         else if (name === 'approach') update({approach: value});
         else if (name === 'sources') update({previewSources: value.sources || [], ...(value.candidates ? {mapCandidates: value.candidates} : {})});
         else if (name === 'quota') seeQuota(value);

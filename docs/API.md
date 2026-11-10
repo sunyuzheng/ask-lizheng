@@ -18,7 +18,7 @@ curl -N http://127.0.0.1:8000/api/ask \
 
 2026-10-15起，`/api/meta` 带 `backup_model`（现为 `gpt-5`；没有备用时为 null）。App 在同意说明里写明备用模型的服务商并取得同意后，请求另附 `ai_consent_backup`（同意时的 backup_model，1–128字符）；不带或与当前备用不一致时，这一请求不用备用模型。网页请求不带同意字段，由页面说明和隐私政策写明备用模型。两个同意字段都不发给模型。
 
-返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；approach 提前提供结合检索材料的整理方向、待核对的问题与出处；partial 提供已完整返回且通过来源编号与格式检查的段落；result 是一次完整且已经校验的 JSON。approach 是公开的回答准备摘要，尚不是结论；不是模型内部推理文本。完整回答仍须经过格式与来源编号核对。
+返回 `text/event-stream`。progress 提供服务器实际到达的处理阶段；sources 在模型回答之前提供可阅读的候选材料；approach 提前提供结合检索材料的整理方向、待核对的问题与出处；partial 提供已完整返回且通过来源编号与格式检查的总结句和段落（总结句先到）；result 是一次完整且已经校验的 JSON。approach 是公开的回答准备摘要，尚不是结论；不是模型内部推理文本。完整回答仍须经过格式与来源编号核对。
 
 ```text
 event: progress
@@ -43,7 +43,10 @@ event: progress
 data: {"stage":"drafting","message":"回答内容已开始返回，正在整理完整段落与出处…"}
 
 event: partial
-data: {"sections":[{"heading":"…","body":"…","source_ids":["S1"],"kind":"synthesis"}],"sources":[{"id":"S1","title":"…","url":"…","excerpt":"…"}]}
+data: {"summary":"…","sections":[],"sources":[]}
+
+event: partial
+data: {"summary":"…","sections":[{"heading":"…","body":"…","source_ids":["S1"],"kind":"synthesis"}],"sources":[{"id":"S1","title":"…","url":"…","excerpt":"…"}]}
 
 event: progress
 data: {"stage":"checking","message":"回答已生成，正在核对来源编号和输出格式…"}
@@ -58,7 +61,7 @@ v4 提示下 status 为 answered 的 result 另带 `share`（record_id、word、
 
 sections 含 heading、body、source_ids，以及 source / synthesis / application 的 kind；分别表示材料转述、AI 综合与联系处境的应用。sources 含 id、title、url、date、excerpt、author、attribution_note、evidence_role、推荐理由及可用的 timecode / public_copy_url。链接和原文片段由服务器提供。
 
-partial 每次是当前完整段落的快照，调用者应替换前一个快照、按 ID 合并来源。服务器只显示已读到 answered 状态之后的完整段落，并逐段执行与最终回答相同的来源编号、目录条目、链接和引文检查；这不是对论断事实正确性的保证，也不代表整份回答已经通过校验。若模型不按提示先输出 status，可能没有提前段落，但最终回答仍会校验。repairing 时撤回暂存段落，result 时以最终回答与最终来源替换；停止、断流或超时时不把 partial 当成功，保留问题和可阅读的材料。不会转发或保存 provider 的原始 reasoning_content。
+partial 每次是当前草稿的快照：已写完的总结句和完整段落，调用者应替换前一个快照、按 ID 合并来源。模型按 status、summary、sections 的顺序写，所以第一个 partial 通常只有总结句（2026-11-10 起；此前总结句要等 result），`sections` 为空数组，`sources` 只含总结句角标指向的出处，没有角标时为空；之后每写完一段再发一次，仍带着总结句。服务器只显示已读到 answered 状态之后的总结句和完整段落，并对总结句、逐段执行与最终回答相同的长度、来源编号、目录条目、链接和引文检查，措辞整理也相同（编号当名字时换成标题、角标移到句号前）；总结句没通过就不带 `summary` 字段，照旧等 result，已通过的段落仍照发。这不是对论断事实正确性的保证，也不代表整份回答已经通过校验：总结句先到时，支撑它的段落还没写完。若模型不按提示先输出 status，可能没有提前的总结句或段落，但最终回答仍会校验。repairing 时撤回暂存的总结句和段落，result 时以最终回答与最终来源替换；停止、断流或超时时不把 partial 当成功，保留问题和可阅读的材料。不会转发或保存 provider 的原始 reasoning_content。
 
 status 还有 clarify（缺少实质条件）、unsupported（资料不支持）和 sources-only（找到材料，但未连接模型、服务故障或仅有目录）。服务失败的 sources-only 仍可正常阅读原文。无法读取资料或处理请求时返回 error 事件。校验、频率与并发拒绝在 SSE 开始前返回 HTTP 422 / 413 / 429 / 503；429 带 Retry-After。调用者应处理停止、断线和未收到最终事件，不能把一条 progress 当成功。
 

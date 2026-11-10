@@ -88,18 +88,38 @@ def strict_schema() -> dict:
     return schema
 
 
-def completed_sections(content: str, passages: list[Passage]) -> list[AnswerSection]:
-    """Read complete top-level sections; incomplete JSON and untrusted IDs stay hidden."""
+# A partial answer's summary until the model's own has been checked; never sent to a page.
+PENDING_SUMMARY = "回答仍在生成。"
+
+
+def checked_summary(value, passages: list[Passage]) -> str | None:
+    """A streamed summary that passes what the final answer's summary must (the model's limits and
+    validate_text); anything else stays hidden until the final answer."""
+    try:
+        summary = ModelAnswer(status="answered", summary=value, sections=[], followups=[], clarifying_questions=[]).summary
+        validate_text(summary, {passage.source["id"] for passage in passages}, {passage.source["title"].strip() for passage in passages})
+    except (ValueError, TypeError):
+        return None
+    return summary
+
+
+def completed_parts(content: str, passages: list[Passage]) -> tuple[str | None, list[AnswerSection]]:
+    """The complete, checked parts of an answer still being written: its summary (None until it is
+    complete and passes) and its top-level sections so far. Incomplete JSON, untrusted IDs and
+    every part of an answer whose status is not answered stay hidden."""
     decoder = json.JSONDecoder()
     cursor = 0
-    status = None
+    status = summary = None
+    sections: list[AnswerSection] = []
     def whitespace(position):
         while position < len(content) and content[position].isspace():
             position += 1
         return position
+    def parts():
+        return (summary, sections) if status == "answered" else (None, [])
     cursor = whitespace(cursor)
     if cursor >= len(content) or content[cursor] != "{":
-        return []
+        return None, []
     cursor += 1
     try:
         while True:
@@ -107,39 +127,55 @@ def completed_sections(content: str, passages: list[Passage]) -> list[AnswerSect
             key, cursor = decoder.raw_decode(content, cursor)
             cursor = whitespace(cursor)
             if not isinstance(key, str) or cursor >= len(content) or content[cursor] != ":":
-                return []
+                return parts()
             cursor = whitespace(cursor + 1)
             if key == "sections":
                 if status != "answered" or cursor >= len(content) or content[cursor] != "[":
-                    return []
+                    return parts()
                 cursor += 1
-                sections = []
                 while len(sections) < 3:
                     cursor = whitespace(cursor)
                     try:
                         value, cursor = decoder.raw_decode(content, cursor)
                         section = AnswerSection.model_validate(value)
                         # Use the same source/quotation/URL boundary as final answers.
-                        partial = ModelAnswer(status="answered", summary="回答仍在生成。", sections=[section], followups=[], clarifying_questions=[])
+                        partial = ModelAnswer(status="answered", summary=PENDING_SUMMARY, sections=[section], followups=[], clarifying_questions=[])
                         normalize_source_bindings(partial, passages)
                         validate_answer(partial, passages)
                     except (ValueError, TypeError):
-                        return sections
+                        return parts()
                     sections.append(section)
                     cursor = whitespace(cursor)
                     if cursor >= len(content) or content[cursor] != ",":
-                        return sections
+                        return parts()
                     cursor += 1
-                return sections
+                return parts()
             value, cursor = decoder.raw_decode(content, cursor)
             if key == "status":
                 status = value
+            elif key == "summary":
+                # A string is complete at its closing quote: no need to wait for what follows it.
+                summary = checked_summary(value, passages)
             cursor = whitespace(cursor)
             if cursor >= len(content) or content[cursor] != ",":
-                return []
+                return parts()
             cursor += 1
     except (ValueError, TypeError):
-        return []
+        return parts()
+
+
+def partial_answer(summary: str | None, sections: list[AnswerSection], passages: list[Passage]) -> dict:
+    """What a page may show of an answer still being written, worded as assemble_answer words the
+    final one: the checked sections, the summary once it has passed, and the sources they cite."""
+    shown = assemble_answer(ModelAnswer(status="answered", summary=summary or PENDING_SUMMARY, sections=sections,
+                                        followups=[], clarifying_questions=[]), passages, final=False)
+    # Only what these parts cite: assemble_answer falls back to the first candidates for an answer
+    # that cites nothing, which a summary without marks does until its first section arrives.
+    cited = {*MARK.findall(shown["summary"]), *(source_id for section in shown["sections"] for source_id in section["source_ids"])}
+    partial = {"sections": shown["sections"], "sources": [source for source in shown["sources"] if source["id"] in cited]}
+    if summary:
+        partial["summary"] = shown["summary"]
+    return partial
 
 
 def provider_status(response: httpx.Response) -> None:
@@ -156,6 +192,7 @@ async def streamed_completion(client, payload, token, remaining, passages, on_pr
     finish = None
     seen_done = False
     sent_sections = 0
+    sent_summary = False
     started = False
     async with client.stream(
         "POST", "https://space.ai-builders.com/backend/v1/chat/completions",
@@ -201,11 +238,12 @@ async def streamed_completion(client, payload, token, remaining, passages, on_pr
                             await on_progress({"stage": "drafting", "message": "回答内容已开始返回，正在整理完整段落与出处…"})
                     started = True
                     if on_partial:
-                        sections = completed_sections(content, passages)
-                        if len(sections) > sent_sections:
-                            partial = assemble_answer(ModelAnswer(status="answered", summary="回答仍在生成。", sections=sections, followups=[], clarifying_questions=[]), passages, final=False)
-                            await on_partial({"sections": partial["sections"], "sources": partial["sources"]})
-                            sent_sections = len(sections)
+                        # The summary is written first: readers get it when it is complete and
+                        # checked, then each section, instead of only with the final answer.
+                        summary, sections = completed_parts(content, passages)
+                        if len(sections) > sent_sections or (summary is not None and not sent_summary):
+                            await on_partial(partial_answer(summary, sections, passages))
+                            sent_sections, sent_summary = len(sections), summary is not None
                 finish = choice.get("finish_reason") or finish
             except InvalidAnswer:
                 raise
@@ -365,22 +403,28 @@ def normalize_source_bindings(answer: ModelAnswer, passages: list[Passage]) -> N
             section.source_ids = combined
 
 
+def validate_text(text: str, known, titles: set[str]) -> None:
+    """What no text of an answer may carry, final or still being written: a link or block quote,
+    a generated sentence presented as someone's own words, a source number that was not provided."""
+    if re.search(r"https?://|www\.|\]\s*\(|^\s*>", text, flags=re.I | re.M):
+        raise InvalidAnswer("正文不能生成 URL、超链接或块引用；使用来源编号并转述内容。")
+    # Quoting a title or marking a concept is ordinary punctuation. Reject
+    # claimed verbatim speech, rather than every long pair of quote marks.
+    for quoted in re.finditer(r'["“「]([^"”」\n]{18,})["”」]', text):
+        prefix = text[max(0, quoted.start() - 22):quoted.start()]
+        if quoted.group(1).strip() not in titles and re.search(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|提到|指出|表示|认为|一句话", prefix):
+            raise InvalidAnswer("不能把模型生成的句子标为作者原话；改为有来源的转述。")
+    if any(source_id not in known for source_id in SOURCE_NUMBER.findall(text)):
+        raise InvalidAnswer("文字引用了不存在的来源编号；只能使用提供的 S 编号。")
+
+
 def validate_answer(answer: ModelAnswer, passages: list[Passage]) -> None:
     by_id = {passage.source["id"]: passage for passage in passages}
     titles = {passage.source["title"].strip() for passage in passages}
     for text in [answer.summary, answer.limitations, *answer.followups, *answer.clarifying_questions,
                  *(item.reason for item in answer.source_reasons),
                  *(section.heading + "\n" + section.body for section in answer.sections)]:
-        if re.search(r"https?://|www\.|\]\s*\(|^\s*>", text, flags=re.I | re.M):
-            raise InvalidAnswer("正文不能生成 URL、超链接或块引用；使用来源编号并转述内容。")
-        # Quoting a title or marking a concept is ordinary punctuation. Reject
-        # claimed verbatim speech, rather than every long pair of quote marks.
-        for quoted in re.finditer(r'["“「]([^"”」\n]{18,})["”」]', text):
-            prefix = text[max(0, quoted.start() - 22):quoted.start()]
-            if quoted.group(1).strip() not in titles and re.search(r"原话|逐字|写道|引用|名言|他说|她说|立正说|作者说|文中说|说过|提到|指出|表示|认为|一句话", prefix):
-                raise InvalidAnswer("不能把模型生成的句子标为作者原话；改为有来源的转述。")
-        if any(source_id not in by_id for source_id in SOURCE_NUMBER.findall(text)):
-            raise InvalidAnswer("文字引用了不存在的来源编号；只能使用提供的 S 编号。")
+        validate_text(text, by_id, titles)
     if any(item.source_id not in by_id for item in answer.source_reasons):
         raise InvalidAnswer("来源推荐理由引用了不存在的编号；只能使用提供的 S 编号。")
     for section in answer.sections:
