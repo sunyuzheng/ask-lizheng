@@ -24,6 +24,8 @@ python3 -m venv .venv
 
 打开 http://127.0.0.1:8000 。前端开发可单独运行 `npm run dev`，Vite 将 API 转发到 8000 端口。
 
+只改页面时不用起回答服务：`npm run dev:rig`（`scripts/page_rig.mjs`）用真实的页面源码，回答由本机的假服务按真实的事件顺序慢慢送回（默认24秒，问题里带「失败」就中途失败），「别人在问什么」和材料地图只读线上的公开数据，统计、点赞、分享、反馈都留在本机，不会进线上的统计。`/s/任意` 打开别人分享页的样子。`scripts/page_walkthrough.mjs` 在这上面走一遍提问、等待时看别人的提问、回答写好的提示，电脑和手机尺寸各两遍（其中一遍关掉浏览器自带的位置保持，相当于 Safari），上线前跑。
+
 ## 公开资料
 
 `data/context` 是 [lizheng-open-context](https://github.com/sunyuzheng/lizheng-open-context) 的哈希校验副本；它的 release manifest 和许可一起保留，版本绑定在 `data/context-lock.json`。人物和节目目录、原稿与AI提炼都由该仓库维护，详见[Context架构](docs/CONTEXT_ARCHITECTURE.md)。

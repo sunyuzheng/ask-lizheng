@@ -107,6 +107,12 @@ const DISCOVERY = {
   similar: n => `另外${n}个类似提问`,
   feedback: '反馈或举报',
   feedbackCopied: '这条问答的链接已复制，留言时贴上就行。',
+  // While an answer is being written (Working): the newest question someone else asked, one line
+  // under the progress, which opens it in the list below; and the word that brings a reader of that
+  // list back once their own answer is there (2026-11-10).
+  waiting: '等的时候，看看别人刚问的',
+  arrived: '你的回答写好了',
+  unfinished: '你的回答没有完成',
 };
 // 我的提问 (history.js): what was asked on this device. Its note is where the page says what the
 // privacy policy means for the person: we cannot tell which questions were theirs.
@@ -337,7 +343,7 @@ function SectionBlock({section, sources, onSelect, personal}) {
   </section>;
 }
 
-function Working({message, elapsed, onStop, onSelect, onReport}) {
+function Working({message, elapsed, other, onStop, onSelect, onReport, onOther}) {
   const candidates = message.previewSources || [];
   const stale = message.lastActivity && Date.now() - message.lastActivity > 12000;
   return <section className="working" aria-label="回答进度">
@@ -347,6 +353,12 @@ function Working({message, elapsed, onStop, onSelect, onReport}) {
       <button type="button" className="ghost-button" onClick={onReport}>{REPORT_COPY.zh.button}</button>
       <button type="button" className="ghost-button" onClick={onStop}>停止</button>
     </div>
+    {/* Something to read meanwhile, where the eyes are while waiting: it opens in 别人在问什么 below. */}
+    {other && <button type="button" className="working-peek" onClick={() => onOther(other)}>
+      <span className="working-peek-label">{DISCOVERY.waiting}</span>
+      <span className="working-peek-question">{other.question}</span>
+      <span className="working-peek-go" aria-hidden="true">↓</span>
+    </button>}
     <AnswerMapPanel message={message} live onSelect={onSelect} onOpen={source => trackSource(source.url)}/>
     <p className="working-note">
       <span>{message.model} · 已用{elapsed}秒</span>
@@ -469,8 +481,6 @@ function FoundingInfo({account, busy, step, onLogin}) {
 // In 最常问 a card leads with how many similar askings it stands for; in 最近问 with when it was
 // asked, showing that count below when it says more than one.
 const DISCOVERY_VIEWS = [['recent', '最近问'], ['frequent', '最常问']];
-// Wide enough for 别人正在问 beside the question box (style.css uses the same width).
-const WIDE = window.matchMedia('(min-width: 1100px)');
 
 // A like, as Product Hunt and Reddit show one: an arrow over the count, beside the question. Anyone
 // may like, counted by browser (2026-10-05); green once liked, and no count until someone has.
@@ -840,20 +850,27 @@ function App() {
   // A shared answer's readers are counted by lizheng.ai as share views; one who asks from it is counted here then.
   const usageStarted = useRef(!SHARED);
   useEffect(() => (SHARED ? undefined : startUsage(IN_APP ? 'app' : 'ask')), []);
-  // Which list shows (最近问 unless only common questions exist yet), its first four or all of it.
+  // Which list shows (最近问, unless only common questions exist yet or a link asked for 最常问),
+  // its first four or all of it.
   const [view, setView] = useState('recent');
   const [expanded, setExpanded] = useState(false);
   const shownList = useMemo(() => (questionLists ? discoveryView(questionLists, view) : []), [questionLists, view]);
   const discovery = expanded ? shownList : shownList.slice(0, 4);
   // 别人正在问: the three newest questions people really asked (not the common ones written fresh),
   // as many as sit beside the question box.
-  const liveCards = useMemo(() => (questionLists ? discoveryView(questionLists, 'recent').filter(card => card.asked_at).slice(0, 3) : []), [questionLists]);
+  const recentCards = useMemo(() => (questionLists ? discoveryView(questionLists, 'recent').filter(card => card.asked_at) : []), [questionLists]);
+  const liveCards = useMemo(() => recentCards.slice(0, 3), [recentCards]);
+  // The newest question someone else asked, shown while an answer is written: never one of this
+  // conversation's own, which reach the list a minute after they are answered.
+  const peekCard = recentCards.slice(0, 4).find(card => !messages.some(m => m.question === card.question.trim()));
   const hasDiscovery = discovery.length > 0;
+  // The list sits on the start page and under a conversation: seen in either place counts once.
+  const inThread = messages.length > 0;
   useEffect(() => {
     if (!hasDiscovery) return;
     markUsage('d_shown');
     watchUsage(document.getElementById('questions'), 'd_seen');
-  }, [hasDiscovery]);
+  }, [hasDiscovery, inThread]);
   const [publicTotal, setPublicTotal] = useState(null);
   const [openCard, setOpenCard] = useState('');
   // In 最常问: whose similar questions are open (any number), and which of those shows its answer.
@@ -916,6 +933,60 @@ function App() {
   // Which answers' links were copied on the way to the community post for feedback.
   const [cardFeedback, setCardFeedback] = useState({});
   const [cardSource, setCardSource] = useState('');
+  // 别人在问什么 also sits under a conversation (2026-11-10, the owner), to read while one's own
+  // answer is written above. Someone is reading it once its heading is in the upper half of the
+  // screen. What is written above must not move the page under them: where the browser does not
+  // hold the place itself (Safari), the page scrolls by as much as the list moved. And when the
+  // answer comes, or fails, while they read, a word at the bottom of the screen takes them back.
+  const layoutRef = useRef(null);
+  const readingOthers = () => {
+    const top = document.getElementById('questions')?.getBoundingClientRect().top;
+    return top !== undefined && top < window.innerHeight / 2;
+  };
+  const [arrived, setArrived] = useState(null);
+  useEffect(() => {
+    const layout = layoutRef.current;
+    if (!inThread || !layout || typeof ResizeObserver === 'undefined') return undefined;
+    const place = () => document.getElementById('questions')?.getBoundingClientRect().top;
+    let top = place();
+    const note = () => { top = place(); };
+    const observer = new ResizeObserver(() => {
+      const now = place();
+      if (top !== undefined && now !== undefined && top < window.innerHeight / 2 && Math.abs(now - top) > 1)
+        window.scrollBy({top: now - top, behavior: 'instant'});
+      note();
+    });
+    observer.observe(layout);
+    window.addEventListener('scroll', note, {passive: true});
+    return () => { observer.disconnect(); window.removeEventListener('scroll', note); };
+  }, [inThread]);
+  useEffect(() => {
+    if (!arrived) return undefined;
+    const check = () => { if (!readingOthers()) setArrived(null); };
+    window.addEventListener('scroll', check, {passive: true});
+    return () => window.removeEventListener('scroll', check);
+  }, [arrived]);
+  const arrivedTurn = arrived && messages.some(m => m.id === arrived.id) ? arrived : null;
+  // Waiting in another tab or app: the tab's title says the answer is there, until it is looked at.
+  const titleBefore = useRef(null);
+  const sayInTitle = text => {
+    if (document.visibilityState !== 'hidden') return;
+    if (titleBefore.current === null) titleBefore.current = document.title;
+    document.title = `${text} · 问问立正`;
+  };
+  useEffect(() => {
+    const restore = () => {
+      if (document.visibilityState !== 'visible' || titleBefore.current === null) return;
+      document.title = titleBefore.current;
+      titleBefore.current = null;
+    };
+    document.addEventListener('visibilitychange', restore);
+    return () => document.removeEventListener('visibilitychange', restore);
+  }, []);
+  const toArrived = () => {
+    document.getElementById(`turn-${arrived.id}`)?.scrollIntoView({behavior: scrollBehavior(), block: 'start'});
+    setArrived(null);
+  };
   // The count comes from Builder, which sleeps when idle: say so while it wakes.
   const [accountWaking, setAccountWaking] = useState(false);
   const input = useRef(null), abort = useRef(null), loginCleanup = useRef(null);
@@ -1084,11 +1155,10 @@ function App() {
     const stale = changedDiscoveryIds(previous.flatMap(card => [card, ...(card.similar || [])]), lists);
     if (firstLists.current && (lists.recent.length || lists.frequent.length)) {
       firstLists.current = false;
-      // Until someone has asked, the common questions written fresh are all there is.
+      // Until someone has asked, the common questions written fresh are all there is. Otherwise the
+      // list opens on 最近问 at every width (2026-11-10, the owner: the newest first, not the most
+      // asked), also on a wide screen, where 别人正在问 beside the question box shows its first three.
       if (!openList.current && !discoveryView(lists, 'recent').length) setView('frequent');
-      // On a wide screen the newest are already beside the question box (别人正在问), so the list
-      // below starts with the most asked rather than showing the same questions twice.
-      else if (!openList.current && WIDE.matches) setView('frequent');
     }
     listsNow.current = lists;
     pendingLists.current = null;
@@ -1114,9 +1184,9 @@ function App() {
       setListsPending(true);
     } else applyLists(lists);
   };
-  const onStartPage = messages.length === 0;
+  // Read on the start page and under a conversation alike (2026-11-10, the owner: while asking, and
+  // above all while waiting, what others asked should still be there to read).
   useEffect(() => {
-    if (!onStartPage) return;
     const watcher = watchDiscoveryLists({read: discoveryLists,
       onLists: (...args) => receiveLists.current(...args),
       // A failed background refresh keeps the questions already on screen.
@@ -1124,7 +1194,10 @@ function App() {
     });
     listWatcher.current = watcher;
     return () => { watcher.stop(); listWatcher.current = null; };
-  }, [onStartPage]);
+  }, []);
+  // Read again on entering and on leaving a conversation, as coming back to the start page did
+  // before: the question just asked reaches 最近问 about a minute after its answer.
+  useEffect(() => { listWatcher.current?.refresh(); }, [inThread]);
   const refreshLists = () => {
     if (pendingLists.current) applyLists(pendingLists.current);
     else listWatcher.current?.refresh();
@@ -1246,10 +1319,11 @@ function App() {
     setOpenSimilar(prev => { const next = new Set(prev); if (open) next.add(card.public_id); else next.delete(card.public_id); return next; });
     if (open) track('Ask Discovery Similar List', {surface: SURFACE});
   };
-  // 别人正在问, beside the question box: a question there opens in the list below, among the newest.
-  function openFromLive(card) {
+  // 别人正在问, beside the question box, and the questions shown while an answer is written: a
+  // question there opens in the list below, among the newest.
+  function openFromLive(card, from = 'live') {
     setView('recent');
-    if (openCard !== card.public_id) toggleCard(card, 'live');
+    if (openCard !== card.public_id) toggleCard(card, from);
     requestAnimationFrame(() => document.getElementById(`qcard-${card.public_id}`)?.scrollIntoView({block: 'start', behavior: scrollBehavior()}));
   }
   function toQuestions(event) {
@@ -1373,7 +1447,7 @@ function App() {
     abort.current = controller;
     setMessages(prev => [...prev.filter(m => m.id !== id), {id, question: payload.question, intent: payload.intent, context: payload.context, request: payload, previewSources: retry?.previewSources || [], model: meta?.model || 'AI', progress: {stage: 'retrieving', message: '正在查找相关公开材料…'}}]);
     setQuestion(prev => (!retry || prev.trim() === payload.question ? '' : prev));
-    setBusy(true); setError(''); setSelected(''); setSourceTurn(null); setEditingSituation(false);
+    setBusy(true); setError(''); setSelected(''); setSourceTurn(null); setEditingSituation(false); setArrived(null);
     requestAnimationFrame(() => document.getElementById(`turn-${id}`)?.scrollIntoView({behavior: scrollBehavior(), block: 'start'}));
     const update = patch => setMessages(prev => prev.map(m => (m.id === id ? {...m, ...(typeof patch === 'function' ? patch(m) : patch)} : m)));
     const seeQuota = value => {
@@ -1429,6 +1503,8 @@ function App() {
           seeQuota(value.quota);
           // `fresh`: answered in this visit, so 我的提问 keeps the conversation again (below).
           update({result: value, partial: undefined, elapsed: Math.round((performance.now() - started) / 1000), fresh: value.status === 'answered'});
+          if (readingOthers()) setArrived({id, ok: !value.retryable});
+          sayInTitle(value.retryable ? DISCOVERY.unfinished : DISCOVERY.arrived);
         } else if (name === 'error') throw refusal(value, value.status, MESSAGES.failed);
       };
       try {
@@ -1456,6 +1532,9 @@ function App() {
         : err instanceof TypeError ? MESSAGES.lost
         : String(err.message || MESSAGES.failed);
       setError(message);
+      // Stopped by its asker, who knows; anything else is said to one reading below.
+      if ((timedOut || !controller.signal.aborted) && readingOthers()) setArrived({id, ok: false});
+      if (timedOut || !controller.signal.aborted) sayInTitle(DISCOVERY.unfinished);
       update({error: message, errorCode: controller.signal.aborted && !timedOut ? 'stopped' : err.code, waited: Math.round((performance.now() - started) / 1000)});
       setQuestion(prev => (prev.trim() ? prev : payload.question));
     } finally {
@@ -1698,6 +1777,27 @@ function App() {
     </div>}
   </QuestionCard>;
 
+  // 别人在问什么: on the start page, and under a conversation (2026-11-10).
+  const othersSection = discoveryState !== 'none' && <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
+    <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
+      <div className="discovery-views" role="group" aria-label="怎样看这些问题">
+        {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
+      </div>
+      <button type="button" className="discovery-refresh" data-pending={listsPending || undefined} onClick={refreshLists}>
+        <span aria-live="polite">{listsPending ? '有更新，点击查看' : '刷新列表'}</span>
+      </button></div>
+    <div className="discovery-list" aria-busy={!questionLists}>
+      {/* While the questions load, the rows they will fill; never the examples first. */}
+      {!questionLists ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
+        : discovery.map(card => questionCard(card))}
+    </div>
+    {/* The rest of the list here; past it, every question on lizheng.ai's public pages. */}
+    {questionLists && (shownList.length > discovery.length
+      ? <button type="button" className="pill-button discovery-more" onClick={showMore}>看更多问题<Chev/></button>
+      : <a className="pill-button discovery-more" href="https://www.lizheng.ai/ask" target="_blank" rel="noopener"
+        onClick={() => track('Ask Discovery All', {surface: SURFACE})}>看全部问题<Ext/></a>)}
+  </section>;
+
   return <div className={`app ${conversation ? 'in-conversation' : ''}`}>
     <a className="skip-link" href="#main-content">跳到提问与回答</a>
     <header className="header">
@@ -1743,25 +1843,7 @@ function App() {
         </aside>}
         </div></div>
         <div className="home-body">
-        {discoveryState !== 'none' ? <section className="starters discovery" id="questions" aria-labelledby="discovery-title">
-          <div className="starters-head"><h2 id="discovery-title">{DISCOVERY.title}</h2><p>{DISCOVERY.note}</p>
-            <div className="discovery-views" role="group" aria-label="怎样看这些问题">
-              {DISCOVERY_VIEWS.map(([id, label]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => showView(id)}>{label}</button>)}
-            </div>
-            <button type="button" className="discovery-refresh" data-pending={listsPending || undefined} onClick={refreshLists}>
-              <span aria-live="polite">{listsPending ? '有更新，点击查看' : '刷新列表'}</span>
-            </button></div>
-          <div className="discovery-list" aria-busy={!questionLists}>
-            {/* While the questions load, the rows they will fill; never the examples first. */}
-            {!questionLists ? [0, 1, 2, 3].map(i => <div key={i} className="qcard-placeholder" aria-hidden="true"><i/><b/></div>)
-              : discovery.map(card => questionCard(card))}
-          </div>
-          {/* The rest of the list here; past it, every question on lizheng.ai's public pages. */}
-          {questionLists && (shownList.length > discovery.length
-            ? <button type="button" className="pill-button discovery-more" onClick={showMore}>看更多问题<Chev/></button>
-            : <a className="pill-button discovery-more" href="https://www.lizheng.ai/ask" target="_blank" rel="noopener"
-              onClick={() => track('Ask Discovery All', {surface: SURFACE})}>看全部问题<Ext/></a>)}
-        </section> : <section className="starters" aria-labelledby="starters-title">
+        {othersSection || <section className="starters" aria-labelledby="starters-title">
           <div className="starters-head"><h2 id="starters-title">不知道从哪问起？</h2><p>选一个，改成你自己的问题。</p></div>
           <div className="starter-grid">
             {EXAMPLES.map(example => <button type="button" key={example.question} className="starter" onClick={() => prefill(example.question, example.intent, 'example')}>
@@ -1791,7 +1873,7 @@ function App() {
           <p><button type="button" className="footer-report" onClick={() => openReport('page')}>{REPORT_COPY.zh.button}</button><a href={LINKS.context} target="_blank" rel="noreferrer">材料开源在GitHub<Ext/></a><a href={LINKS.site} target="_blank" rel="noreferrer">lizheng.ai<Ext/></a></p>
         </footer>
         </div>
-      </div> : <div className="layout">
+      </div> : <><div className="layout" ref={layoutRef}>
         <div className="thread-column">
           <h1 className="sr-only">问问立正，当前对话</h1>
           <section className="thread" aria-label="当前对话">
@@ -1812,7 +1894,8 @@ function App() {
                   {m.context && <details className="question-context"><summary>你的处境<Chev/></summary><p>{m.context}</p></details>}
                 </header>
                 {!m.result && (working || m.previewSources?.length > 0) && (working
-                  ? <Working message={m} elapsed={elapsed} onStop={() => abort.current?.abort()} onSelect={select} onReport={() => openReport('waiting', m)}/>
+                  ? <Working message={m} elapsed={elapsed} other={peekCard} onStop={() => abort.current?.abort()} onSelect={select} onReport={() => openReport('waiting', m)}
+                      onOther={card => openFromLive(card, 'waiting')}/>
                   : <section className="working idle"><Candidates sources={m.previewSources} turnId={m.id} onSelect={select}/></section>)}
                 {m.result && <div className="answer">
                   {m.result.status === 'sources-only'
@@ -1878,8 +1961,13 @@ function App() {
           {railSources.map(source => <SourceCard key={`${source.id}-${source.url}`} source={source} prefix="rail" selected={selected === source.id} onOpen={setSelected}/>)}
           <a className="rail-foot" href={LINKS.community} target="_blank" rel="noreferrer" onClick={() => track('Ask Community Click', {surface: SURFACE, location: 'rail'})}>去社区接着聊<Ext/></a>
         </aside>}
-      </div>}
+      </div>
+      {othersSection && <div className="home-body thread-others">{othersSection}</div>}
+      </>}
     </main>
+    <div className="arrived-place" aria-live="polite">{arrivedTurn && <button type="button" className={`arrived ${arrivedTurn.ok ? '' : 'unfinished'}`} onClick={toArrived}>
+      {arrivedTurn.ok ? DISCOVERY.arrived : DISCOVERY.unfinished}<span aria-hidden="true">↑</span>
+    </button>}</div>
     {historyOpen && <MyQuestions items={askedHere} busy={busy} close={() => setHistoryOpen(false)} onOpen={openAsked}
       onForget={id => setAskedHere(forgetAsked(id))} onForgetAll={() => { setAskedHere(forgetAll()); setHistoryOpen(false); }}/>}
     {about && <About close={() => setAbout(null)} meta={meta} account={account} focusInput={about.focusInput} publicArchive={publicArchive} contextKept={contextKept} onRevokeConsent={revokeConsent}/>}

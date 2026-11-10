@@ -2146,6 +2146,77 @@ main {
   color: var(--muted);
 }
 
+/* While the answer is written: the newest question someone else asked, on one line, to read meanwhile. */
+.working-peek {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 6px 0 6px 28px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.working-peek-label {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.working-peek-question {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--green-text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.working-peek-go {
+  flex-shrink: 0;
+  color: var(--green-text);
+  transition: transform 0.2s var(--ease);
+}
+
+.working-peek:hover .working-peek-question {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.working-peek:hover .working-peek-go {
+  transform: translateY(2px);
+}
+
+/* On a phone the question gets a line of its own, two at most, so enough of it shows to be worth a tap. */
+@media (max-width: 720px) {
+  .working-peek {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding-left: 0;
+    font-size: 13.5px;
+  }
+
+  .working-peek-question {
+    display: -webkit-box;
+    grid-column: 1;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 15px;
+    white-space: normal;
+  }
+
+  .working-peek-go {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    font-size: 16px;
+  }
+}
+
 .candidates-all {
   margin-top: 10px;
 }
@@ -2615,6 +2686,54 @@ main {
 .dock #question {
   padding: 8px 20px 4px;
   font-size: 16.5px;
+}
+
+/* 别人在问什么 under a conversation: the same list as on the start page, after a rule. */
+.thread-others {
+  margin-top: clamp(40px, 6vw, 72px);
+  padding-bottom: calc(clamp(64px, 9vw, 112px) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--rule);
+}
+
+.thread-others .starters {
+  padding-top: clamp(40px, 6vw, 64px);
+}
+
+/* The answer came while its asker read the questions below: one tap back to it. */
+.arrived-place {
+  position: fixed;
+  right: 0;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.arrived {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 23px;
+  background: var(--green);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 14px 32px -14px rgb(15 61 35 / 0.6);
+  pointer-events: auto;
+  animation: rise 0.35s var(--ease) both;
+  transition: background 0.2s;
+}
+
+.arrived:hover {
+  background: var(--green-deep);
+}
+
+.arrived.unfinished {
+  background: var(--ink);
 }
 
 /* ---------- Sources: numbered notes, not cards ---------- */

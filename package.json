@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:rig": "vite --config scripts/page_rig.mjs --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "python3 -m pytest tests -q"
