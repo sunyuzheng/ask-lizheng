@@ -1,21 +1,21 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
   "snapshot_at": "2026-11-01",
-  "release_manifest_sha256": "ba95ef9f835b887f2ed9d3caf2da38e0df91bbeb143f552281bd7dae34185ccc",
-  "files": 1757,
+  "release_manifest_sha256": "9806481354174e55e9a09beca88a021ae5744dc7e0cbce1708197fbaa48ea895",
+  "files": 1759,
   "counts": {
-    "structured_public_dialogues": 375,
-    "structured_dialogue_cues": 307682,
+    "structured_public_dialogues": 376,
+    "structured_dialogue_cues": 313363,
     "guest_entities": 157,
     "guest_sources": 411,
     "guest_appearances": 431,
     "guest_slug_routes": 162,
     "guest_articles": 23,
     "guest_redirects": 3,
-    "guest_public_raw_records": 375,
+    "guest_public_raw_records": 376,
     "guest_introductions": 169,
-    "community_posts_catalog": 252,
-    "community_posts_full_text": 252,
+    "community_posts_catalog": 253,
+    "community_posts_full_text": 253,
     "community_comments_included": 362,
     "member_course_lessons": 23,
     "book_chapters_zh": 12,
@@ -33,7 +33,7 @@
     "member_video_transcripts": 218,
     "member_video_solo_reviewed": 45,
     "known_guest_videos": 393,
-    "external_guest_appearances": 32,
+    "external_guest_appearances": 33,
     "english_community_catalog": 50,
     "english_community_full_text_files": 49,
     "english_community_original_yuzheng": 11,
@@ -41,11 +41,11 @@
     "english_video_translations": 76
   },
   "licenses": {
-    "CC-BY-4.0": 945,
+    "CC-BY-4.0": 946,
     "CC0-1.0": 44,
     "LicenseRef-Lizheng-Reference-Use-1.0": 629,
-    "LicenseRef-Original-Rights-Retained": 69,
+    "LicenseRef-Original-Rights-Retained": 70,
     "MIT": 63
   },
-  "source_commit": "342e0ab9a7dff7f4eb9ae0bdfdc51aa16f6747a2"
+  "source_commit": "cb1c821a023840141f72e4297ce8ea2871d911b9"
 }
