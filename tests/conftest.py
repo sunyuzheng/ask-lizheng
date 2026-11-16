@@ -6,6 +6,7 @@ import pytest
 def isolate_evidence_selection(request, monkeypatch):
     if request.node.get_closest_marker("evidence_selection"):
         return
-    async def keep_candidates(client, token, model, request, passages):
-        return passages
-    monkeypatch.setattr("server.app.select_evidence", keep_candidates)
+    async def keep_candidates(client, token, model, request, passages, **kwargs):
+        from server.evidence_selection import EvidenceSelection
+        return EvidenceSelection(passages)
+    monkeypatch.setattr("server.evidence_selection.plan_evidence", keep_candidates)

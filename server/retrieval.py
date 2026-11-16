@@ -486,7 +486,7 @@ class ContextIndex:
             query += " " + str(previous)[:500]
         return query
 
-    def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None, *, intent: str = "find") -> list[Passage]:
+    def retrieve(self, question: str, context: str = "", history: list | None = None, limit: int = 16, semantic_candidates: list | None = None, *, intent: str = "find", source_families: set[str] | None = None, diagnostics: dict | None = None) -> list[Passage]:
         if intent not in {"find", "understand", "apply"}:
             raise ValueError("Invalid retrieval intent")
         if not self.briefs:
@@ -496,6 +496,8 @@ class ContextIndex:
         query = self.retrieval_query(question, history)
         participants = self.participant_entities(query)
         def admitted(row: Brief) -> bool:
+            if source_families is not None and row.family not in source_families:
+                return False
             if not row.flags & (FLAG_DISCOVERY | FLAG_BODY):
                 return False
             if intent == "find":
@@ -548,9 +550,9 @@ class ContextIndex:
             candidates.update(in_title[term])
         for identity in participants:
             candidates.update(self.by_participant.get(identity, ()))
-        ranked = []
+        ranked, blocked = [], []
         for index in sorted(candidates):
-            if index not in eligible:
+            if source_families is not None and briefs[index].family not in source_families:
                 continue
             row = briefs[index]
             def present(term):
@@ -588,8 +590,13 @@ class ContextIndex:
                 score *= .68
             if re.search(r"Main Community｜|Knowledge Bank｜|访谈过的.*列表|报名指南|产品入口", row.title) and not re.search(r"社区|课程|产品|入口|报名|community|knowledge bank", query, flags=re.I):
                 score *= .35
-            ranked.append((score, index))
+            (ranked if index in eligible else blocked).append((score, index))
         ranked.sort(key=lambda row: (-row[0], briefs[row[1]].title))
+        blocked.sort(key=lambda row: (-row[0], briefs[row[1]].title))
+        if diagnostics is not None:
+            diagnostics.update(lexical=[i for _, i in ranked[:24]],
+                               blocked=[i for score, i in blocked[:12]
+                                        if score >= (ranked[0][0] * .35 if ranked else 0)])
         # Reciprocal rank fusion preserves exact-word matches while admitting
         # paraphrases. Curated links bring the basis and scope contrast together.
         fused = {index: 1 / (FUSION_K + rank) for index, rank in channel_ranks((i for _, i in ranked), briefs)}
@@ -636,6 +643,15 @@ class ContextIndex:
                 fused[index] *= 1 + coverage
         ranked = sorted(((score, index) for index, score in fused.items()),
                         key=lambda row: (not participant_match(row[1]), -row[0], briefs[row[1]].title))
+        if diagnostics is not None:
+            best_similarity = max((c["score"] for c in semantic_candidates or []), default=0)
+            semantic_blocked = [c["docindex"] for c in semantic_candidates or []
+                                if c["docindex"] not in eligible and c["score"] >= max(MIN_SIMILARITY, best_similarity * .9)
+                                and (source_families is None or briefs[c["docindex"]].family in source_families)][:12]
+            diagnostics["blocked"] = list(dict.fromkeys(diagnostics["blocked"] + semantic_blocked))[:12]
+            diagnostics.update(semantic=[c["docindex"] for c in semantic],
+                               navigation=[c["docindex"] for c in linked if c["docindex"] in eligible],
+                               hybrid=[i for _, i in ranked[:24]])
         if intent == "find" and len(participants) > 1:
             covered, representatives = set(), []
             for row in ranked:
@@ -738,12 +754,15 @@ class ContextIndex:
                 value = getattr(doc, key, "")
                 if isinstance(value, str) and value:
                     source[key] = value
+            # A stable public fragment identity also survives final S-number
+            # compaction for ordinary Markdown, not only structured dialogues.
+            source.setdefault("fragment_id", doc.id)
             if not is_discovery(doc) and doc.path.startswith(("corpus/", "context/", "examples/")):
                 source["public_copy_url"] = "https://github.com/sunyuzheng/lizheng-open-context/blob/" + self.source_revision + "/" + quote(doc.path, safe="/")
             if timestamp:
                 source["timecode"] = timestamp
             evidence = {**source, **self.name_evidence(getattr(doc, "participant_entity_ids", "").split("；")),
-                        "document_id": doc.id, "docindex": index, "source_path": doc.path, "source_family": family, "source_context": doc.source_context,
+                        "document_id": doc.id, "source_id": doc.source_id, "docindex": index, "source_path": doc.path, "source_family": family, "source_context": doc.source_context,
                         "yuzheng_stance_weight": doc.yuzheng_stance_weight,
                         "content_origin": doc.content_origin, "publisher": doc.publisher,
                         "generation_method": doc.generation_method,
@@ -767,6 +786,32 @@ class ContextIndex:
         # A named programme remains reachable even when its conversation has
         # no attributable own statements. Return its entry, not guest speech.
         return passages or (self.programme_discovery(query, limit) if participants else [])
+
+    def navigation_families(self, question: str, history: list | None = None, *, limit: int = 3) -> set[str]:
+        """Lightweight source-directory routes, alongside (never instead of) global search.
+
+        Existing people/programme relationships and reading-map links nominate
+        sources. Specific title terms can find other subjects without a new
+        taxonomy or product-specific aliases. Only metadata is read here.
+        """
+        if not self.briefs:
+            return set()
+        query = self.retrieval_query(question, history)
+        people = self.participant_entities(query)
+        terms = [t for t in ordered_terms(self.search_module, QUESTION_FILLERS.sub(" ", query))
+                 if t not in STOP_TERMS and len(t) >= 3][:30]
+        links = self.architecture.linked_candidates(self.card_ids(question, "", history or [])) if self.architecture else []
+        linked = {self.briefs[c["docindex"]].family for c in links}
+        families = {}
+        for row in self.briefs:
+            folded = row.title.casefold()
+            hit = sum(min(len(t), 12) for t in terms if t in folded)
+            named = bool(people.intersection(row.participants))
+            routed = row.family in linked
+            if hit or named or routed:
+                score = hit + 24 * named + 12 * routed
+                families[row.family] = max(families.get(row.family, 0), score)
+        return set(sorted(families, key=lambda family: (-families[family], family))[:limit])
 
     def programme_discovery(self, query: str, limit: int = 8) -> list[Passage]:
         identities = self.participant_entities(query)

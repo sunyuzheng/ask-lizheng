@@ -26,7 +26,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .answers import ANSWER_BUDGET_SECONDS, BACKUP_MODELS, DEFAULT_MODEL, ProviderFailure, assemble_answer, attribution_clarification, generate_answer, guest_reading_result, model_options, sources_only, unsupported_result
-from .evidence_selection import empty_answer, select_evidence
+from .evidence_selection import empty_answer
+from .context_reader import ContextReader
 from .query_context import uses_previous_question
 from .answer_contract import VERSION as ANSWER_CONTRACT_VERSION, engine_fingerprint
 from .retrieval import ContextIndex
@@ -399,6 +400,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
         answer_slug = ""
         # The answer's own page (<day>/<slug>), made as it was archived.
         record_page = None
+        reader = ContextReader(application.state.index, payload.question, payload.context, payload.history, payload.intent)
+        record_trace = None
 
         def release_slot():
             nonlocal slot_released
@@ -407,11 +410,13 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 application.state.slots.release()
 
         async def finish_archive():
-            nonlocal record_duration_ms, archive_confirmed, record_page
+            nonlocal record_duration_ms, archive_confirmed, record_page, record_trace
             if ops_record_id is None or archive_confirmed:
                 return True
             if record_duration_ms is None:
                 record_duration_ms = max(0, int((time.monotonic() - record_started) * 1000))
+                if record_trace is None:
+                    record_trace = reader.trace.snapshot()
             # Keep this body stable across both the initial final write and
             # cancellation cleanup. A lost ACK must never become null/error.
             # An answered v4 question gets its page as it is archived, even
@@ -419,7 +424,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             page_word = share_word(answer_slug) if payload.query_log_notice == "v4" and record_status == "answered" else None
             try:
                 ack = await application.state.ops_records.finish(ops_record_id, record_status,
-                    record_duration_ms, answer=record_answer, error_code=record_error_code, page_word=page_word)
+                    record_duration_ms, answer=record_answer, error_code=record_error_code, page_word=page_word,
+                    retrieval_trace=record_trace)
             except Exception:
                 ack = None
             archive_confirmed = ack is not None
@@ -428,8 +434,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
             return archive_confirmed
 
         def capture_answer(result):
-            nonlocal record_answer, record_status, record_error_code
+            nonlocal record_answer, record_status, record_error_code, record_trace
             if ops_record_id is not None:
+                if record_answer is None:
+                    record_trace = reader.cited(result, passages_for_trace)
                 record_answer = archived_answer(result)
                 record_status = result["status"]
                 record_error_code = result.get("failure_code")
@@ -493,8 +501,10 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 await release_resources()
                 raise
 
+        passages_for_trace = []
+
         async def events():
-            nonlocal generation_task, record_status, record_answer, record_error_code, answer_slug
+            nonlocal generation_task, record_status, record_answer, record_error_code, answer_slug, passages_for_trace
             async def settled_result(result):
                 nonlocal quota_finished, record_status, record_answer, record_error_code
                 if ops_record_id is not None:
@@ -533,7 +543,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                 # can open actual public excerpts without waiting on either AI call.
                 semantic_task = asyncio.create_task(application.state.semantic.candidates(application.state.provider, token, semantic_query))
                 try:
-                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, intent=payload.intent)
+                    passages = await asyncio.to_thread(reader.retrieve, initial=True)
+                    passages_for_trace = passages
                     if passages:
                         yield sse("sources", {"phase": "initial", "provisional": True, "sources": [passage.source for passage in passages[:5]], "candidates": map_candidates(passages)})
                     # The padding sends these now: proxies hold small frames, and without it the
@@ -550,7 +561,8 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                         semantic_task.cancel()
                     await asyncio.gather(semantic_task, return_exceptions=True)
                 if semantic_candidates:
-                    passages = await asyncio.to_thread(application.state.index.retrieve, payload.question, payload.context, payload.history, 12, semantic_candidates, intent=payload.intent)
+                    passages = await asyncio.to_thread(reader.retrieve, semantic_candidates)
+                passages_for_trace = passages
                 yield sse("sources", {"phase": "matched", "provisional": True, "sources": [passage.source for passage in passages[:5]], "candidates": map_candidates(passages)})
                 if await request.is_disconnected():
                     return
@@ -579,11 +591,13 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                     async def partial(value):
                         await updates.put({"_event": "partial", **value})
                     async def generate():
-                        nonlocal passages
+                        nonlocal passages, passages_for_trace
                         try:
                             deadline = time.monotonic() + ANSWER_BUDGET_SECONDS
                             answer_request = payload.model_dump(exclude={"query_log_notice", "conversation_id", "ai_consent_model", "ai_consent_backup"})
-                            passages = await select_evidence(application.state.provider, token, current_model, answer_request, passages)
+                            passages = await reader.select(application.state.provider, token, current_model,
+                                answer_request, passages, application.state.semantic, deadline, updates.put)
+                            passages_for_trace = passages
                             await updates.put({"_event": "sources", "phase": "matched", "provisional": True,
                                                "sources": [p.source for p in passages[:5]], "candidates": map_candidates(passages)})
                             if not passages:
@@ -591,7 +605,9 @@ def create_app(context_root: Path | None = None, provider_transport=None, *, quo
                             cards = application.state.index.reasoning_bundle(payload.question, payload.context, payload.history, passages, semantic_candidates)
                             await updates.put({"_event": "approach", **answer_approach(payload.intent, passages, cards)})
                             await updates.put({"stage": "thinking", "message": f"已选出 {len(passages)} 个相关片段，正在根据原文整理回答…"})
-                            return await generate_answer(application.state.provider, token, current_model, {**answer_request, "reasoning_cards": cards}, passages, on_progress=updates.put, on_partial=partial, backup=backup_model, deadline=deadline)
+                            return await generate_answer(application.state.provider, token, current_model,
+                                {**answer_request, "reasoning_cards": cards}, passages,
+                                on_progress=updates.put, on_partial=partial, backup=backup_model, deadline=deadline)
                         finally:
                             await updates.put(None)
                     generation_task = asyncio.create_task(generate())

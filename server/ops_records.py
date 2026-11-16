@@ -14,6 +14,7 @@ import httpx
 
 from .admission import AdmissionError, Principal, QUOTA_STORE_PURPOSE, derived_secret
 from .query_records import QUERY_STORE_HEADER, QUERY_STORE_URL, STATUSES, WRITE_SECONDS
+from .retrieval_trace import normalize_trace
 
 OPS_BODY_LIMIT = 262144
 # Every answered v4 question has its own page, ask.lizheng.ai/s/<date>/<word> (2026-10-14, the owner:
@@ -84,6 +85,12 @@ class OpsRecorder:
         # Reuse exactly the same UUID/body across lost-response retries. No
         # background queue: start must be acknowledged before any model call.
         body = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(body) > OPS_BODY_LIMIT and record.get("event") == "finish" and "retrieval_trace" in record:
+            # Optional diagnostics must not prevent a complete answer from being
+            # archived. Choose the bounded body once, before signing/retrying;
+            # do not mutate the caller's frozen answer or trace.
+            body = json.dumps({key: value for key, value in record.items() if key != "retrieval_trace"},
+                              ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if not self.secret or len(body) > OPS_BODY_LIMIT:
             return None
         for attempt in range(2):
@@ -125,7 +132,8 @@ class OpsRecorder:
         return {"record_id": record_id, "word": word, "proof": proof, **({"url": PAGE_ORIGIN + page} if page else {})}
 
     async def finish(self, record_id: str, status: str, duration_ms: int, *, answer: dict | None = None,
-                     error_code: str | None = None, page_word: str | None = None) -> dict | None:
+                     error_code: str | None = None, page_word: str | None = None,
+                     retrieval_trace: dict | None = None) -> dict | None:
         """The acknowledgement, or None. With page_word (an answered v4 question), lizheng.ai makes
         the answer's page as it archives it, and "share" names it."""
         if status not in STATUSES or (answer is None and status not in {"error", "cancelled"}):
@@ -134,4 +142,7 @@ class OpsRecorder:
                   "duration_ms": min(600_000, max(0, duration_ms)), "answer": answer, "error_code": error_code}
         if page_word and status == "answered":
             record["share_word"] = page_word
+        trace = normalize_trace(retrieval_trace)
+        if trace is not None:
+            record["retrieval_trace"] = trace
         return await self._write(record)
