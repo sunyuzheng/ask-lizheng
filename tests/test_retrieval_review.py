@@ -45,3 +45,15 @@ def test_compatible_revision_reuse_requires_explicit_opt_in_and_all_gold_hashes(
     compatible_context(fixture,current,True)
     del fixture["refs"]["r"]["sha256"]
     with pytest.raises(ValueError):compatible_context(fixture,current,True)
+
+
+@pytest.mark.parametrize("count", [0,1,2])
+def test_review_accepts_the_dashboard_actual_jsonl_export(tmp_path, monkeypatch, count):
+    monkeypatch.setattr(review,"ROOT",tmp_path)
+    folder=tmp_path/".local";folder.mkdir()
+    src=folder/"archive.jsonl";out=folder/"review.json"
+    src.write_text("".join(json.dumps({"record_id":f"synthetic-{n}","question":"private", "retrieval_trace":receipt()})+"\n" for n in range(count)))
+    assert review.main(["--input",str(src),"--output",str(out)])==0
+    value=json.loads(out.read_text())
+    assert len(value["records"])==count and value["network_requests"]==0
+    assert "question" not in out.read_text()

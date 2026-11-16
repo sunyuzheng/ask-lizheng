@@ -46,7 +46,7 @@ def private_path(path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True, help="An owner export page: {records:[...]}")
+    parser.add_argument("--input", type=Path, required=True, help="Owner dashboard .jsonl export or an API page {records:[...]}")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args(argv)
@@ -54,13 +54,17 @@ def main(argv=None):
         private_path(args.input); private_path(args.output)
         if not 1 <= args.limit <= 500 or args.input.stat().st_size > 16 * 1024 * 1024 or args.output.exists():
             raise ValueError("Use up to 500 records / 16 MB and a new output file")
-        data = json.loads(args.input.read_text())
-        records = data.get("records") if isinstance(data, dict) else None
+        raw = args.input.read_text()
+        try:
+            data = json.loads(raw)
+            records = data.get("records") if isinstance(data, dict) and "records" in data else [data] if isinstance(data, dict) and "record_id" in data else data
+        except json.JSONDecodeError:
+            records = [json.loads(line) for line in raw.splitlines() if line.strip()]
         if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
             raise ValueError("Expected an owner export page with records")
         rows = [review_record(r) for r in records[:args.limit]]
         private_write(args.output, {"v": 1, "mode": "recorded-stages-only", "network_requests": 0,
-            "records": rows, "remaining_in_page": max(0, len(records)-args.limit)})
+            "records": rows, "remaining_in_input": max(0, len(records)-args.limit)})
         print(json.dumps({"reviewed": len(rows), "with_trace": sum(r["trace_status"] == "recorded" for r in rows),
                           "network_requests": 0}))
         return 0

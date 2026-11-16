@@ -20,11 +20,11 @@ Builder 在现有签名 `finish` 顶层发送可选 `retrieval_trace`，主站�
 
 ## 怎样复盘
 
-从 owner 后台导出一页记录，放到本仓库忽略的 `.local/` 下：
+从 owner 后台下载 JSONL 导出，放到本仓库忽略的 `.local/` 下；也兼容导出 API 的分页 JSON：
 
 ```sh
 python scripts/review_retrieval.py \
-  --input .local/ops-export.json --output .local/retrieval-review.json
+  --input .local/ops-export.jsonl --output .local/retrieval-review.json
 ```
 
 这个命令不联网、不调用模型、不重新提交提问。报告区分阶段间来源消失和同一来源换了窗口，保留版本与资格缺口；不再复制问题和答案正文。文件与报告必须留在 `.local/`，已有输出不会覆盖。没有轨迹的历史记录明确标记为无法还原。
