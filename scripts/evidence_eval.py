@@ -63,6 +63,7 @@ def implementation(root: Path):
         retrieval=importlib.import_module(name + ".retrieval"),
         semantic=importlib.import_module(name + ".semantic"),
         answers=importlib.import_module(name + ".answers"),
+        reader=importlib.import_module(name + ".context_reader") if (root / "server/context_reader.py").exists() else None,
         selection=importlib.import_module(name + ".evidence_selection") if (root / "server/evidence_selection.py").exists() else None)
 
 
@@ -218,7 +219,11 @@ def prepare_case(impl, index, semantic, case: dict, vector: array) -> dict:
     question, context, history = case["question"], case.get("context", ""), case.get("history", [])
     clarification = impl.answers.attribution_clarification(question, context, history)
     candidates = semantic._rank(vector) if not clarification else []
-    passages = index.retrieve(question, context, history, 12, candidates, intent=case["intent"]) if not clarification else []
+    reader = impl.reader.ContextReader(index, question, context, history, case["intent"]) if getattr(impl, "reader", None) else None
+    if reader and not clarification:
+        passages = reader.retrieve(candidates)
+    else:
+        passages = index.retrieve(question, context, history, 12, candidates, intent=case["intent"]) if not clarification else []
     cards, result, route = [], clarification, "clarify" if clarification else "generate"
     if not clarification:
         named = index.participant_entities(index.retrieval_query(question, history)) if case["intent"] == "find" else set()
@@ -231,7 +236,7 @@ def prepare_case(impl, index, semantic, case: dict, vector: array) -> dict:
             route = "sources-only"
         else:
             cards = index.reasoning_bundle(question, context, history, passages, candidates)
-    return {"passages": passages, "cards": cards, "result": result, "route": route,
+    return {"passages": passages, "cards": cards, "result": result, "route": route, "reader": reader,
             "retrieval_ms": round((time.perf_counter() - started) * 1000, 3)}
 
 
@@ -335,6 +340,17 @@ def add_inputs(parser):
     parser.add_argument("--vectors-cache", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--split", choices=("dev", "holdout"))
     parser.add_argument("--cases", nargs="+")
+    parser.add_argument("--allow-compatible-context", action="store_true",
+                        help="Reuse gold on a later release only when every reference retains its pinned file hash, anchors and speaker/unit bindings")
+
+
+def compatible_context(fixture, index, allow=False):
+    if fixture.get("context_commit") == index.source_revision:
+        return
+    if not allow or any(not ref.get("sha256") for ref in fixture["refs"].values()):
+        raise ValueError("Fixture and pinned context commits differ; explicit compatible-context reuse requires every gold source hash")
+    # load_fixture has already checked every file hash, quote, speaker and unit.
+    # Never silently update the fixture's original commit or regenerate vectors.
 
 
 async def evaluate(args) -> dict:
@@ -343,8 +359,7 @@ async def evaluate(args) -> dict:
     cases = select_cases(fixture, args.split, args.cases)
     index = impl.retrieval.ContextIndex(impl.root / "data/context", require_lock=True)
     index.load()
-    if fixture.get("context_commit") != index.source_revision:
-        raise ValueError("Fixture and pinned context commits differ")
+    compatible_context(fixture, index, getattr(args, "allow_compatible_context", False))
     semantic = index.semantic_index()
     if not semantic.ready:
         raise ValueError("Pinned semantic index is not ready")
@@ -362,6 +377,7 @@ async def evaluate(args) -> dict:
     report = {"schema_version": 1, "kind": "evidence-evaluation", "implementation": str(impl.root),
               "implementation_sha256": implementation_hash(impl.root),
               "fixture_sha256": digest(args.fixture.read_bytes()), "context_commit": index.source_revision,
+              "fixture_context_commit": fixture["context_commit"],
               **vector_meta, "summary": summary(rows), "cases": rows,
               "method": "Exact normalized source-anchor presence in actual model excerpts; paths reported separately. Retrieval coverage is not answer accuracy."}
     if args.compare:

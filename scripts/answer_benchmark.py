@@ -174,8 +174,7 @@ async def generate(args, token: str, client=None) -> dict:
                   if client is None and not getattr(args, "reuse_only", False) else None)
     index = impl.retrieval.ContextIndex(impl.root / "data/context", require_lock=True)
     index.load()
-    if fixture.get("context_commit") != index.source_revision:
-        raise ValueError("Fixture and pinned context commits differ")
+    evidence.compatible_context(fixture, index, getattr(args, "allow_compatible_context", False))
     semantic = index.semantic_index()
     if not semantic.ready:
         raise ValueError("Pinned semantic index is not ready")
@@ -199,13 +198,14 @@ async def generate(args, token: str, client=None) -> dict:
                            "public_source_snapshots": [p.source for p in value["passages"]], "metrics": metrics[case_id]}
     report = {"schema_version": 1, "kind": "answer-generation", "implementation": str(impl.root),
               "implementation_sha256": evidence.implementation_hash(impl.root),
+              "retrieval_policy": "supplement-preview" if getattr(args, "experimental_context_supplement", False) else "stable",
               "fixture_sha256": evidence.digest(args.fixture.read_bytes()), "context_commit": index.source_revision,
               **vector_meta, "answer_model": model, "backup_model": backup, "repeats": args.repeats,
               "concurrency": args.concurrency, "inputs": inputs, "runs": [],
               "method": "Direct local production retrieval/generation functions; no public API, quota, archive, or raw provider reasoning. Cached retrieval is reused for repeated answer sampling."}
     previous, previous_sha = prior_report(args)
     if previous and not getattr(args, "fresh", False) and any(previous.get(k) != report[k] for k in (
-            "implementation_sha256", "answer_model", "backup_model")):
+            "implementation_sha256", "answer_model", "backup_model", "retrieval_policy")):
         raise ValueError("Cached implementation/model changed; narrow the experiment and explicitly justify --fresh")
     previous_rows = {(r["id"], r["repeat"]): r for r in previous.get("runs", [])} if previous else {}
     semaphore = asyncio.Semaphore(args.concurrency)
@@ -235,6 +235,7 @@ async def generate(args, token: str, client=None) -> dict:
                     row.update(error="experiment_stopped", skipped=True)
                 elif value["route"] == "generate":
                     passages = value["passages"]
+                    answer_request = copy.deepcopy(inputs[case_id]["request"])
                     kwargs = {}
                     if impl.selection is not None:
                         deadline = time.monotonic() + impl.answers.ANSWER_BUDGET_SECONDS
@@ -246,15 +247,24 @@ async def generate(args, token: str, client=None) -> dict:
                                 raise ValueError("Cached selection input changed")
                             row["selection_reused"] = True
                         else:
-                            passages = await impl.selection.select_evidence(provider, token, model, inputs[case_id]["request"], passages)
+                            if value.get("reader"):
+                                # A fresh request-local controller per repeat; never carry
+                                # supplemental state between benchmark samples.
+                                controller = impl.reader.ContextReader(index, case["question"], case.get("context", ""),
+                                    case.get("history", []), case["intent"],
+                                    allow_supplement=getattr(args, "experimental_context_supplement", False))
+                                controller.gaps = list(value["reader"].gaps)
+                                passages = await controller.select(provider, token, model, answer_request, passages, semantic, deadline)
+                            else:
+                                passages = await impl.selection.select_evidence(provider, token, model, answer_request, passages)
                         kwargs["deadline"] = deadline
                         row["selection_seconds"] = round(time.monotonic() - started, 3)
-                        row["actual_input"] = {**inputs[case_id], "route": "generate" if passages else "selection-empty",
+                        row["actual_input"] = {**inputs[case_id], "request": answer_request, "route": "generate" if passages else "selection-empty",
                             "sources": [impl.answers.model_evidence(p) for p in passages],
                             "source_snapshots": [p.evidence for p in passages], "public_source_snapshots": [p.source for p in passages],
-                            "model_messages": impl.answers.answer_payload(model, inputs[case_id]["request"], passages)["messages"] if passages else []}
+                            "model_messages": impl.answers.answer_payload(model, answer_request, passages)["messages"] if passages else []}
                     if passages:
-                        answer = await impl.answers.generate_answer(provider, token, model, inputs[case_id]["request"], passages, backup=backup, **kwargs)
+                        answer = await impl.answers.generate_answer(provider, token, model, answer_request, passages, backup=backup, **kwargs)
                         row["validated_model_answer"] = answer.model_dump()
                     else:
                         answer = impl.selection.empty_answer()
@@ -540,6 +550,8 @@ def main(argv=None):
     generate_parser.add_argument("--model")
     generate_parser.add_argument("--repeats", type=int, default=1)
     generate_parser.add_argument("--concurrency", type=int, default=2)
+    generate_parser.add_argument("--experimental-context-supplement", action="store_true",
+                                 help="Development-only missing-facet search prototype; not enabled in production")
     judge_parser = commands.add_parser("judge", aliases=["compare"])
     judge_parser.add_argument("--fixture", type=Path, default=evidence.DEFAULT_FIXTURE)
     judge_parser.add_argument("--baseline", type=Path, required=True)
