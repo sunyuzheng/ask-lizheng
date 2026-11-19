@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/sunyuzheng/lizheng-open-context",
   "snapshot_at": "2026-11-12",
-  "release_manifest_sha256": "6da5cf85e63f7f56294d0549303657f8b7c1ddaa8126da8407c8d65cac4c6f80",
+  "release_manifest_sha256": "f81f0e821514da6135809738593dc64f58b49a6f471daa1166fc89ac6e91e0ed",
   "files": 1862,
   "counts": {
     "structured_public_dialogues": 467,
@@ -48,5 +48,5 @@
     "LicenseRef-Original-Rights-Retained": 70,
     "MIT": 67
   },
-  "source_commit": "00c52c25e933005a26c69c8af801a26d10f4efa6"
+  "source_commit": "769758048e5d6214a5648447f56b949926b88677"
 }
